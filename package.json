@@ -1,0 +1,39 @@
+{
+  "name": "mcp-xpp-server",
+  "version": "1.0.0",
+  "description": "MCP server for browsing Dynamics 365 Finance and Operations X++ codebase",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "mcp-xpp-server": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node build/index.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+  },
+  "keywords": [
+    "mcp",
+    "dynamics365",
+    "x++",
+    "finance",
+    "operations"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "jest": "^30.0.4",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "build"
+  ]
+}

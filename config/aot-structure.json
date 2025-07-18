@@ -1,0 +1,254 @@
+{
+  "aotStructure": {
+    "Data Types": {
+      "folderPatterns": ["DataTypes"],
+      "children": {
+        "Base Enums": {
+          "folderPatterns": ["AxEnum"],
+          "fileExtensions": [".xml"],
+          "objectType": "BASE_ENUMS"
+        },
+        "Base Enum Extensions": {
+          "folderPatterns": ["AxEnumExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "BASE_ENUM_EXTENSIONS"
+        },
+        "Extended Data Types": {
+          "folderPatterns": ["AxEdt"],
+          "fileExtensions": [".xml"],
+          "objectType": "EXTENDED_DATA_TYPES"
+        },
+        "Extended Data Type Extensions": {
+          "folderPatterns": ["AxEdtExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "EXTENDED_DATA_TYPE_EXTENSIONS"
+        }
+      }
+    },
+    "Data Model": {
+      "folderPatterns": ["DataModel"],
+      "children": {
+        "Tables": {
+          "folderPatterns": ["AxTable"],
+          "fileExtensions": [".xml"],
+          "objectType": "TABLES"
+        },
+        "Table Extensions": {
+          "folderPatterns": ["AxTableExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "TABLE_EXTENSIONS"
+        },
+        "Views": {
+          "folderPatterns": ["AxView"],
+          "fileExtensions": [".xml"],
+          "objectType": "VIEWS"
+        },
+        "View Extensions": {
+          "folderPatterns": ["AxViewExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "VIEW_EXTENSIONS"
+        },
+        "Queries": {
+          "folderPatterns": ["AxQuery"],
+          "fileExtensions": [".xml"],
+          "objectType": "QUERIES"
+        },
+        "Query Extensions": {
+          "folderPatterns": ["AxQueryExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "QUERY_EXTENSIONS"
+        },
+        "Data Entities": {
+          "folderPatterns": ["AxDataEntity"],
+          "fileExtensions": [".xml"],
+          "objectType": "DATA_ENTITIES"
+        },
+        "Data Entity Extensions": {
+          "folderPatterns": ["AxDataEntityExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "DATA_ENTITY_EXTENSIONS"
+        },
+        "Composite Data Entities": {
+          "folderPatterns": ["AxCompositeDataEntity"],
+          "fileExtensions": [".xml"],
+          "objectType": "COMPOSITE_DATA_ENTITIES"
+        },
+        "Aggregate Data Entities": {
+          "folderPatterns": ["AxAggregateDataEntity"],
+          "fileExtensions": [".xml"],
+          "objectType": "AGGREGATE_DATA_ENTITIES"
+        },
+        "Maps": {
+          "folderPatterns": ["AxMap"],
+          "fileExtensions": [".xml"],
+          "objectType": "MAPS"
+        },
+        "Table Collections": {
+          "folderPatterns": ["AxTableCollection"],
+          "fileExtensions": [".xml"],
+          "objectType": "TABLE_COLLECTIONS"
+        }
+      }
+    },
+    "Code": {
+      "folderPatterns": ["Code"],
+      "children": {
+        "Classes": {
+          "folderPatterns": ["AxClass"],
+          "fileExtensions": [".xml", ".xpp"],
+          "objectType": "CLASSES"
+        },
+        "Macros": {
+          "folderPatterns": ["AxMacro"],
+          "fileExtensions": [".xml"],
+          "objectType": "MACROS"
+        }
+      }
+    },
+    "User Interface": {
+      "folderPatterns": ["UserInterface"],
+      "children": {
+        "Forms": {
+          "folderPatterns": ["AxForm"],
+          "fileExtensions": [".xml"],
+          "objectType": "FORMS"
+        },
+        "Form Extensions": {
+          "folderPatterns": ["AxFormExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "FORM_EXTENSIONS"
+        },
+        "Tiles": {
+          "folderPatterns": ["AxTile"],
+          "fileExtensions": [".xml"],
+          "objectType": "TILES"
+        },
+        "Menus": {
+          "folderPatterns": ["AxMenu"],
+          "fileExtensions": [".xml"],
+          "objectType": "MENUS"
+        },
+        "Menu Extensions": {
+          "folderPatterns": ["AxMenuExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "MENU_EXTENSIONS"
+        },
+        "Menu Items": {
+          "folderPatterns": ["AxMenuItems"],
+          "fileExtensions": [".xml"],
+          "objectType": "MENU_ITEMS"
+        },
+        "Menu Item Extensions": {
+          "folderPatterns": ["AxMenuItemExtension"],
+          "fileExtensions": [".xml"],
+          "objectType": "MENU_ITEM_EXTENSIONS"
+        }
+      }
+    },
+    "Analytics": {
+      "folderPatterns": ["Analytics"],
+      "children": {
+        "Perspectives": {
+          "folderPatterns": ["AxPerspective"],
+          "fileExtensions": [".xml"],
+          "objectType": "PERSPECTIVES"
+        },
+        "Key Performance Indicators (KPI)": {
+          "folderPatterns": ["AxKpi"],
+          "fileExtensions": [".xml"],
+          "objectType": "KPIS"
+        },
+        "Reports": {
+          "folderPatterns": ["AxReport"],
+          "fileExtensions": [".xml"],
+          "objectType": "REPORTS"
+        }
+      }
+    },
+    "Business Process and Workflow": {
+      "folderPatterns": ["BusinessProcessAndWorkflow"],
+      "children": {
+        "Workflows": {
+          "folderPatterns": ["AxWorkflow"],
+          "fileExtensions": [".xml"],
+          "objectType": "WORKFLOWS"
+        }
+      }
+    },
+    "Label Files": {
+      "folderPatterns": ["LabelFiles"],
+      "fileExtensions": [".xml", ".txt"],
+      "objectType": "LABEL_FILES"
+    },
+    "Resources": {
+      "folderPatterns": ["Resources"],
+      "fileExtensions": [".xml", ".png", ".jpg", ".gif", ".ico"],
+      "objectType": "RESOURCES"
+    },
+    "Configuration": {
+      "folderPatterns": ["Configuration"],
+      "children": {
+        "Configuration Keys": {
+          "folderPatterns": ["AxConfigurationKey"],
+          "fileExtensions": [".xml"],
+          "objectType": "CONFIGURATION_KEYS"
+        },
+        "Security Keys": {
+          "folderPatterns": ["AxSecurityKey"],
+          "fileExtensions": [".xml"],
+          "objectType": "SECURITY_KEYS"
+        }
+      }
+    },
+    "Security": {
+      "folderPatterns": ["Security"],
+      "children": {
+        "Duties": {
+          "folderPatterns": ["AxSecurityDuty"],
+          "fileExtensions": [".xml"],
+          "objectType": "SECURITY_DUTIES"
+        },
+        "Privileges": {
+          "folderPatterns": ["AxSecurityPrivilege"],
+          "fileExtensions": [".xml"],
+          "objectType": "SECURITY_PRIVILEGES"
+        },
+        "Roles": {
+          "folderPatterns": ["AxSecurityRole"],
+          "fileExtensions": [".xml"],
+          "objectType": "SECURITY_ROLES"
+        },
+        "Policies": {
+          "folderPatterns": ["AxSecurityPolicy"],
+          "fileExtensions": [".xml"],
+          "objectType": "SECURITY_POLICIES"
+        }
+      }
+    },
+    "References": {
+      "folderPatterns": ["References"],
+      "fileExtensions": [".xml"],
+      "objectType": "REFERENCES"
+    },
+    "Services": {
+      "folderPatterns": ["Services"],
+      "children": {
+        "Service Groups": {
+          "folderPatterns": ["AxServiceGroup"],
+          "fileExtensions": [".xml"],
+          "objectType": "SERVICE_GROUPS"
+        },
+        "Services": {
+          "folderPatterns": ["AxService"],
+          "fileExtensions": [".xml"],
+          "objectType": "SERVICES"
+        }
+      }
+    },
+    "System Documentation": {
+      "folderPatterns": ["SystemDocumentation"],
+      "fileExtensions": [".xml", ".md", ".txt"],
+      "objectType": "SYSTEM_DOCUMENTATION"
+    }
+  }
+}

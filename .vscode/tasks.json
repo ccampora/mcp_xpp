@@ -1,0 +1,111 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build and Run MCP Server",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"npm run build"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "Test MCP Server",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"node test-simple.mjs"
+			],
+			"group": "test",
+			"dependsOn": "Build and Run MCP Server"
+		},
+		{
+			"label": "Test Index Performance",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"node test-index.mjs"
+			],
+			"group": "test",
+			"dependsOn": "Build and Run MCP Server"
+		},
+		{
+			"label": "Quick Performance Test",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"node test-quick.mjs"
+			],
+			"group": "test",
+			"dependsOn": "Build and Run MCP Server"
+		},
+		{
+			"label": "Test Auto-Index Building",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"node test-auto-index.mjs"
+			],
+			"group": "test",
+			"dependsOn": "Build and Run MCP Server"
+		},
+		{
+			"label": "Performance Demo - Before/After Index",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"node test-enhanced.mjs"
+			],
+			"group": "test",
+			"dependsOn": "Build and Run MCP Server"
+		},
+		{
+			"label": "Test Type-Specific Index Building",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"node test-type-index.mjs"
+			],
+			"group": "test",
+			"dependsOn": "Build and Run MCP Server"
+		},
+		{
+			"label": "Test Optimized Full Index Building",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"node test-full-index.mjs"
+			],
+			"group": "test",
+			"dependsOn": "Build and Run MCP Server"
+		}
+	]
+}
