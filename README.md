@@ -5,62 +5,57 @@
 
 This repository provides a Model Context Protocol (MCP) server for basic navigation and file operations on Dynamics 365 Finance and Operations (D365 F&O) X++ codebases. The server enables AI models and tools to browse directories, read files, and perform simple text searches within a configured D365 F&O codebase.
 
-## 🚀 Vision & Roadmap
 
 ## Roadmap
 
 ### Current State (Phase 1)
-- Basic file system browsing and navigation
-- File reading with size limits
-- Basic text search across files
-- Simple object existence validation
+* Basic file system browsing and navigation
+* File reading with size limits
+* Basic text search across files
+* Simple object existence validation
 
-*Note: No advanced object discovery, code analysis, or project-specific features are available at this stage. Advanced features are planned for future phases.*
+Note: No advanced object discovery, code analysis, or project-specific features are available at this stage. Advanced features are planned for future phases, but not yet implemented.
 
 ### Planned Phases
 
-#### 📖 **Phase 1: Analysis & Discovery** *(Current - Q1 2025)*
-- Basic file system browsing and navigation
-- File reading with size limits
-- Basic text search across files
-- Simple object existence validation
-- Performance-optimized indexing (basic implementation)
-- Class method parsing (limited)
-- Table structure parsing (limited)
+#### Phase 1: Analysis & Discovery (Current - Q1 2025)
+* Basic file system browsing and navigation
+* File reading with size limits
+* Basic text search across files
+* Simple object existence validation
+* Performance-optimized indexing (basic implementation)
+* Class method parsing (limited)
+* Table structure parsing (limited)
 
-#### 🔨 **Phase 2: Code Generation** *(Q2-Q3 2025)*
-- X++ object creation (planned)
-- Custom project management (planned)
-- Code templates (planned)
-- Relationship management (planned)
-- Security integration (planned)
-- Extension support (planned)
+#### Phase 2: Code Generation (Q2-Q3 2025)
+* X++ object creation (planned)
+* Custom project management (planned)
+* Code templates (planned)
+* Relationship management (planned)
+* Security integration (planned)
+* Extension support (planned)
 
-#### 🏗️ **Phase 3: Project Management** *(Q4 2025)*
-- Package management (planned)
-- Dependency resolution (planned)
-- Version control integration (planned)
-- Project templates (planned)
-- ISV development support (planned)
+#### Phase 3: Project Management (Q4 2025)
+* Package management (planned)
+* Dependency resolution (planned)
+* Version control integration (planned)
+* Project templates (planned)
+* ISV development support (planned)
 
-#### 🚀 **Phase 4: Build & Deployment** *(Q1 2026)*
-- Automated builds (planned)
-- Deployment automation (planned)
-- Environment management (planned)
-- CI/CD integration (planned)
-- Quality assurance (planned)
+#### Phase 4: Build & Deployment (Q1 2026)
+* Automated builds (planned)
+* Deployment automation (planned)
+* Environment management (planned)
+* CI/CD integration (planned)
+* Quality assurance (planned)
 
-#### 🎯 **Phase 5: Enterprise Integration** *(Q2 2026+)*
-- Production deployment (planned)
-- Lifecycle management (planned)
-- Compliance and governance (planned)
-- Performance optimization (planned)
-- Multi-tenant support (planned)
+#### Phase 5: Enterprise Integration (Q2 2026+)
+* Production deployment (planned)
+* Lifecycle management (planned)
+* Compliance and governance (planned)
+* Performance optimization (planned)
+* Multi-tenant support (planned)
 
-### Revolutionary Impact
-
-
-## 🔬 Technical Innovation
 
 ## Technical Overview
 
@@ -71,8 +66,6 @@ This MCP server provides:
 - Recognition of common X++ file types (.xpp, .xml, etc.)
 
 *Note: Advanced code analysis and automation features are not yet implemented.*
-
-## 🎯 Current Purpose
 
 ## Current Capabilities
 
@@ -85,7 +78,7 @@ This MCP server provides:
 
 *Note: Advanced analysis, relationship parsing, and intelligent code understanding are planned for future phases.*
 
-## ✨ Features
+## Features
 
 **Note:** All features are experimental and under active development. Feedback and bug reports are welcome.
 
@@ -109,11 +102,11 @@ This MCP server provides:
 
 *Note: Advanced code parsing, relationship analysis, and intelligent object understanding is planned for future development phases.*
 
-## 📖 Documentation
+## Documentation
 
 This section will be updated as documentation becomes available.
 
-## 🛠️ Available Tools
+## Available Tools
 
 ### Setup & Configuration
 - `set_xpp_codebase_path`: Configure the root path to your X++ codebase (required first step)
@@ -150,64 +143,62 @@ Recognized file extensions:
 
 ## Prerequisites
 
-This section will be updated as documentation becomes available.
+- Node.js (see [nodejs.org](https://nodejs.org/))
 - Access to a Dynamics 365 F&O X++ codebase directory
 
-## Vision and Roadmap
+## Installation and Setup
 
-1. Install Node.js (see [nodejs.org](https://nodejs.org/))
-#### Phase 1: Analysis & Discovery (Current - Q1 2025)
-3. Build the project: `npm run build`
-
-#### Phase 4: Build & Deployment (Q1 2026)
+1. Install Node.js
+2. Clone this repository
+3. Install dependencies: `npm install`
+4. Build the project: `npm run build`
 
 ## Usage
-#### Phase 5: Enterprise Integration (Q2 2026+)
+
 ### Running the Server
 
-## Technical Innovation
-- `npm start`
-or
-## Current Purpose
+Start the MCP server:
+```bash
+npm start
+```
 
-### Integration with Visual Studio
-## Features
-To use this server with Visual Studio or other MCP clients:
+### Integration with MCP Clients
+
+To use this server with Claude Desktop, Visual Studio, or other MCP clients:
 1. Configure the MCP client with the server details (see your client documentation)
-## Documentation
+2. Set your X++ codebase path using `set_xpp_codebase_path`
 3. Use the available tools to browse and analyze your X++ code
 
 ## Available Tools
-mcp_xpp/
-├── src/
-## Troubleshooting
-│   └── modules/                    # Modular architecture
-│       ├── aot-structure.ts        # AOT structure management
-## Get Involved
-│       ├── config.ts               # Configuration management
-│       ├── file-utils.ts           # File system utilities
-│       ├── logger.ts               # Logging system
-│       ├── object-index.ts         # Object indexing
-│       ├── parsers.ts              # X++ file parsers
-│       ├── search.ts               # Search functionality
-│       ├── types.ts                # Type definitions
-│       └── utils.ts                # General utilities
-├── tests/                          # Jest test suite
-│   ├── helpers/                    # Test utilities
-│   ├── mcp-server.test.js          # Integration tests
-│   ├── performance.test.js         # Performance tests
-│   └── setup.js                    # Jest configuration
-├── build/                          # Compiled JavaScript output
-├── .github/
-│   └── copilot-instructions.md
-├── jest.config.js                  # Jest configuration
-├── package.json
-├── tsconfig.json
-└── README.md
 
 ### Project Structure
 
-See the `src/` directory for main server implementation and modules. Tests are in the `tests/` directory. Build output is in `build/`.
+- `src/` - Main server implementation and modules
+  - `modules/` - Modular architecture
+    - `aot-structure.ts` - AOT structure management
+    - `config.ts` - Configuration management
+    - `file-utils.ts` - File system utilities
+    - `logger.ts` - Logging system
+    - `object-index.ts` - Object indexing
+    - `parsers.ts` - X++ file parsers
+    - `search.ts` - Search functionality
+    - `types.ts` - Type definitions
+    - `utils.ts` - General utilities
+- `config/` - Contains JSON or JS files for runtime configuration.
+  - `aot-structure.json`: Predefined AOT structure tree
+  - Any other custom configuration files used by your deployment or scripts
+- `tests/` - Jest test suite
+  - `helpers/` - Test utilities
+  - `mcp-server.test.js` - Integration tests
+  - `performance.test.js` - Performance tests
+  - `setup.js` - Jest configuration
+- `build/` - Compiled JavaScript output
+- `.github/` - GitHub configuration and Copilot instructions
+  - `copilot-instructions.md`
+- `jest.config.js` - Jest configuration
+- `package.json` - Project manifest
+- `tsconfig.json` - TypeScript configuration
+- `README.md` - Project documentation
 
 ### Development Commands
 - `npm run dev`: Watch mode for development
@@ -232,7 +223,7 @@ Example usage:
 4. Analyze object structure with `get_table_structure` or `get_class_methods`
 5. Search for code patterns with `smart_search`
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 **Note:** If you encounter issues, please report them as GitHub issues. This software is experimental and may have unexpected behavior.
 
@@ -254,11 +245,11 @@ Contributions are welcome. Please fork the repository, create a feature branch, 
 
 MIT License - see LICENSE file for details
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This is experimental software provided "as is" without warranty of any kind. Use at your own risk, especially in production environments. The software may have bugs, incomplete features, or unexpected behavior.
 
-## 🌟 Get Involved
+## Get Involved
 
 This project is experimental and under active development. If you have feedback, encounter issues, or wish to contribute improvements, please use the GitHub repository to:
 - Star the repository to show support
