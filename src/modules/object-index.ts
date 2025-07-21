@@ -1,9 +1,10 @@
 import { promises as fs } from "fs";
-import { join, relative, basename, extname } from "path";
+import { join, relative, basename, extname, dirname } from "path";
 import { ObjectIndex } from "./types.js";
 import { AOTStructureManager } from "./aot-structure.js";
 import { isXppRelatedFile, getPackagePriority } from "./utils.js";
 import { MAX_FILE_SIZE } from "./config.js";
+import { fileURLToPath } from "url";
 
 // AOT folder cache for fast lookups
 const aotFoldersCache = new Map<string, string[]>();
@@ -16,7 +17,12 @@ export class ObjectIndexManager {
   private static indexPath: string = "";
 
   static setIndexPath(basePath: string): void {
-    this.indexPath = join(basePath, '.mcp-index.json');
+    // Get the MCP server directory (where this module is located)
+    const currentModulePath = fileURLToPath(import.meta.url);
+    const mcpServerDir = join(dirname(currentModulePath), '..', '..');
+    const cacheDir = join(mcpServerDir, 'cache');
+    
+    this.indexPath = join(cacheDir, 'mcp-index.json');
   }
 
   /**
@@ -169,6 +175,9 @@ export class ObjectIndexManager {
         const indexData = await fs.readFile(this.indexPath, 'utf-8');
         const parsedIndex = JSON.parse(indexData);
         this.index = new Map(Object.entries(parsedIndex.objects || {}));
+        console.log(`📂 Index loaded from: ${this.indexPath} (${this.index.size} objects)`);
+      } else {
+        console.log(`📂 No existing index found at: ${this.indexPath}`);
       }
     } catch (error) {
       console.error("Error loading index:", error);
@@ -178,14 +187,75 @@ export class ObjectIndexManager {
 
   static async saveIndex(): Promise<void> {
     try {
+      // Ensure the cache directory exists
+      const cacheDir = dirname(this.indexPath);
+      await fs.mkdir(cacheDir, { recursive: true });
+      
       const indexData = {
         lastUpdated: Date.now(),
         version: "1.0",
         objects: Object.fromEntries(this.index)
       };
       await fs.writeFile(this.indexPath, JSON.stringify(indexData, null, 2));
+      console.log(`💾 Index saved to: ${this.indexPath}`);
     } catch (error) {
       console.error("Error saving index:", error);
+    }
+  }
+
+  /**
+   * Get the cache directory path
+   */
+  static getCacheDirectory(): string {
+    return dirname(this.indexPath);
+  }
+
+  /**
+   * Clean up old cache files (optional utility method)
+   * Optimized version using readdir with withFileTypes for better performance
+   */
+  static async cleanupOldCaches(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<void> {
+    try {
+      const cacheDir = this.getCacheDirectory();
+      if (!(await this.fileExists(cacheDir))) return;
+
+      // Use withFileTypes to get file info in single call
+      const entries = await fs.readdir(cacheDir, { withFileTypes: true });
+      const now = Date.now();
+      
+      // Process files in parallel for better performance
+      const cleanupPromises = entries
+        .filter(entry => 
+          entry.isFile() && 
+          entry.name.startsWith('mcp-') && 
+          entry.name.endsWith('.json')
+        )
+        .map(async (entry) => {
+          try {
+            const filePath = join(cacheDir, entry.name);
+            const stats = await fs.stat(filePath);
+            
+            if (now - stats.mtime.getTime() > maxAgeMs) {
+              await fs.unlink(filePath);
+              console.log(`🗑️ Cleaned up old cache file: ${entry.name}`);
+              return entry.name;
+            }
+            return null;
+          } catch (error) {
+            // Skip files that can't be processed
+            return null;
+          }
+        });
+
+      // Wait for all cleanup operations to complete
+      const results = await Promise.all(cleanupPromises);
+      const cleanedCount = results.filter(result => result !== null).length;
+      
+      if (cleanedCount > 0) {
+        console.log(`🗑️ Cache cleanup completed: ${cleanedCount} files removed`);
+      }
+    } catch (error) {
+      console.error("Error cleaning up cache:", error);
     }
   }
 
@@ -447,5 +517,12 @@ export class ObjectIndexManager {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Clear the current index (for testing purposes)
+   */
+  static clearIndex(): void {
+    this.index.clear();
   }
 }
