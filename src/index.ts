@@ -14,6 +14,7 @@ import {
 import { promises as fs } from "fs";
 import { join, extname} from "path";
 import { z } from "zod";
+import { fileURLToPath } from "url";
 
 // Import modules
 import { DiskLogger, createLoggedResponse } from "./modules/logger.js";
@@ -771,6 +772,6 @@ async function runServer() {
 }
 
 // Only start the server if this module is being run directly (not imported)
-if (process.argv[1] && process.argv[1].endsWith('index.js')) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   runServer();
 }
