@@ -18,6 +18,7 @@ import { z } from "zod";
 // Import modules
 import { DiskLogger, createLoggedResponse } from "./modules/logger.js";
 import { setXppCodebasePath, getXppCodebasePath, XPP_EXTENSIONS } from "./modules/config.js";
+import { AppConfig } from "./modules/app-config.js";
 import { AOTStructureManager } from "./modules/aot-structure.js";
 import { ObjectIndexManager } from "./modules/object-index.js";
 import { EnhancedSearchManager } from "./modules/search.js";
@@ -28,6 +29,16 @@ import { isXppRelatedFile } from "./modules/utils.js";
 // =============================================================================
 // SERVER INITIALIZATION
 // =============================================================================
+
+// Global server start time - set when server actually starts
+let serverStartTime: Date | null = null;
+
+/**
+ * Get the server start time
+ */
+export function getServerStartTime(): Date | null {
+  return serverStartTime;
+}
 
 // Create server instance
 const server = new Server({
@@ -49,20 +60,6 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
   
   const toolsResponse = {
     tools: [
-      {
-        name: "set_xpp_codebase_path",
-        description: "Set the root path to the Dynamics 365 Finance and Operations X++ codebase",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "Absolute path to the X++ codebase root directory",
-            },
-          },
-          required: ["path"],
-        },
-      },
       {
         name: "browse_directory",
         description: "Browse a directory in the X++ codebase and list its contents",
@@ -134,7 +131,7 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
       },
       {
         name: "find_xpp_object",
-        description: "Find and analyze X++ objects (classes, tables, forms, etc.) by name",
+        description: "Find and analyze X++ objects (classes, tables, forms, etc.) by name. Can also be used to validate if an object exists in the codebase.",
         inputSchema: {
           type: "object",
           properties: {
@@ -180,33 +177,6 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
         },
       },
       {
-        name: "validate_object_exists",
-        description: "Quickly validate if an X++ object exists in the codebase",
-        inputSchema: {
-          type: "object",
-          properties: {
-            objectName: {
-              type: "string",
-              description: "Name of the object to validate",
-            },
-            objectType: {
-              type: "string",
-              description: "Expected object type",
-              enum: ["CLASSES", "TABLES", "FORMS", "REPORTS", "ENUMS", "EDTS", "VIEWS", "MAPS", "SERVICES", "WORKFLOWS", "QUERIES", "MENUS", "MENUITEM"],
-            },
-          },
-          required: ["objectName"],
-        },
-      },
-      {
-        name: "discover_object_types",
-        description: "Discover available X++ object types in the current codebase",
-        inputSchema: {
-          type: "object",
-          properties: {},
-        },
-      },
-      {
         name: "discover_object_types_json",
         description: "Return the raw JSON structure from aot-structure.json file",
         inputSchema: {
@@ -230,14 +200,6 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
               default: false,
             },
           },
-        },
-      },
-      {
-        name: "get_index_stats",
-        description: "Get statistics about the current object index",
-        inputSchema: {
-          type: "object",
-          properties: {},
         },
       },
       {
@@ -292,6 +254,14 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
           required: ["searchTerm"],
         },
       },
+      {
+        name: "get_current_config",
+        description: "Get comprehensive server configuration including paths, index statistics, and system information",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
     ],
   };
 
@@ -334,7 +304,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 Index will be maintained at: ${join(path, '.mcp-index.json')}
 
-Use discover_object_types to see available object types in this codebase.
 Use build_object_index to create an index for faster searching.`;
         
         return await createLoggedResponse(content, (request as any).id, name);
@@ -348,7 +317,7 @@ Use build_object_index to create an index for faster searching.`;
         const { path, showHidden } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         const fullPath = path ? join(getXppCodebasePath(), path) : getXppCodebasePath();
@@ -373,7 +342,7 @@ Use build_object_index to create an index for faster searching.`;
         const { path } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         const fullPath = join(getXppCodebasePath(), path);
@@ -391,7 +360,7 @@ Use build_object_index to create an index for faster searching.`;
         const { searchTerm, path, extensions } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         const searchPath = path ? join(getXppCodebasePath(), path) : getXppCodebasePath();
@@ -415,7 +384,7 @@ Use build_object_index to create an index for faster searching.`;
         const { path } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         const fullPath = join(getXppCodebasePath(), path);
@@ -454,7 +423,7 @@ Use build_object_index to create an index for faster searching.`;
         const { objectName, objectType } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         const results = await findXppObject(objectName, objectType);
@@ -464,9 +433,9 @@ Use build_object_index to create an index for faster searching.`;
         content += `:\n\n`;
         
         if (results.length === 0) {
-          content += "No objects found.\n";
+          content += "❌ No objects found. The object does not exist in the codebase.\n";
         } else {
-          content += `Found ${results.length} objects:\n\n`;
+          content += `✅ Found ${results.length} object(s):\n\n`;
           for (const result of results) {
             content += `📦 ${result.name}\n`;
             content += `   Type: ${result.type}\n`;
@@ -484,7 +453,7 @@ Use build_object_index to create an index for faster searching.`;
         const { className } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         // Find the class file first
@@ -545,7 +514,7 @@ Use build_object_index to create an index for faster searching.`;
         const { tableName } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         // Find the table file first
@@ -593,49 +562,6 @@ Use build_object_index to create an index for faster searching.`;
         return await createLoggedResponse(content, (request as any).id, name);
       }
 
-      case "validate_object_exists": {
-        const schema = z.object({
-          objectName: z.string(),
-          objectType: z.string().optional(),
-        });
-        const { objectName, objectType } = schema.parse(args);
-        
-        if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
-        }
-        
-        const results = await findXppObject(objectName, objectType);
-        const exists = results.length > 0;
-        
-        let content = `Object "${objectName}" `;
-        if (objectType) content += `of type "${objectType}" `;
-        content += exists ? "EXISTS" : "DOES NOT EXIST";
-        content += " in the codebase.\n";
-        
-        if (exists) {
-          content += `\nFound ${results.length} match(es):\n`;
-          for (const result of results) {
-            content += `- ${result.name} (${result.type}) at ${result.path}\n`;
-          }
-        }
-        
-        return await createLoggedResponse(content, (request as any).id, name);
-      }
-
-      case "discover_object_types": {
-        if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
-        }
-        
-        const availableTypes = await AOTStructureManager.discoverAvailableObjectTypes(getXppCodebasePath());
-        const structuredTree = AOTStructureManager.getStructuredTree(availableTypes);
-        
-        let content = `Discovered ${availableTypes.length} object types in the current codebase:\n\n`;
-        content += structuredTree;
-        
-        return await createLoggedResponse(content, (request as any).id, name);
-      }
-
       case "discover_object_types_json": {
         await AOTStructureManager.loadStructure();
         const structure = AOTStructureManager.getRawStructure();
@@ -656,7 +582,7 @@ Use build_object_index to create an index for faster searching.`;
         const { objectType, forceRebuild } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         let content = "";
@@ -680,38 +606,6 @@ Use build_object_index to create an index for faster searching.`;
         return await createLoggedResponse(content, (request as any).id, name);
       }
 
-      case "get_index_stats": {
-        if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
-        }
-        
-        const stats = ObjectIndexManager.getStats();
-        
-        let content = `Object Index Statistics:\n\n`;
-        content += `Total objects: ${stats.totalObjects}\n\n`;
-        
-        if (Object.keys(stats.byType).length > 0) {
-          content += "By type:\n";
-          for (const [type, count] of Object.entries(stats.byType)) {
-            content += `- ${type}: ${count}\n`;
-          }
-          content += "\n";
-        }
-        
-        if (Object.keys(stats.byPackage).length > 0) {
-          content += "By package (top 10):\n";
-          const sortedPackages = Object.entries(stats.byPackage)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 10);
-          
-          for (const [pkg, count] of sortedPackages) {
-            content += `- ${pkg}: ${count}\n`;
-          }
-        }
-        
-        return await createLoggedResponse(content, (request as any).id, name);
-      }
-
       case "list_objects_by_type": {
         const schema = z.object({
           objectType: z.string(),
@@ -721,7 +615,7 @@ Use build_object_index to create an index for faster searching.`;
         const { objectType, sortBy, limit } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         const objects = ObjectIndexManager.listObjectsByType(objectType, sortBy, limit);
@@ -751,7 +645,7 @@ Use build_object_index to create an index for faster searching.`;
         const { searchTerm, searchPath, extensions, maxResults } = schema.parse(args);
         
         if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not set. Use set_xpp_codebase_path first.");
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
         }
         
         const results = await EnhancedSearchManager.smartSearch(
@@ -776,6 +670,25 @@ Use build_object_index to create an index for faster searching.`;
         }
         
         return await createLoggedResponse(content, (request as any).id, name);
+      }
+
+      case "get_current_config": {
+        try {
+          const config = await AppConfig.getApplicationConfiguration();
+          const response = {
+            _meta: {
+              type: "configuration",
+              timestamp: new Date().toISOString(),
+              version: "1.0.0"
+            },
+            ...config
+          };
+          
+          return await createLoggedResponse(JSON.stringify(response, null, 2), (request as any).id, name);
+        } catch (error) {
+          const errorMsg = `Error retrieving configuration: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          return await createLoggedResponse(errorMsg, (request as any).id, name);
+        }
       }
 
       default:
@@ -807,10 +720,43 @@ Use build_object_index to create an index for faster searching.`;
 
 async function runServer() {
   try {
+    // Initialize configuration system
+    await AppConfig.initialize();
+    
+    // Set XPP codebase path for backward compatibility with existing code
+    const xppPath = AppConfig.getXppPath();
+    if (xppPath) {
+      setXppCodebasePath(xppPath);
+      console.error(`XPP codebase path configured: ${xppPath}`);
+      
+      const metadataFolder = AppConfig.getXppMetadataFolder();
+      if (metadataFolder) {
+        console.error(`XPP metadata folder configured: ${metadataFolder}`);
+      }
+    }
+
+    // Initialize ObjectIndexManager if path is available
+    if (getXppCodebasePath()) {
+      ObjectIndexManager.setIndexPath(getXppCodebasePath());
+    }
+
     await DiskLogger.logStartup();
+    
+    // Load index if XPP path is set
+    if (getXppCodebasePath()) {
+      try {
+        await ObjectIndexManager.loadIndex();
+        await DiskLogger.logDebug(`Loaded object index for: ${getXppCodebasePath()}`);
+      } catch (error) {
+        await DiskLogger.logDebug(`Could not load existing index: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
     
     const transport = new StdioServerTransport();
     await server.connect(transport);
+    
+    // Set server start time after successful connection
+    serverStartTime = new Date();
     
     await DiskLogger.logDebug("🚀 MCP X++ Server started and listening on stdio");
   } catch (error) {
@@ -820,4 +766,7 @@ async function runServer() {
   }
 }
 
-runServer();
+// Only start the server if this module is being run directly (not imported)
+if (process.argv[1] && process.argv[1].endsWith('index.js')) {
+  runServer();
+}
