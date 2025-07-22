@@ -117,9 +117,6 @@ This section will be updated as documentation becomes available.
 
 ## Available Tools
 
-### Setup & Configuration
-- `set_xpp_codebase_path`: Configure the root path to your X++ codebase (required first step)
-
 ### File System Operations
 - `browse_directory`: List directory contents with X++ file identification
 - `read_file`: Read and display file contents
@@ -182,17 +179,42 @@ Recognized file extensions:
 
 ### Running the Server
 
-Start the MCP server:
+Start the MCP server with required configuration:
 ```bash
-npm start
+node build/index.js --xpp-path "C:\path\to\PackagesLocalDirectory"
+```
+
+With optional metadata folder:
+```bash
+node build/index.js --xpp-path "C:\path\to\PackagesLocalDirectory" --xpp-metadata-folder "C:\custom\metadata"
+```
+
+### VS Code Integration
+
+Configure in `.vscode/mcp.json`:
+```json
+{
+  "servers": {
+    "mcp-xpp-server": {
+      "command": "node",
+      "args": [
+        "./build/index.js",
+        "--xpp-path", "C:\\path\\to\\PackagesLocalDirectory",
+        "--xpp-metadata-folder", "C:\\custom\\metadata"  
+      ],
+      "cwd": "${workspaceFolder}",
+      "type": "stdio"
+    }
+  }
+}
 ```
 
 ### Integration with MCP Clients
 
 To use this server with Claude Desktop, Visual Studio, or other MCP clients:
-1. Configure the MCP client with the server details (see your client documentation)
-2. Set your X++ codebase path using `set_xpp_codebase_path`
-3. Use the available tools to browse and analyze your X++ code
+1. Configure the MCP client with the server details and provide the X++ codebase path via `--xpp-path` argument
+2. Use the available tools to browse and analyze your X++ code
+3. Use `get_current_config` to verify server configuration and monitor index statistics
 
 ## Available Tools
 
