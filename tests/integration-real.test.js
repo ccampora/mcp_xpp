@@ -30,8 +30,15 @@ beforeAll(async () => {
   const mcpConfigContent = await fs.readFile(mcpConfigPath, 'utf-8');
   mcpConfig = JSON.parse(mcpConfigContent.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''));
   
-  // Get the real D365 path from configuration
-  realXppPath = mcpConfig.servers['mcp-xpp-server'].env.XPP_CODEBASE_PATH;
+  // Get the real D365 path from command line arguments
+  const serverConfig = mcpConfig.servers['mcp-xpp-server'];
+  const xppPathIndex = serverConfig.args.findIndex(arg => arg === '--xpp-path');
+  if (xppPathIndex !== -1 && xppPathIndex + 1 < serverConfig.args.length) {
+    realXppPath = serverConfig.args[xppPathIndex + 1];
+  } else {
+    throw new Error('XPP codebase path not found in mcp.json configuration. Expected --xpp-path argument.');
+  }
+
   
   console.log(`🔧 Using real D365 path: ${realXppPath}`);
   
@@ -96,7 +103,8 @@ test('REAL: list_objects_by_type - Actual D365 CLASSES', async () => {
     
     // Call the real implementation
     const objects = ObjectIndexManager.listObjectsByType("CLASSES", "name", 10);
-    const totalCount = ObjectIndexManager.getObjectCountByType("CLASSES");
+    const stats = ObjectIndexManager.getStats();
+    const totalCount = stats.byType["CLASSES"] || 0;
     
     // Create the response in the same format as the real tool handler
     const response = {
@@ -164,7 +172,8 @@ test('REAL: list_objects_by_type - Actual D365 TABLES', async () => {
   try {
     // Call the real implementation for TABLES
     const objects = ObjectIndexManager.listObjectsByType("TABLES", "size", 5);
-    const totalCount = ObjectIndexManager.getObjectCountByType("TABLES");
+    const stats = ObjectIndexManager.getStats();
+    const totalCount = stats.byType["TABLES"] || 0;
     
     const response = {
       objectType: "TABLES",
@@ -210,7 +219,10 @@ test('REAL: Configuration validation', async () => {
   const serverConfig = mcpConfig.servers['mcp-xpp-server'];
   expect(serverConfig.command).toBe('node');
   expect(serverConfig.args).toContain('./build/index.js');
-  expect(serverConfig.env.XPP_CODEBASE_PATH).toBeDefined();
+  expect(serverConfig.args).toContain('--xpp-path');
+  const xppPathIndex = serverConfig.args.findIndex(arg => arg === '--xpp-path');
+  expect(xppPathIndex).toBeGreaterThanOrEqual(0);
+  expect(serverConfig.args[xppPathIndex + 1]).toBeDefined();
   
   // Verify the real path is set
   const configuredPath = getXppCodebasePath();
@@ -269,7 +281,8 @@ test('REAL: Error handling with invalid object type', async () => {
   try {
     // Test with invalid object type - this should handle gracefully
     const objects = ObjectIndexManager.listObjectsByType("INVALID_TYPE", "name", 10);
-    const totalCount = ObjectIndexManager.getObjectCountByType("INVALID_TYPE");
+    const stats = ObjectIndexManager.getStats();
+    const totalCount = stats.byType["INVALID_TYPE"] || 0;
     
     // Should return empty results, not throw
     expect(Array.isArray(objects)).toBe(true);
@@ -300,16 +313,22 @@ test('REAL: JSON serialization with actual D365 data', async () => {
     // Get real data from multiple object types
     const classesObjects = ObjectIndexManager.listObjectsByType("CLASSES", "name", 3);
     const tablesObjects = ObjectIndexManager.listObjectsByType("TABLES", "name", 3);
-    
+
+    const stats = ObjectIndexManager.getStats();
+
     const testResponse = {
       classes: {
         objectType: "CLASSES",
-        totalCount: ObjectIndexManager.getObjectCountByType("CLASSES"),
+
+        totalCount: stats.byType["CLASSES"] || 0,
+
         objects: classesObjects
       },
       tables: {
         objectType: "TABLES", 
-        totalCount: ObjectIndexManager.getObjectCountByType("TABLES"),
+
+        totalCount: stats.byType["TABLES"] || 0,
+
         objects: tablesObjects
       }
     };
@@ -332,3 +351,71 @@ test('REAL: JSON serialization with actual D365 data', async () => {
     throw error;
   }
 }, 30000);
+
+test('REAL: get_current_config tool functionality', async () => {
+  console.log('🔍 Testing get_current_config tool...');
+  
+  try {
+    const { AppConfig } = await import('../build/modules/app-config.js');
+    
+    // Initialize with test configuration
+    const originalArgv = process.argv;
+    process.argv = [
+      'node', 'index.js',
+      '--xpp-path', realXppPath,
+      '--xpp-metadata-folder', 'C:\\CustomXppMetadata1x4ye02p.ocz'
+    ];
+    
+    await AppConfig.initialize();
+    
+    // Test configuration retrieval
+    const config = await AppConfig.getApplicationConfiguration();
+    
+    // Validate configuration structure
+    expect(config).toBeDefined();
+    expect(config.serverConfig).toBeDefined();
+    expect(config.indexStats).toBeDefined();
+    expect(config.applicationInfo).toBeDefined();
+    expect(config.systemInfo).toBeDefined();
+    
+    // Validate server configuration
+    expect(config.serverConfig.xppPath).toBe(realXppPath);
+    expect(config.serverConfig.xppMetadataFolder).toBe('C:\\CustomXppMetadata1x4ye02p.ocz');
+    
+    // Validate application info
+    expect(config.applicationInfo.name).toBe('MCP X++ Server');
+    expect(config.applicationInfo.version).toBe('1.0.0');
+    expect(config.applicationInfo.startTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(config.applicationInfo.uptime).toBeDefined();
+    
+    // Validate system info
+    expect(config.systemInfo.nodeVersion).toMatch(/^v\d+\.\d+\.\d+$/);
+    expect(config.systemInfo.platform).toBeDefined();
+    expect(config.systemInfo.architecture).toBeDefined();
+    
+    // Validate index stats (may be empty if index not loaded)
+    expect(config.indexStats.totalObjects).toBeGreaterThanOrEqual(0);
+    expect(config.indexStats.objectTypes).toBeDefined();
+    expect(config.indexStats.indexSize).toBeDefined();
+    expect(config.indexStats.indexPath).toBeDefined();
+    
+    console.log('✅ get_current_config functionality validated');
+    console.log(`📊 Configuration contains ${config.indexStats.totalObjects} objects`);
+    console.log(`🖥️  Running on ${config.systemInfo.platform} with Node.js ${config.systemInfo.nodeVersion}`);
+    console.log(`⏰ Server uptime: ${config.applicationInfo.uptime}`);
+    console.log(`📁 XPP Path: ${config.serverConfig.xppPath}`);
+    console.log(`📂 Metadata Folder: ${config.serverConfig.xppMetadataFolder}`);
+    
+    // Test JSON serialization
+    const jsonString = JSON.stringify(config, null, 2);
+    expect(jsonString.length).toBeGreaterThan(500); // Should be substantial
+    expect(() => JSON.parse(jsonString)).not.toThrow();
+    
+    // Restore original argv
+    process.argv = originalArgv;
+    
+  } catch (error) {
+    console.error('❌ get_current_config test failed:', error);
+    throw error;
+  }
+}, 10000);
