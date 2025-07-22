@@ -38,6 +38,7 @@ beforeAll(async () => {
   } else {
     throw new Error('XPP codebase path not found in mcp.json configuration. Expected --xpp-path argument.');
   }
+
   
   console.log(`🔧 Using real D365 path: ${realXppPath}`);
   
@@ -312,17 +313,22 @@ test('REAL: JSON serialization with actual D365 data', async () => {
     // Get real data from multiple object types
     const classesObjects = ObjectIndexManager.listObjectsByType("CLASSES", "name", 3);
     const tablesObjects = ObjectIndexManager.listObjectsByType("TABLES", "name", 3);
+
     const stats = ObjectIndexManager.getStats();
-    
+
     const testResponse = {
       classes: {
         objectType: "CLASSES",
+
         totalCount: stats.byType["CLASSES"] || 0,
+
         objects: classesObjects
       },
       tables: {
         objectType: "TABLES", 
+
         totalCount: stats.byType["TABLES"] || 0,
+
         objects: tablesObjects
       }
     };

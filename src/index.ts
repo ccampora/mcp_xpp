@@ -620,17 +620,21 @@ Use build_object_index to create an index for faster searching.`;
         
         const objects = ObjectIndexManager.listObjectsByType(objectType, sortBy, limit);
         
-        let content = `Objects of type ${objectType}:\n`;
-        content += `Found ${objects.length} objects`;
-        if (limit) content += ` (limited to ${limit})`;
-        content += "\n\n";
+        // Get total count (before applying limit)
+        const totalCount = ObjectIndexManager.getObjectCountByType(objectType);
         
-        for (const obj of objects) {
-          content += `📦 ${obj.name}\n`;
-          content += `   Package: ${obj.package}\n`;
-          content += `   Path: ${obj.path}\n`;
-          content += `   Size: ${obj.size} bytes\n\n`;
-        }
+        const response = {
+          objectType,
+          totalCount,
+          objects: objects.map(obj => ({
+            name: obj.name,
+            package: obj.package,
+            path: obj.path,
+            size: obj.size
+          }))
+        };
+        
+        const content = JSON.stringify(response, null, 2);
         
         return await createLoggedResponse(content, (request as any).id, name);
       }

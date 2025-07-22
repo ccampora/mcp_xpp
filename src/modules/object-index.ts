@@ -519,6 +519,19 @@ export class ObjectIndexManager {
     }
   }
 
+  static getObjectCountByType(objectType: string): number {
+    const normalizedType = objectType.toUpperCase();
+    let count = 0;
+
+    for (const obj of this.index.values()) {
+      if (obj.type === normalizedType) {
+        count++;
+      }
+    }
+
+    return count;
+  }
+
   /**
    * Clear the current index (for testing purposes)
    */
