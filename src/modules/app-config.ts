@@ -41,6 +41,7 @@ export interface IndexStatistics {
   objectTypes: Record<string, number>;
   lastBuilt?: string;
   indexSize?: string;
+  indexSizeInKB?: number;
   indexPath?: string;
 }
 
@@ -213,6 +214,7 @@ class AppConfigManager {
             objectTypes: fileStats.objectTypes,
             lastBuilt: indexMetadata.lastBuilt,
             indexSize: indexMetadata.indexSize,
+            indexSizeInKB: indexMetadata.indexSizeInKB,
             indexPath: indexMetadata.indexPath
           };
         }
@@ -223,6 +225,7 @@ class AppConfigManager {
         objectTypes: stats.byType,
         lastBuilt: indexMetadata.lastBuilt,
         indexSize: indexMetadata.indexSize,
+        indexSizeInKB: indexMetadata.indexSizeInKB,
         indexPath: indexMetadata.indexPath
       };
     } catch (error) {
@@ -231,6 +234,7 @@ class AppConfigManager {
         objectTypes: {},
         lastBuilt: "Never",
         indexSize: "0 KB",
+        indexSizeInKB: 0,
         indexPath: "Not available"
       };
     }
@@ -270,7 +274,7 @@ class AppConfigManager {
   /**
    * Get index metadata from the index file
    */
-  private async getIndexMetadata(): Promise<{ lastBuilt: string; indexSize: string; indexPath: string }> {
+  private async getIndexMetadata(): Promise<{ lastBuilt: string; indexSize: string; indexSizeInKB: number; indexPath: string }> {
     try {
       const indexPath = join(process.cwd(), 'cache', 'mcp-index.json');
       
@@ -282,12 +286,14 @@ class AppConfigManager {
         return {
           lastBuilt: parsed.lastUpdated ? new Date(parsed.lastUpdated).toISOString() : "Unknown",
           indexSize: this.formatBytes(stats.size),
+          indexSizeInKB: Math.round((stats.size / 1024) * 100) / 100, // Round to 2 decimal places
           indexPath: indexPath
         };
       } catch {
         return {
           lastBuilt: "Never",
           indexSize: "0 KB",
+          indexSizeInKB: 0,
           indexPath: indexPath
         };
       }
@@ -295,6 +301,7 @@ class AppConfigManager {
       return {
         lastBuilt: "Error",
         indexSize: "Unknown",
+        indexSizeInKB: 0,
         indexPath: "Not available"
       };
     }
