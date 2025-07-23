@@ -28,3 +28,28 @@ export interface ObjectIndex {
   dependencies?: string[];
   size: number;
 }
+
+// Model creation types
+export interface ModelDescriptor {
+  name: string;
+  publisher: string;
+  version: string;
+  layer: string;
+  description?: string;
+  dependencies?: ModelDependency[];
+}
+
+export interface ModelDependency {
+  name: string;
+  publisher: string;
+  version: string;
+}
+
+export interface ModelCreationResult {
+  modelName: string;
+  modelPath: string;
+  descriptorPath: string;
+  aotStructurePath: string;
+  created: string[];
+  message: string;
+}

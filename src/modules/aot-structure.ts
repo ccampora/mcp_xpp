@@ -14,7 +14,7 @@ export class AOTStructureManager {
 
   static async loadStructure(): Promise<void> {
     try {
-      const structureFile = join(__dirname, '..', 'config', 'aot-structure.json');
+      const structureFile = join(__dirname, '..', '..', 'config', 'aot-structure.json');
       const content = await fs.readFile(structureFile, 'utf-8');
       this.aotStructure = JSON.parse(content);
     } catch (error) {

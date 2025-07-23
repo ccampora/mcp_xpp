@@ -28,6 +28,8 @@ import { EnhancedSearchManager } from "./modules/search.js";
 import { parseXppClass, parseXppTable, findXppObject, getXppObjectType } from "./modules/parsers.js";
 import { safeReadFile, getDirectoryListing, searchInFiles } from "./modules/file-utils.js";
 import { isXppRelatedFile } from "./modules/utils.js";
+import { ModelCreator } from "./modules/model-creator.js";
+import { ModelDescriptor } from "./modules/types.js";
 
 // =============================================================================
 // SERVER INITIALIZATION
@@ -263,6 +265,54 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
         inputSchema: {
           type: "object",
           properties: {},
+        },
+      },
+      {
+        name: "create_standalone_model",
+        description: "Create modern .ocz deployment container structure for D365 F&O models",
+        inputSchema: {
+          type: "object",
+          properties: {
+            modelName: {
+              type: "string",
+              description: "Name of the model to create",
+            },
+            publisher: {
+              type: "string", 
+              description: "Publisher of the model",
+            },
+            version: {
+              type: "string",
+              description: "Version of the model (e.g., '1.0.0')",
+            },
+            layer: {
+              type: "string",
+              description: "Layer for the model (e.g., 'usr', 'cus', 'var', 'isv')",
+              enum: ["usr", "cus", "var", "isv", "isy", "bus", "dat", "gls", "dis", "uat", "frt", "fpk", "sln"],
+            },
+            targetPath: {
+              type: "string",
+              description: "Target directory path where the model should be created (relative to X++ codebase root or absolute path)",
+            },
+            description: {
+              type: "string",
+              description: "Optional description for the model",
+            },
+            dependencies: {
+              type: "array",
+              description: "Optional array of model dependencies",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  publisher: { type: "string" },
+                  version: { type: "string" },
+                },
+                required: ["name", "publisher", "version"],
+              },
+            },
+          },
+          required: ["modelName", "publisher", "version", "layer", "targetPath"],
         },
       },
     ],
@@ -696,6 +746,62 @@ Use build_object_index to create an index for faster searching.`;
           const errorMsg = `Error retrieving configuration: ${error instanceof Error ? error.message : 'Unknown error'}`;
           return await createLoggedResponse(errorMsg, (request as any).id, name);
         }
+      }
+
+      case "create_standalone_model": {
+        const schema = z.object({
+          modelName: z.string(),
+          publisher: z.string(),
+          version: z.string(),
+          layer: z.enum(["usr", "cus", "var", "isv", "isy", "bus", "dat", "gls", "dis", "uat", "frt", "fpk", "sln"]),
+          targetPath: z.string(),
+          description: z.string().optional(),
+          dependencies: z.array(z.object({
+            name: z.string(),
+            publisher: z.string(),
+            version: z.string(),
+          })).optional(),
+        });
+        const { modelName, publisher, version, layer, targetPath, description, dependencies } = schema.parse(args);
+        
+        // Resolve target path (can be relative to XPP codebase or absolute)
+        let resolvedTargetPath: string;
+        if (targetPath.startsWith('/') || targetPath.match(/^[A-Z]:/)) {
+          // Absolute path
+          resolvedTargetPath = targetPath;
+        } else {
+          // Relative to XPP codebase root
+          if (!getXppCodebasePath()) {
+            throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server or provide an absolute path.");
+          }
+          resolvedTargetPath = join(getXppCodebasePath(), targetPath);
+        }
+        
+        const modelDescriptor: ModelDescriptor = {
+          name: modelName,
+          publisher,
+          version,
+          layer,
+          description,
+          dependencies,
+        };
+        
+        const result = await ModelCreator.createStandaloneModel(resolvedTargetPath, modelDescriptor);
+        
+        let content = `✅ ${result.message}\n\n`;
+        content += `Model Details:\n`;
+        content += `- Name: ${result.modelName}\n`;
+        content += `- Path: ${result.modelPath}\n`;
+        content += `- Descriptor: ${result.descriptorPath}\n`;
+        content += `- AOT Structure: ${result.aotStructurePath}\n\n`;
+        content += `Created Files/Directories (${result.created.length}):\n`;
+        for (const item of result.created) {
+          content += `📁 ${item}\n`;
+        }
+        content += `\n🎯 The model is ready for development and deployment!\n`;
+        content += `📝 You can now add X++ objects to the appropriate AOT folders.`;
+        
+        return await createLoggedResponse(content, (request as any).id, name);
       }
 
       default:
