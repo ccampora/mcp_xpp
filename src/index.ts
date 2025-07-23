@@ -16,6 +16,7 @@ import { join, extname } from "path";
 import { pathToFileURL } from "url";
 import { realpathSync } from "fs";
 import { z } from "zod";
+import { fileURLToPath } from "url";
 
 // Import modules
 import { DiskLogger, createLoggedResponse } from "./modules/logger.js";
