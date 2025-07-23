@@ -12,7 +12,9 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { promises as fs } from "fs";
-import { join, extname} from "path";
+import { join, extname } from "path";
+import { pathToFileURL } from "url";
+import { realpathSync } from "fs";
 import { z } from "zod";
 import { fileURLToPath } from "url";
 
@@ -772,6 +774,16 @@ async function runServer() {
 }
 
 // Only start the server if this module is being run directly (not imported)
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runServer();
+if (process.argv[1]) {
+  try {
+    const resolvedPath = realpathSync(process.argv[1]);
+    if (import.meta.url === pathToFileURL(resolvedPath).href) {
+      runServer();
+    }
+  } catch (error) {
+    // Fallback to basic check if realpath fails
+    if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+      runServer();
+    }
+  }
 }
