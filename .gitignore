@@ -119,3 +119,6 @@ cache/
 cache/*
 
 MetadataExample
+
+misc
+misc/*

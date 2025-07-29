@@ -64,6 +64,47 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
   const toolsResponse = {
     tools: [
       {
+        name: "create_standalone_model",
+        description: "Create modern .ocz deployment container structure for D365 F&O models",
+        inputSchema: {
+          type: "object",
+          properties: {
+            modelName: {
+              type: "string",
+              description: "Name of the model to create",
+            },
+            publisher: {
+              type: "string",
+              description: "Publisher name for the model",
+              default: "YourCompany",
+            },
+            version: {
+              type: "string",
+              description: "Version number for the model (e.g., '1.0.0.0')",
+              default: "1.0.0.0",
+            },
+            layer: {
+              type: "string",
+              description: "Application layer (e.g., 'usr', 'cus', 'var')",
+              enum: ["usr", "cus", "var", "isv"],
+              default: "usr",
+            },
+            dependencies: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of model dependencies",
+              default: ["ApplicationPlatform", "ApplicationFoundation"],
+            },
+            outputPath: {
+              type: "string",
+              description: "Output path for the model structure (relative to X++ codebase root)",
+              default: "Models",
+            },
+          },
+          required: ["modelName"],
+        },
+      },
+      {
         name: "browse_directory",
         description: "Browse a directory in the X++ codebase and list its contents",
         inputSchema: {
@@ -283,6 +324,118 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   
   try {
     switch (name) {
+      case "create_standalone_model": {
+        const schema = z.object({
+          modelName: z.string(),
+          publisher: z.string().default("YourCompany"),
+          version: z.string().default("1.0.0.0"),
+          layer: z.enum(["usr", "cus", "var", "isv"]).default("usr"),
+          dependencies: z.array(z.string()).default(["ApplicationPlatform", "ApplicationFoundation"]),
+          outputPath: z.string().default("Models"),
+        });
+        const { modelName, publisher, version, layer, dependencies, outputPath } = schema.parse(args);
+        
+        if (!getXppCodebasePath()) {
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
+        }
+        
+        // Create the model structure
+        const fullOutputPath = join(getXppCodebasePath(), outputPath, modelName);
+        
+        try {
+          // Create directory structure
+          await fs.mkdir(fullOutputPath, { recursive: true });
+          await fs.mkdir(join(fullOutputPath, "XppMetadata"), { recursive: true });
+          await fs.mkdir(join(fullOutputPath, "XppSource"), { recursive: true });
+          await fs.mkdir(join(fullOutputPath, "Descriptor"), { recursive: true });
+          
+          // Generate model descriptor XML
+          const descriptorXml = `<?xml version="1.0" encoding="utf-8"?>
+<AxModelInfo xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+  <AppliedUpdates xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
+  <Customization>Allow</Customization>
+  <DataLoss>Allow</DataLoss>
+  <Description>${modelName} - Custom D365 F&O Model</Description>
+  <DisplayName>${modelName}</DisplayName>
+  <Id>00000000-0000-0000-0000-000000000000</Id>
+  <InstallMode>Standard</InstallMode>
+  <Layer>${layer.toUpperCase()}</Layer>
+  <Locked>false</Locked>
+  <Name>${modelName}</Name>
+  <Publisher>${publisher}</Publisher>
+  <References xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+${dependencies.map(dep => `    <d2p1:string>${dep}</d2p1:string>`).join('\n')}
+  </References>
+  <Signed>false</Signed>
+  <SupportedPlatforms xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
+  <VersionBuildNumber>0</VersionBuildNumber>
+  <VersionMajor>${version.split('.')[0] || '1'}</VersionMajor>
+  <VersionMinor>${version.split('.')[1] || '0'}</VersionMinor>
+  <VersionRevision>${version.split('.')[3] || '0'}</VersionRevision>
+</AxModelInfo>`;
+          
+          // Write descriptor file
+          await fs.writeFile(join(fullOutputPath, "Descriptor", `${modelName}.xml`), descriptorXml, 'utf8');
+          
+          // Create basic AOT folder structure in XppMetadata
+          const aotFolders = [
+            "Classes", "Tables", "Forms", "Reports", "Enums", "ExtendedDataTypes",
+            "Views", "Maps", "Services", "Workflows", "Queries", "Menus", "MenuItems"
+          ];
+          
+          for (const folder of aotFolders) {
+            await fs.mkdir(join(fullOutputPath, "XppMetadata", folder), { recursive: true });
+            await fs.mkdir(join(fullOutputPath, "XppSource", folder), { recursive: true });
+          }
+          
+          // Create a sample README file
+          const readmeContent = `# ${modelName}
+
+This is a D365 Finance and Operations model created with the MCP X++ Server.
+
+## Model Information
+- **Publisher**: ${publisher}
+- **Version**: ${version}
+- **Layer**: ${layer.toUpperCase()}
+- **Dependencies**: ${dependencies.join(', ')}
+
+## Structure
+- \`Descriptor/\` - Contains model descriptor XML
+- \`XppMetadata/\` - Contains compiled metadata
+- \`XppSource/\` - Contains X++ source code files
+
+## Usage
+Add your X++ objects to the appropriate folders under XppSource/ and XppMetadata/.
+`;
+          
+          await fs.writeFile(join(fullOutputPath, "README.md"), readmeContent, 'utf8');
+          
+          const content = `Successfully created model: ${modelName}
+
+Location: ${fullOutputPath}
+
+Model Details:
+- Publisher: ${publisher}
+- Version: ${version}
+- Layer: ${layer.toUpperCase()}
+- Dependencies: ${dependencies.join(', ')}
+
+Created Structure:
+✓ Descriptor/${modelName}.xml - Model descriptor with dependencies
+✓ XppMetadata/ - Folder for compiled metadata
+✓ XppSource/ - Folder for X++ source files
+✓ AOT folder structure for all object types
+✓ README.md - Documentation file
+
+The model is ready for development. Add your X++ objects to the appropriate folders.`;
+          
+          return await createLoggedResponse(content, (request as any).id, name);
+          
+        } catch (error) {
+          throw new Error(`Failed to create model structure: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
       case "set_xpp_codebase_path": {
         const schema = z.object({
           path: z.string(),

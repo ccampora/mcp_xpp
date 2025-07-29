@@ -669,6 +669,185 @@ test('REAL: get_current_config JSON Output Validation - MCP Tool Response Format
   }
 }, 10000);
 
+test('REAL: Model Discovery JSON Validation - Enhanced get_current_config Models Array', async () => {
+  console.log('🔍 Testing model discovery JSON validation in get_current_config...');
+  
+  try {
+    const { AppConfig } = await import('../build/modules/app-config.js');
+    
+    // Initialize with test configuration
+    const originalArgv = process.argv;
+    process.argv = [
+      'node', 'index.js',
+      '--xpp-path', realXppPath,
+      '--xpp-metadata-folder', 'C:\\CustomXppMetadata1x4ye02p.ocz'
+    ];
+    
+    await AppConfig.initialize();
+    
+    // Get configuration as the tool handler would
+    const config = await AppConfig.getApplicationConfiguration();
+    
+    // Create response exactly as the tool handler does (with _meta wrapper)
+    const response = {
+      _meta: {
+        type: "configuration",
+        timestamp: new Date().toISOString(),
+        version: "1.0.0"
+      },
+      ...config
+    };
+    
+    // === MODELS ARRAY VALIDATION ===
+    
+    // 1. Models array existence and type validation
+    expect(response).toHaveProperty('models');
+    expect(Array.isArray(response.models)).toBe(true);
+    console.log(`📦 Found ${response.models.length} models in discovery`);
+    
+    // 2. Validate models array is not empty (should find at least standard Microsoft models)
+    expect(response.models.length).toBeGreaterThan(0);
+    expect(response.models.length).toBeGreaterThan(50); // Should have many Microsoft models
+    
+    // 3. Validate each model object structure
+    response.models.forEach((model, index) => {
+      // Required string fields
+      expect(typeof model.name).toBe('string');
+      expect(typeof model.displayName).toBe('string');
+      expect(typeof model.publisher).toBe('string');
+      expect(typeof model.version).toBe('string');
+      expect(typeof model.layer).toBe('string');
+      expect(typeof model.id).toBe('string');
+      expect(typeof model.descriptorPath).toBe('string');
+      
+      // Required boolean fields
+      expect(typeof model.hasSource).toBe('boolean');
+      expect(typeof model.hasBuildArtifacts).toBe('boolean');
+      
+      // Required array field
+      expect(Array.isArray(model.dependencies)).toBe(true);
+      
+      // Optional string field (can be undefined or string)
+      if (model.description !== undefined) {
+        expect(typeof model.description).toBe('string');
+      }
+      
+      // Optional number field (can be undefined or number)
+      if (model.objectCount !== undefined) {
+        expect(typeof model.objectCount).toBe('number');
+        expect(Number.isInteger(model.objectCount)).toBe(true);
+        expect(model.objectCount).toBeGreaterThanOrEqual(0);
+      }
+      
+      // Validate field content requirements
+      expect(model.name).toBeTruthy(); // Name should not be empty
+      expect(model.displayName).toBeTruthy(); // Display name should not be empty
+      expect(model.publisher).toBeTruthy(); // Publisher should not be empty
+      expect(model.version).toBeTruthy(); // Version should not be empty
+      expect(model.id).toBeTruthy(); // ID should not be empty
+      expect(model.descriptorPath).toBeTruthy(); // Descriptor path should not be empty
+      
+      // Validate version format (should be X.Y.Z.W)
+      expect(model.version).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+      
+      // Validate dependencies array contains only strings
+      model.dependencies.forEach((dep, depIndex) => {
+        expect(typeof dep).toBe('string');
+        expect(dep).toBeTruthy(); // Dependency names should not be empty
+      });
+      
+      // Validate descriptor path format (should be absolute path ending with .xml)
+      expect(model.descriptorPath).toMatch(/^[A-Za-z]:\\.+\.xml$/);
+      
+      // Log sample models for verification
+      if (index < 3) {
+        console.log(`📋 Sample Model ${index + 1}: ${model.name} (${model.publisher}) - Layer ${model.layer}`);
+      }
+    });
+    
+    // 4. Validate specific model types exist
+    const layerCounts = {};
+    const publisherCounts = {};
+    let microsoftModels = 0;
+    let customModels = 0;
+    
+    response.models.forEach(model => {
+      // Count by layer
+      layerCounts[model.layer] = (layerCounts[model.layer] || 0) + 1;
+      
+      // Count by publisher
+      publisherCounts[model.publisher] = (publisherCounts[model.publisher] || 0) + 1;
+      
+      // Count Microsoft vs custom models
+      if (model.publisher.toLowerCase().includes('microsoft')) {
+        microsoftModels++;
+      } else {
+        customModels++;
+      }
+    });
+    
+    // 5. Validate we found expected model types
+    expect(microsoftModels).toBeGreaterThan(100); // Should have many Microsoft models
+    console.log(`🏢 Microsoft models: ${microsoftModels}`);
+    console.log(`🔧 Custom/ISV models: ${customModels}`);
+    
+    // Should have models in layer 0 (Microsoft standard models)
+    expect(layerCounts['0']).toBeGreaterThan(50);
+    console.log(`📊 Layer distribution:`, layerCounts);
+    console.log(`🏭 Publisher distribution:`, Object.keys(publisherCounts).length, 'publishers');
+    
+    // 6. Validate specific expected models exist
+    const modelNames = response.models.map(m => m.name);
+    const expectedStandardModels = [
+      'ApplicationPlatform',
+      'ApplicationFoundation', 
+      'Foundation', // This is the actual model name for ApplicationSuite
+      'ApplicationCommon'
+    ];
+    
+    expectedStandardModels.forEach(expectedModel => {
+      expect(modelNames).toContain(expectedModel);
+    });
+    console.log('✅ Found all expected standard Microsoft models');
+    
+    // 7. JSON serialization validation for models array
+    const modelsJsonString = JSON.stringify(response.models, null, 2);
+    expect(modelsJsonString).toBeTruthy();
+    expect(modelsJsonString.length).toBeGreaterThan(10000); // Should be substantial JSON
+    
+    // 8. JSON round-trip validation for models
+    const reparsedModels = JSON.parse(modelsJsonString);
+    expect(reparsedModels).toEqual(response.models);
+    
+    // 9. Validate models JSON doesn't contain problematic values
+    expect(modelsJsonString).not.toContain('undefined');
+    expect(modelsJsonString).not.toContain('NaN');
+    expect(modelsJsonString).not.toContain('Infinity');
+    expect(modelsJsonString).not.toContain('[object Object]');
+    
+    // 10. Full response JSON validation including models
+    const fullJsonString = JSON.stringify(response, null, 2);
+    expect(fullJsonString).toBeTruthy();
+    
+    // Validate full response round-trip with models
+    const reparsedFull = JSON.parse(fullJsonString);
+    expect(reparsedFull).toEqual(response);
+    expect(reparsedFull.models).toEqual(response.models);
+    
+    console.log('✅ Model discovery JSON validation completed successfully');
+    console.log(`📊 Models JSON size: ${modelsJsonString.length} characters`);
+    console.log(`📈 Full response JSON size: ${fullJsonString.length} characters`);
+    console.log(`🎯 Model discovery found ${response.models.length} total models`);
+    
+    // Restore original argv
+    process.argv = originalArgv;
+    
+  } catch (error) {
+    console.error('❌ Model discovery JSON validation failed:', error);
+    throw error;
+  }
+}, 15000); // Longer timeout for model discovery
+
 test('REAL: Multiple Tools JSON Consistency Validation', async () => {
   // Skip if D365 path doesn't exist
   try {

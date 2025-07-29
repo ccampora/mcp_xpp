@@ -35,9 +35,23 @@ When working with this codebase, be aware of these common X++ file extensions:
 - Maintain performance by limiting search results and file sizes
 - Follow MCP protocol specifications for tool definitions
 
+## MCP Tool Management Guidelines
+- **Tool Limit Awareness**: VS Code supports max 128 tools simultaneously
+- **Information Display Strategy**: Any tool that primarily shows information should be consolidated into the `get_current_config` tool rather than creating separate tools
+- **Tool Consolidation Rule**: Before creating a new tool, evaluate if the functionality can be added to existing tools
+- **Examples**:
+  - ✅ `get_current_config` - Central hub for all configuration and informational data
+  - ❌ `list_models` - Should be part of `get_current_config`
+  - ❌ `show_server_info` - Should be part of `get_current_config`
+  - ❌ `display_statistics` - Should be part of `get_current_config`
+
 You can find more info and examples at https://modelcontextprotocol.io/llms-full.txt
 
 ## Security Considerations
 - All file operations are restricted to the configured X++ codebase directory
 - Path traversal attacks are prevented through path validation
 - File size limits prevent memory issues with large files
+
+## When doing adhoc testing
+- Any adhoc testing file or script that you would need to create MUST be created inside a misc folder
+- You won't create any other adhoc test outside the misc folder

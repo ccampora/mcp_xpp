@@ -45,9 +45,25 @@ export interface IndexStatistics {
   indexPath?: string;
 }
 
+export interface ModelInfo {
+  name: string;
+  displayName: string;
+  publisher: string;
+  version: string;
+  layer: string;
+  id: string;
+  dependencies: string[];
+  description?: string;
+  descriptorPath: string;
+  hasSource: boolean;
+  hasBuildArtifacts: boolean;
+  objectCount?: number;
+}
+
 export interface ApplicationConfiguration {
   serverConfig: ServerConfiguration;
   indexStats: IndexStatistics;
+  models: ModelInfo[];
   applicationInfo: {
     name: string;
     version: string;
@@ -174,6 +190,7 @@ class AppConfigManager {
    */
   public async getApplicationConfiguration(): Promise<ApplicationConfiguration> {
     const indexStats = await this.getIndexStatistics();
+    const models = await this.getAvailableModels();
     
     // Get server start time from the main server module
     const getServerStartTimeFn = await importServerStartTime();
@@ -183,6 +200,7 @@ class AppConfigManager {
     return {
       serverConfig: this.getServerConfig(),
       indexStats,
+      models,
       applicationInfo: {
         name: "MCP X++ Server",
         version: "1.0.0",
@@ -338,6 +356,187 @@ class AppConfigManager {
     } else {
       return `${seconds}s`;
     }
+  }
+
+  /**
+   * Get all available D365 F&O models in the codebase
+   */
+  public async getAvailableModels(): Promise<ModelInfo[]> {
+    const models: ModelInfo[] = [];
+    
+    if (!this.config.xppPath) {
+      return models;
+    }
+
+    try {
+      // Search for model descriptor files throughout the codebase
+      await this.findModelsRecursively(this.config.xppPath, models);
+      
+      // Sort models by name for consistent output
+      models.sort((a, b) => a.name.localeCompare(b.name));
+      
+      return models;
+    } catch (error) {
+      await DiskLogger.logError(error, "getAvailableModels");
+      return [];
+    }
+  }
+
+  /**
+   * Recursively find model descriptor files and parse model information
+   */
+  private async findModelsRecursively(dirPath: string, models: ModelInfo[]): Promise<void> {
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = join(dirPath, entry.name);
+        
+        if (entry.isDirectory()) {
+          // Check if this directory contains a Descriptor folder
+          const descriptorPath = join(fullPath, 'Descriptor');
+          try {
+            const descriptorStat = await fs.stat(descriptorPath);
+            if (descriptorStat.isDirectory()) {
+              // Look for XML files in the Descriptor folder
+              const descriptorFiles = await fs.readdir(descriptorPath);
+              const xmlFiles = descriptorFiles.filter(file => file.endsWith('.xml'));
+              
+              for (const xmlFile of xmlFiles) {
+                const modelName = xmlFile.replace('.xml', '');
+                const xmlPath = join(descriptorPath, xmlFile);
+                
+                try {
+                  const modelInfo = await this.parseModelDescriptor(xmlPath, modelName, fullPath);
+                  if (modelInfo) {
+                    models.push(modelInfo);
+                  }
+                } catch (error) {
+                  await DiskLogger.logError(error, `parseModelDescriptor:${modelName}`);
+                }
+              }
+            }
+          } catch {
+            // Directory doesn't have Descriptor folder, continue searching recursively
+            await this.findModelsRecursively(fullPath, models);
+          }
+        }
+      }
+    } catch (error) {
+      // Ignore directories we can't read
+    }
+  }
+
+  /**
+   * Parse a model descriptor XML file and extract model information
+   */
+  private async parseModelDescriptor(xmlPath: string, modelName: string, modelRoot: string): Promise<ModelInfo | null> {
+    try {
+      const xmlContent = await fs.readFile(xmlPath, 'utf-8');
+      
+      // Simple XML parsing - extract key elements
+      const displayNameMatch = xmlContent.match(/<DisplayName>([^<]+)<\/DisplayName>/);
+      const publisherMatch = xmlContent.match(/<Publisher>([^<]+)<\/Publisher>/);
+      const idMatch = xmlContent.match(/<Id>([^<]+)<\/Id>/);
+      const layerMatch = xmlContent.match(/<Layer>([^<]+)<\/Layer>/);
+      const descriptionMatch = xmlContent.match(/<Description>([^<]*)<\/Description>/);
+      
+      // Extract version information
+      const versionMajorMatch = xmlContent.match(/<VersionMajor>([^<]+)<\/VersionMajor>/);
+      const versionMinorMatch = xmlContent.match(/<VersionMinor>([^<]+)<\/VersionMinor>/);
+      const versionBuildMatch = xmlContent.match(/<VersionBuild>([^<]+)<\/VersionBuild>/);
+      const versionRevisionMatch = xmlContent.match(/<VersionRevision>([^<]+)<\/VersionRevision>/);
+      
+      // Extract dependencies
+      const dependencies: string[] = [];
+      const moduleRefsMatch = xmlContent.match(/<ModuleReferences[^>]*>(.*?)<\/ModuleReferences>/s);
+      if (moduleRefsMatch) {
+        const stringMatches = moduleRefsMatch[1].match(/<d2p1:string>([^<]+)<\/d2p1:string>/g);
+        if (stringMatches) {
+          for (const match of stringMatches) {
+            const depMatch = match.match(/<d2p1:string>([^<]+)<\/d2p1:string>/);
+            if (depMatch) {
+              dependencies.push(depMatch[1]);
+            }
+          }
+        }
+      }
+      
+      // Build version string
+      const major = versionMajorMatch?.[1] || '1';
+      const minor = versionMinorMatch?.[1] || '0';
+      const build = versionBuildMatch?.[1] || '0';
+      const revision = versionRevisionMatch?.[1] || '0';
+      const version = `${major}.${minor}.${build}.${revision}`;
+      
+      // Check for source files and build artifacts
+      const parentDir = join(modelRoot, '..');
+      const hasSource = await this.checkForSourceFiles(parentDir, modelName);
+      const hasBuildArtifacts = await this.checkForBuildArtifacts(modelRoot);
+      
+      return {
+        name: modelName,
+        displayName: displayNameMatch?.[1] || modelName,
+        publisher: publisherMatch?.[1] || 'Unknown',
+        version,
+        layer: layerMatch?.[1] || 'Unknown',
+        id: idMatch?.[1] || 'Unknown',
+        dependencies,
+        description: descriptionMatch?.[1] || '',
+        descriptorPath: xmlPath,
+        hasSource,
+        hasBuildArtifacts
+      };
+    } catch (error) {
+      await DiskLogger.logError(error, `parseModelDescriptor:${modelName}`);
+      return null;
+    }
+  }
+
+  /**
+   * Check if model has source files in XppSource folder
+   */
+  private async checkForSourceFiles(containerDir: string, modelName: string): Promise<boolean> {
+    try {
+      const xppSourcePath = join(containerDir, 'XppSource', modelName);
+      const stat = await fs.stat(xppSourcePath);
+      if (stat.isDirectory()) {
+        const files = await fs.readdir(xppSourcePath);
+        return files.some(file => file.endsWith('.xpp'));
+      }
+    } catch {
+      // Directory doesn't exist or can't be read
+    }
+    return false;
+  }
+
+  /**
+   * Check if model has build artifacts
+   */
+  private async checkForBuildArtifacts(modelRoot: string): Promise<boolean> {
+    try {
+      // Check for common build artifacts
+      const buildFiles = ['BuildProjectResult.xml', 'BuildProjectResult.log'];
+      for (const buildFile of buildFiles) {
+        try {
+          await fs.stat(join(modelRoot, buildFile));
+          return true;
+        } catch {
+          // File doesn't exist, continue checking
+        }
+      }
+      
+      // Check for bin directory
+      try {
+        const binStat = await fs.stat(join(modelRoot, 'bin'));
+        return binStat.isDirectory();
+      } catch {
+        // Bin directory doesn't exist
+      }
+    } catch {
+      // Error checking for build artifacts
+    }
+    return false;
   }
 }
 

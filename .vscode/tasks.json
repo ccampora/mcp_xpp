@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Build and Run MCP Server",
+			"label": "Build Only",
 			"type": "shell",
 			"command": "powershell",
 			"args": [
@@ -15,6 +15,22 @@
 			"problemMatcher": [
 				"$tsc"
 			]
+		},
+		{
+			"label": "Build and Run MCP Server",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"npm run build; if ($LASTEXITCODE -eq 0) { node ./build/index.js --xpp-path 'C:\\Users\\ccampora\\AppData\\Local\\Microsoft\\Dynamics365\\10.0.2015.54\\PackagesLocalDirectory' --xpp-metadata-folder 'C:\\CustomXppMetadata1x4ye02p.ocz' }"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"isBackground": true
 		},
 		{
 			"label": "Test MCP Server",
