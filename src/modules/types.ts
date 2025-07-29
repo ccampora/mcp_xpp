@@ -8,6 +8,15 @@ export interface AOTNodeConfig {
 
 export interface AOTStructure {
   aotStructure: { [key: string]: AOTNodeConfig };
+  aotDirectories?: string[];
+  xppMetadataDirectories?: string[];
+  layerMapping?: Record<string, number>;
+  descriptorTemplate?: any;
+  modelStructure?: {
+    required: string[];
+    conditional: string[];
+    buildArtifacts: string[];
+  };
 }
 
 export interface DiscoveredTypeInfo {

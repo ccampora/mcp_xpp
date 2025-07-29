@@ -61,8 +61,57 @@ const server = new Server({
 server.setRequestHandler(ListToolsRequestSchema, async (request) => {
   await DiskLogger.logRequest(request);
   
+  // Get available layers and object types dynamically from configuration
+  const availableLayers = await AOTStructureManager.getAvailableLayers();
+  const availableObjectTypes = await AOTStructureManager.getAvailableObjectTypes();
+  
   const toolsResponse = {
     tools: [
+      {
+        name: "create_xpp_object",
+        description: "Create D365 F&O objects (models, classes, tables, enums, forms, etc.) with unified interface",
+        inputSchema: {
+          type: "object",
+          properties: {
+            objectName: {
+              type: "string",
+              description: "Name of the object to create",
+            },
+            objectType: {
+              type: "string",
+              enum: availableObjectTypes,
+              description: "Type of X++ object to create"
+            },
+            layer: {
+              type: "string",
+              enum: availableLayers,
+              description: "Application layer for the object"
+            },
+            outputPath: {
+              type: "string",
+              description: "Output path for the object structure (relative to X++ codebase root)",
+              default: "Models",
+            },
+            publisher: {
+              type: "string",
+              description: "Publisher name for the object",
+              default: "YourCompany",
+            },
+            version: {
+              type: "string",
+              description: "Version number for the object (e.g., '1.0.0.0')",
+              default: "1.0.0.0",
+            },
+            dependencies: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of object dependencies",
+              default: ["ApplicationPlatform", "ApplicationFoundation"],
+            }
+          },
+          required: ["objectName", "objectType"],
+        },
+      },
       {
         name: "browse_directory",
         description: "Browse a directory in the X++ codebase and list its contents",
@@ -116,20 +165,6 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
             },
           },
           required: ["searchTerm"],
-        },
-      },
-      {
-        name: "get_file_info",
-        description: "Get detailed information about a file or directory",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "Relative path to the file or directory from X++ codebase root",
-            },
-          },
-          required: ["path"],
         },
       },
       {
@@ -273,6 +308,104 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
 });
 
 // =============================================================================
+// HELPER FUNCTIONS FOR OBJECT CREATION
+// =============================================================================
+
+/**
+ * Create a model with all required structure
+ */
+async function createModel(modelName: string, options: {
+  layer?: string;
+  publisher: string;
+  version: string;
+  dependencies: string[];
+  outputPath: string;
+}): Promise<string> {
+  const { layer = "usr", publisher, version, dependencies, outputPath } = options;
+  
+  // Use the writable metadata folder, not the read-only codebase path
+  const metadataPath = AppConfig.getXppMetadataFolder();
+  if (!metadataPath) {
+    throw new Error("X++ metadata folder not configured. Use --xpp-metadata-folder argument when starting the server.");
+  }
+  
+  const fullOutputPath = join(metadataPath, modelName);
+  
+  try {
+    // Create directory structure
+    await fs.mkdir(fullOutputPath, { recursive: true });
+    await fs.mkdir(join(fullOutputPath, "XppMetadata"), { recursive: true });
+    await fs.mkdir(join(fullOutputPath, "XppSource"), { recursive: true });
+    await fs.mkdir(join(fullOutputPath, "Descriptor"), { recursive: true });
+    
+    // Generate model descriptor XML using template system
+    const descriptorXml = await AOTStructureManager.generateModelDescriptorXml({
+      modelName,
+      layer: layer.toUpperCase(),
+      publisher,
+      version,
+      dependencies
+    });
+    
+    // Write descriptor file
+    await fs.writeFile(join(fullOutputPath, "Descriptor", `${modelName}.xml`), descriptorXml, 'utf8');
+    
+    // Create basic AOT folder structure in XppMetadata
+    const aotFolders = [
+      "Classes", "Tables", "Forms", "Reports", "Enums", "ExtendedDataTypes",
+      "Views", "Maps", "Services", "Workflows", "Queries", "Menus", "MenuItems"
+    ];
+    
+    for (const folder of aotFolders) {
+      await fs.mkdir(join(fullOutputPath, "XppMetadata", folder), { recursive: true });
+      await fs.mkdir(join(fullOutputPath, "XppSource", folder), { recursive: true });
+    }
+    
+    return `Successfully created model: ${modelName}
+
+Location: ${fullOutputPath}
+
+Model Details:
+- Publisher: ${publisher}
+- Version: ${version}
+- Layer: ${layer.toUpperCase()}
+- Dependencies: ${dependencies.join(', ')}
+
+Created Structure:
+✓ Descriptor/${modelName}.xml - Model descriptor with dependencies
+✓ XppMetadata/ - Folder for compiled metadata
+✓ XppSource/ - Folder for X++ source files
+✓ AOT folder structure for all object types
+
+The model is ready for development. Add your X++ objects to the appropriate folders.`;
+    
+  } catch (error) {
+    throw new Error(`Failed to create model structure: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Create a class (placeholder implementation)
+ */
+async function createClass(className: string, options: { layer?: string; outputPath: string }): Promise<string> {
+  return `Class creation for ${className} not yet implemented. Layer: ${options.layer || 'usr'}`;
+}
+
+/**
+ * Create a table (placeholder implementation)
+ */
+async function createTable(tableName: string, options: { layer?: string; outputPath: string }): Promise<string> {
+  return `Table creation for ${tableName} not yet implemented. Layer: ${options.layer || 'usr'}`;
+}
+
+/**
+ * Create an enum (placeholder implementation)
+ */
+async function createEnum(enumName: string, options: { layer?: string; outputPath: string }): Promise<string> {
+  return `Enum creation for ${enumName} not yet implemented. Layer: ${options.layer || 'usr'}`;
+}
+
+// =============================================================================
 // TOOL HANDLERS
 // =============================================================================
 
@@ -283,6 +416,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   
   try {
     switch (name) {
+      case "create_xpp_object": {
+        const schema = z.object({
+          objectName: z.string(),
+          objectType: z.string(),
+          layer: z.string().optional(),
+          publisher: z.string().default("YourCompany"),
+          version: z.string().default("1.0.0.0"),
+          dependencies: z.array(z.string()).default(["ApplicationPlatform", "ApplicationFoundation"]),
+          outputPath: z.string().default("Models"),
+        });
+        const { objectName, objectType, layer, publisher, version, dependencies, outputPath } = schema.parse(args);
+        
+        if (!getXppCodebasePath()) {
+          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
+        }
+        
+        // Route to appropriate creation function based on objectType
+        let content: string;
+        switch (objectType.toLowerCase()) {
+          case "model":
+            content = await createModel(objectName, { layer, publisher, version, dependencies, outputPath });
+            break;
+          case "class":
+            content = await createClass(objectName, { layer, outputPath });
+            break;
+          case "table":
+            content = await createTable(objectName, { layer, outputPath });
+            break;
+          case "enum":
+            content = await createEnum(objectName, { layer, outputPath });
+            break;
+          default:
+            throw new Error(`Unsupported object type: ${objectType}`);
+        }
+        
+        return await createLoggedResponse(content, (request as any).id, "create_xpp_object");
+      }
+
       case "set_xpp_codebase_path": {
         const schema = z.object({
           path: z.string(),
@@ -378,44 +549,6 @@ Use build_object_index to create an index for faster searching.`;
         }
         
         return await createLoggedResponse(content, (request as any).id, name);
-      }
-
-      case "get_file_info": {
-        const schema = z.object({
-          path: z.string(),
-        });
-        const { path } = schema.parse(args);
-        
-        if (!getXppCodebasePath()) {
-          throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
-        }
-        
-        const fullPath = join(getXppCodebasePath(), path);
-        
-        try {
-          const stats = await fs.stat(fullPath);
-          const isDirectory = stats.isDirectory();
-          
-          let content = `File Information: ${path}\n\n`;
-          content += `Type: ${isDirectory ? 'Directory' : 'File'}\n`;
-          content += `Size: ${stats.size} bytes\n`;
-          content += `Created: ${stats.birthtime.toISOString()}\n`;
-          content += `Modified: ${stats.mtime.toISOString()}\n`;
-          content += `Accessed: ${stats.atime.toISOString()}\n`;
-          
-          if (!isDirectory) {
-            content += `Extension: ${extname(path)}\n`;
-            content += `X++ Related: ${isXppRelatedFile(path) ? 'Yes' : 'No'}\n`;
-            
-            if (isXppRelatedFile(path)) {
-              content += `Detected Object Type: ${getXppObjectType(fullPath)}\n`;
-            }
-          }
-          
-          return await createLoggedResponse(content, (request as any).id, name);
-        } catch (error) {
-          throw new Error(`Could not get file info: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
       }
 
       case "find_xpp_object": {

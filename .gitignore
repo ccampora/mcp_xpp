@@ -119,3 +119,8 @@ cache/
 cache/*
 
 MetadataExample
+
+misc
+misc/*
+
+.vscode/tasks.json
