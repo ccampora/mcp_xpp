@@ -120,7 +120,6 @@ This section will be updated as documentation becomes available.
 ### File System Operations
 - `browse_directory`: List directory contents with X++ file identification
 - `read_file`: Read and display file contents
-- `get_file_info`: Get detailed file/directory information
 - `search_files`: Text search across X++ files
 
 ### Object Discovery & Analysis

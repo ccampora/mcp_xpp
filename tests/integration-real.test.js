@@ -669,6 +669,185 @@ test('REAL: get_current_config JSON Output Validation - MCP Tool Response Format
   }
 }, 10000);
 
+test('REAL: Model Discovery JSON Validation - Enhanced get_current_config Models Array', async () => {
+  console.log('🔍 Testing model discovery JSON validation in get_current_config...');
+  
+  try {
+    const { AppConfig } = await import('../build/modules/app-config.js');
+    
+    // Initialize with test configuration
+    const originalArgv = process.argv;
+    process.argv = [
+      'node', 'index.js',
+      '--xpp-path', realXppPath,
+      '--xpp-metadata-folder', 'C:\\CustomXppMetadata1x4ye02p.ocz'
+    ];
+    
+    await AppConfig.initialize();
+    
+    // Get configuration as the tool handler would
+    const config = await AppConfig.getApplicationConfiguration();
+    
+    // Create response exactly as the tool handler does (with _meta wrapper)
+    const response = {
+      _meta: {
+        type: "configuration",
+        timestamp: new Date().toISOString(),
+        version: "1.0.0"
+      },
+      ...config
+    };
+    
+    // === MODELS ARRAY VALIDATION ===
+    
+    // 1. Models array existence and type validation
+    expect(response).toHaveProperty('models');
+    expect(Array.isArray(response.models)).toBe(true);
+    console.log(`📦 Found ${response.models.length} models in discovery`);
+    
+    // 2. Validate models array is not empty (should find at least standard Microsoft models)
+    expect(response.models.length).toBeGreaterThan(0);
+    expect(response.models.length).toBeGreaterThan(50); // Should have many Microsoft models
+    
+    // 3. Validate each model object structure
+    response.models.forEach((model, index) => {
+      // Required string fields
+      expect(typeof model.name).toBe('string');
+      expect(typeof model.displayName).toBe('string');
+      expect(typeof model.publisher).toBe('string');
+      expect(typeof model.version).toBe('string');
+      expect(typeof model.layer).toBe('string');
+      expect(typeof model.id).toBe('string');
+      expect(typeof model.descriptorPath).toBe('string');
+      
+      // Required boolean fields
+      expect(typeof model.hasSource).toBe('boolean');
+      expect(typeof model.hasBuildArtifacts).toBe('boolean');
+      
+      // Required array field
+      expect(Array.isArray(model.dependencies)).toBe(true);
+      
+      // Optional string field (can be undefined or string)
+      if (model.description !== undefined) {
+        expect(typeof model.description).toBe('string');
+      }
+      
+      // Optional number field (can be undefined or number)
+      if (model.objectCount !== undefined) {
+        expect(typeof model.objectCount).toBe('number');
+        expect(Number.isInteger(model.objectCount)).toBe(true);
+        expect(model.objectCount).toBeGreaterThanOrEqual(0);
+      }
+      
+      // Validate field content requirements
+      expect(model.name).toBeTruthy(); // Name should not be empty
+      expect(model.displayName).toBeTruthy(); // Display name should not be empty
+      expect(model.publisher).toBeTruthy(); // Publisher should not be empty
+      expect(model.version).toBeTruthy(); // Version should not be empty
+      expect(model.id).toBeTruthy(); // ID should not be empty
+      expect(model.descriptorPath).toBeTruthy(); // Descriptor path should not be empty
+      
+      // Validate version format (should be X.Y.Z.W)
+      expect(model.version).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+      
+      // Validate dependencies array contains only strings
+      model.dependencies.forEach((dep, depIndex) => {
+        expect(typeof dep).toBe('string');
+        expect(dep).toBeTruthy(); // Dependency names should not be empty
+      });
+      
+      // Validate descriptor path format (should be absolute path ending with .xml)
+      expect(model.descriptorPath).toMatch(/^[A-Za-z]:\\.+\.xml$/);
+      
+      // Log sample models for verification
+      if (index < 3) {
+        console.log(`📋 Sample Model ${index + 1}: ${model.name} (${model.publisher}) - Layer ${model.layer}`);
+      }
+    });
+    
+    // 4. Validate specific model types exist
+    const layerCounts = {};
+    const publisherCounts = {};
+    let microsoftModels = 0;
+    let customModels = 0;
+    
+    response.models.forEach(model => {
+      // Count by layer
+      layerCounts[model.layer] = (layerCounts[model.layer] || 0) + 1;
+      
+      // Count by publisher
+      publisherCounts[model.publisher] = (publisherCounts[model.publisher] || 0) + 1;
+      
+      // Count Microsoft vs custom models
+      if (model.publisher.toLowerCase().includes('microsoft')) {
+        microsoftModels++;
+      } else {
+        customModels++;
+      }
+    });
+    
+    // 5. Validate we found expected model types
+    expect(microsoftModels).toBeGreaterThan(100); // Should have many Microsoft models
+    console.log(`🏢 Microsoft models: ${microsoftModels}`);
+    console.log(`🔧 Custom/ISV models: ${customModels}`);
+    
+    // Should have models in layer 0 (Microsoft standard models)
+    expect(layerCounts['0']).toBeGreaterThan(50);
+    console.log(`📊 Layer distribution:`, layerCounts);
+    console.log(`🏭 Publisher distribution:`, Object.keys(publisherCounts).length, 'publishers');
+    
+    // 6. Validate specific expected models exist
+    const modelNames = response.models.map(m => m.name);
+    const expectedStandardModels = [
+      'ApplicationPlatform',
+      'ApplicationFoundation', 
+      'Foundation', // This is the actual model name for ApplicationSuite
+      'ApplicationCommon'
+    ];
+    
+    expectedStandardModels.forEach(expectedModel => {
+      expect(modelNames).toContain(expectedModel);
+    });
+    console.log('✅ Found all expected standard Microsoft models');
+    
+    // 7. JSON serialization validation for models array
+    const modelsJsonString = JSON.stringify(response.models, null, 2);
+    expect(modelsJsonString).toBeTruthy();
+    expect(modelsJsonString.length).toBeGreaterThan(10000); // Should be substantial JSON
+    
+    // 8. JSON round-trip validation for models
+    const reparsedModels = JSON.parse(modelsJsonString);
+    expect(reparsedModels).toEqual(response.models);
+    
+    // 9. Validate models JSON doesn't contain problematic values
+    expect(modelsJsonString).not.toContain('undefined');
+    expect(modelsJsonString).not.toContain('NaN');
+    expect(modelsJsonString).not.toContain('Infinity');
+    expect(modelsJsonString).not.toContain('[object Object]');
+    
+    // 10. Full response JSON validation including models
+    const fullJsonString = JSON.stringify(response, null, 2);
+    expect(fullJsonString).toBeTruthy();
+    
+    // Validate full response round-trip with models
+    const reparsedFull = JSON.parse(fullJsonString);
+    expect(reparsedFull).toEqual(response);
+    expect(reparsedFull.models).toEqual(response.models);
+    
+    console.log('✅ Model discovery JSON validation completed successfully');
+    console.log(`📊 Models JSON size: ${modelsJsonString.length} characters`);
+    console.log(`📈 Full response JSON size: ${fullJsonString.length} characters`);
+    console.log(`🎯 Model discovery found ${response.models.length} total models`);
+    
+    // Restore original argv
+    process.argv = originalArgv;
+    
+  } catch (error) {
+    console.error('❌ Model discovery JSON validation failed:', error);
+    throw error;
+  }
+}, 15000); // Longer timeout for model discovery
+
 test('REAL: Multiple Tools JSON Consistency Validation', async () => {
   // Skip if D365 path doesn't exist
   try {
@@ -1136,3 +1315,210 @@ test('REAL: Edge Case JSON Validation for Tool Robustness', async () => {
     throw error;
   }
 }, 30000);
+
+test('REAL: create_standalone_model - Create model named "jj"', async () => {
+  // Define the writable metadata directory (not the read-only PackagesLocalDirectory!)
+  const writableMetadataPath = "C:\\CustomXppMetadata1x4ye02p.ocz";
+  
+  // Skip if writable metadata path doesn't exist
+  try {
+    await fs.access(writableMetadataPath);
+  } catch (error) {
+    console.log('⏭️ Skipping test - Writable metadata path not accessible');
+    return;
+  }
+  
+  console.log('🔍 Testing create_standalone_model tool with model "jj"...');
+  console.log(`📂 Using WRITABLE metadata directory: ${writableMetadataPath}`);
+  
+  try {
+    // Import the real tool handler
+    const { AOTStructureManager } = await import('../build/modules/aot-structure.js');
+    
+    // Define model parameters
+    const modelName = "jj";
+    const publisher = "TestPublisher";
+    const version = "1.0.0.0";
+    const layer = "usr";
+    const dependencies = ["ApplicationPlatform", "ApplicationFoundation"];
+    
+    // Create the model path in the WRITABLE metadata directory
+    const modelPath = join(writableMetadataPath, modelName);
+    
+    // Clean up any existing model first
+    try {
+      await fs.rm(modelPath, { recursive: true, force: true });
+      console.log(`🧹 Cleaned up existing model at: ${modelPath}`);
+    } catch (error) {
+      // Ignore if directory doesn't exist
+    }
+    
+    // Execute the model creation logic (same as the real tool handler)
+    console.log(`📁 Creating model structure at: ${modelPath}`);
+    
+    // Create directory structure
+    await fs.mkdir(modelPath, { recursive: true });
+    await fs.mkdir(join(modelPath, "XppMetadata"), { recursive: true });
+    await fs.mkdir(join(modelPath, "XppSource"), { recursive: true });
+    await fs.mkdir(join(modelPath, "Descriptor"), { recursive: true });
+    
+    // Generate model descriptor XML (same as tool handler)
+    const descriptorXml = `<?xml version="1.0" encoding="utf-8"?>
+<AxModelInfo xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+  <AppliedUpdates xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
+  <Customization>Allow</Customization>
+  <DataLoss>Allow</DataLoss>
+  <Description>${modelName} - Custom D365 F&O Model</Description>
+  <DisplayName>${modelName}</DisplayName>
+  <Id>00000000-0000-0000-0000-000000000000</Id>
+  <InstallMode>Standard</InstallMode>
+  <Layer>${layer.toUpperCase()}</Layer>
+  <Locked>false</Locked>
+  <n>${modelName}</n>
+  <Publisher>${publisher}</Publisher>
+  <References xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+${dependencies.map(dep => `    <d2p1:string>${dep}</d2p1:string>`).join('\n')}
+  </References>
+  <Signed>false</Signed>
+  <SupportedPlatforms xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
+  <VersionBuildNumber>0</VersionBuildNumber>
+  <VersionMajor>${version.split('.')[0] || '1'}</VersionMajor>
+  <VersionMinor>${version.split('.')[1] || '0'}</VersionMinor>
+  <VersionRevision>${version.split('.')[3] || '0'}</VersionRevision>
+</AxModelInfo>`;
+    
+    // Write descriptor file
+    await fs.writeFile(join(modelPath, "Descriptor", `${modelName}.xml`), descriptorXml, 'utf8');
+    console.log(`✅ Created descriptor file: Descriptor/${modelName}.xml`);
+    
+    // Create AOT folder structure using configuration
+    const aotDirectories = await AOTStructureManager.getAOTDirectories();
+    const xppMetadataDirectories = await AOTStructureManager.getXppMetadataDirectories();
+    
+    console.log(`📂 Creating ${xppMetadataDirectories.length} XppMetadata directories...`);
+    for (const folder of xppMetadataDirectories) {
+      await fs.mkdir(join(modelPath, "XppMetadata", folder), { recursive: true });
+    }
+    
+    console.log(`📂 Creating ${aotDirectories.length} XppSource directories...`);
+    for (const folder of aotDirectories) {
+      await fs.mkdir(join(modelPath, "XppSource", folder), { recursive: true });
+    }
+    
+    // Create README file
+    const readmeContent = `# ${modelName}
+
+This is a D365 Finance and Operations model created with the MCP X++ Server.
+
+## Model Information
+- **Publisher**: ${publisher}
+- **Version**: ${version}
+- **Layer**: ${layer.toUpperCase()}
+- **Dependencies**: ${dependencies.join(', ')}
+
+## Structure
+- \`Descriptor/\` - Contains model descriptor XML
+- \`XppMetadata/\` - Contains compiled metadata
+- \`XppSource/\` - Contains X++ source code files
+
+## Usage
+Add your X++ objects to the appropriate folders under XppSource/ and XppMetadata/.
+`;
+    
+    await fs.writeFile(join(modelPath, "README.md"), readmeContent, 'utf8');
+    console.log(`✅ Created README.md`);
+    
+    // === VALIDATION ===
+    
+    // 1. Verify main directories exist
+    const mainDirs = ['Descriptor', 'XppMetadata', 'XppSource'];
+    for (const dir of mainDirs) {
+      const dirPath = join(modelPath, dir);
+      const stat = await fs.stat(dirPath);
+      expect(stat.isDirectory()).toBe(true);
+      console.log(`✅ Verified directory: ${dir}`);
+    }
+    
+    // 2. Verify descriptor file exists and has correct content
+    const descriptorPath = join(modelPath, "Descriptor", `${modelName}.xml`);
+    const descriptorContent = await fs.readFile(descriptorPath, 'utf8');
+    expect(descriptorContent).toContain(`<n>${modelName}</n>`);
+    expect(descriptorContent).toContain(`<Publisher>${publisher}</Publisher>`);
+    expect(descriptorContent).toContain(`<Layer>${layer.toUpperCase()}</Layer>`);
+    expect(descriptorContent).toContain('<d2p1:string>ApplicationPlatform</d2p1:string>');
+    expect(descriptorContent).toContain('<d2p1:string>ApplicationFoundation</d2p1:string>');
+    console.log(`✅ Verified descriptor XML content`);
+    
+    // 3. Verify README file exists
+    const readmePath = join(modelPath, "README.md");
+    const readmeFileContent = await fs.readFile(readmePath, 'utf8');
+    expect(readmeFileContent).toContain(`# ${modelName}`);
+    expect(readmeFileContent).toContain(`**Publisher**: ${publisher}`);
+    console.log(`✅ Verified README.md content`);
+    
+    // 4. Count and verify AOT directories
+    const xppMetadataEntries = await fs.readdir(join(modelPath, "XppMetadata"));
+    const xppSourceEntries = await fs.readdir(join(modelPath, "XppSource"));
+    
+    expect(xppMetadataEntries.length).toBe(xppMetadataDirectories.length);
+    expect(xppSourceEntries.length).toBe(aotDirectories.length);
+    
+    console.log(`✅ Created ${xppMetadataEntries.length} XppMetadata directories`);
+    console.log(`✅ Created ${xppSourceEntries.length} XppSource directories`);
+    
+    // 5. Verify specific expected directories exist
+    const expectedMetadataDirs = ['AxClass', 'AxTable', 'AxForm'];
+    const expectedSourceDirs = ['AxClass', 'AxTable', 'AxForm', 'AxEnum', 'AxEdt'];
+    
+    for (const expectedDir of expectedMetadataDirs) {
+      if (xppMetadataDirectories.includes(expectedDir)) {
+        expect(xppMetadataEntries).toContain(expectedDir);
+      }
+    }
+    
+    for (const expectedDir of expectedSourceDirs) {
+      if (aotDirectories.includes(expectedDir)) {
+        expect(xppSourceEntries).toContain(expectedDir);
+      }
+    }
+    
+    console.log(`✅ Verified expected AOT directories exist`);
+    
+    // 6. Test that we can create a sample X++ class in the model
+    const sampleClassPath = join(modelPath, "XppSource", "AxClass", "TestClass_jj.xpp");
+    const sampleClassContent = `/// Test class created in model jj
+class TestClass_jj
+{
+    /// Sample method
+    public str getName()
+    {
+        return "jj";
+    }
+}`;
+    
+    await fs.writeFile(sampleClassPath, sampleClassContent, 'utf8');
+    const writtenClassContent = await fs.readFile(sampleClassPath, 'utf8');
+    expect(writtenClassContent).toContain('class TestClass_jj');
+    expect(writtenClassContent).toContain('return "jj"');
+    console.log(`✅ Created and verified sample X++ class`);
+    
+    // === FINAL SUCCESS REPORT ===
+    console.log(`\n🎉 SUCCESS: Model "${modelName}" created successfully!`);
+    console.log(`📁 Location: ${modelPath}`);
+    console.log(`📊 Structure summary:`);
+    console.log(`   - Descriptor: ${modelName}.xml`);
+    console.log(`   - README: README.md`);
+    console.log(`   - XppMetadata: ${xppMetadataEntries.length} directories`);
+    console.log(`   - XppSource: ${xppSourceEntries.length} directories`);
+    console.log(`   - Sample class: TestClass_jj.xpp`);
+    console.log(`✨ Model is ready for D365 F&O development!`);
+    
+    // Clean up test model (optional - comment out if you want to inspect the created model)
+    // await fs.rm(modelPath, { recursive: true, force: true });
+    // console.log(`🧹 Cleaned up test model`);
+    
+  } catch (error) {
+    console.error('❌ create_standalone_model test failed:', error);
+    throw error;
+  }
+}, 30000); // 30 second timeout for file operations

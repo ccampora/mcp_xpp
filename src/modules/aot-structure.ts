@@ -274,4 +274,171 @@ export class AOTStructureManager {
     
     return false;
   }
+
+  // Get AOT directories from configuration
+  static async getAOTDirectories(): Promise<string[]> {
+    try {
+      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+      return config.aotDirectories || [];
+    } catch (error) {
+      console.error('Failed to load AOT directories from config:', error);
+      // Fallback to minimal set
+      return ['AxClass', 'AxTable', 'AxForm', 'AxEnum', 'AxQuery'];
+    }
+  }
+
+  // Get XppMetadata directories from configuration
+  static async getXppMetadataDirectories(): Promise<string[]> {
+    try {
+      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+      return config.xppMetadataDirectories || [];
+    } catch (error) {
+      console.error('Failed to load XppMetadata directories from config:', error);
+      // Fallback to minimal set
+      return ['AxClass', 'AxTable', 'AxForm'];
+    }
+  }
+
+  // Get numeric layer value from configuration
+  static async getLayerNumber(layerCode: string): Promise<number> {
+    try {
+      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+      return config.layerMapping?.[layerCode.toLowerCase()] ?? 14; // Default to USR (14)
+    } catch (error) {
+      console.error('Failed to load layer mapping from config:', error);
+      return 14; // Default to USR
+    }
+  }
+
+  // Get model descriptor template from configuration
+  static async getModelDescriptorTemplate(): Promise<any> {
+    try {
+      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+      return config.modelDescriptorTemplate;
+    } catch (error) {
+      console.error('Failed to load model descriptor template from config:', error);
+      return null;
+    }
+  }
+
+  // Generate model descriptor XML using template
+  static async generateModelDescriptorXml(params: {
+    modelName: string;
+    publisher: string;
+    version: string;
+    layer: string;
+    dependencies: string[];
+  }): Promise<string> {
+    const template = await this.getModelDescriptorTemplate();
+    if (!template) {
+      throw new Error('Model descriptor template not found in configuration');
+    }
+
+    const versionParts = params.version.split('.');
+    const versionMajor = versionParts[0] || '1';
+    const versionMinor = versionParts[1] || '0';
+    const versionBuild = versionParts[2] || '0';
+    const versionRevision = versionParts[3] || '0';
+
+    // Get the numeric layer value from configuration
+    const layerNumber = await this.getLayerNumber(params.layer);
+
+    // Create dependencies XML
+    const dependenciesXml = params.dependencies
+      .map(dep => `    <d2p1:string>${dep}</d2p1:string>`)
+      .join('\n');
+
+    // Build the XML structure
+    let xml = `${template.xmlDeclaration}\n`;
+    xml += `<${template.rootElement} ${template.namespace}>\n`;
+    
+    const structure = template.structure;
+    
+    // AppliedUpdates
+    xml += `  <AppliedUpdates ${structure.AppliedUpdates.attributes} />\n`;
+    
+    // Simple elements
+    xml += `  <Customization>${structure.Customization.replace('{{customization}}', 'Allow')}</Customization>\n`;
+    xml += `  <DataLoss>${structure.DataLoss}</DataLoss>\n`;
+    xml += `  <Description>${structure.Description.replace('{{modelName}}', params.modelName)}</Description>\n`;
+    xml += `  <DisplayName>${structure.DisplayName.replace('{{modelName}}', params.modelName)}</DisplayName>\n`;
+    xml += `  <Id>${structure.Id}</Id>\n`;
+    xml += `  <InstallMode>${structure.InstallMode}</InstallMode>\n`;
+    xml += `  <Layer>${layerNumber}</Layer>\n`;
+    xml += `  <Locked>${structure.Locked.replace('{{locked}}', 'false')}</Locked>\n`;
+    xml += `  <n>${params.modelName}</n>\n`;
+    xml += `  <Publisher>${structure.Publisher.replace('{{publisher}}', params.publisher)}</Publisher>\n`;
+    
+    // References
+    xml += `  <References ${structure.References.attributes}>\n`;
+    xml += dependenciesXml + '\n';
+    xml += `  </References>\n`;
+    
+    // More simple elements
+    xml += `  <Signed>${structure.Signed}</Signed>\n`;
+    xml += `  <SupportedPlatforms ${structure.SupportedPlatforms.attributes} />\n`;
+    xml += `  <VersionBuildNumber>${structure.VersionBuildNumber.replace('{{versionBuild}}', versionBuild)}</VersionBuildNumber>\n`;
+    xml += `  <VersionMajor>${structure.VersionMajor.replace('{{versionMajor}}', versionMajor)}</VersionMajor>\n`;
+    xml += `  <VersionMinor>${structure.VersionMinor.replace('{{versionMinor}}', versionMinor)}</VersionMinor>\n`;
+    xml += `  <VersionRevision>${structure.VersionRevision.replace('{{versionRevision}}', versionRevision)}</VersionRevision>\n`;
+    
+    xml += `</${template.rootElement}>`;
+    
+    return xml;
+  }
+
+  static async getAvailableLayers(): Promise<string[]> {
+    const config = await this.getD365ModelConfig();
+    if (config && config.layerMapping) {
+      return Object.keys(config.layerMapping);
+    }
+    // Fallback to basic layers if config is not available
+    return ["usr", "cus", "var", "isv"];
+  }
+
+  static async getObjectTemplates(): Promise<any> {
+    try {
+      const templatesFile = join(__dirname, '..', 'config', 'd365-object-templates.json');
+      const content = await fs.readFile(templatesFile, 'utf-8');
+      return JSON.parse(content);
+    } catch (error) {
+      console.error('Failed to load D365 object templates:', error);
+      return null;
+    }
+  }
+
+  static async getAvailableObjectTypes(): Promise<string[]> {
+    const templates = await this.getObjectTemplates();
+    if (templates && templates.objectTypes) {
+      return Object.keys(templates.objectTypes);
+    }
+    return ["model"]; // Fallback
+  }
+
+  static async getObjectTypeDefinition(objectType: string): Promise<any> {
+    const templates = await this.getObjectTemplates();
+    if (templates && templates.objectTypes && templates.objectTypes[objectType]) {
+      return templates.objectTypes[objectType];
+    }
+    return null;
+  }
+
+  private static async getD365ModelConfig(): Promise<any> {
+    try {
+      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
+      const content = await fs.readFile(configFile, 'utf-8');
+      return JSON.parse(content);
+    } catch (error) {
+      console.error('Failed to load D365 model configuration:', error);
+      return null;
+    }
+  }
 }
