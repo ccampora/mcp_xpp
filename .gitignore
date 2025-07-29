@@ -122,3 +122,5 @@ MetadataExample
 
 misc
 misc/*
+
+.vscode/tasks.json

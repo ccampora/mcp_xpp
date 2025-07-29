@@ -30,10 +30,13 @@ When working with this codebase, be aware of these common X++ file extensions:
 - Provides search capabilities across the codebase
 
 ## Development Guidelines
+- **NO HARDCODING**: HARDCODING IS FORBIDDEN. Always use configuration files for templates, constants, and structured data
 - Always validate file paths to prevent security issues
 - Use appropriate error handling for file system operations
 - Maintain performance by limiting search results and file sizes
 - Follow MCP protocol specifications for tool definitions
+- Store XML templates, file structures, and configuration data in the config/ directory
+- Use template engines or string replacement for dynamic content generation
 
 ## MCP Tool Management Guidelines
 - **Tool Limit Awareness**: VS Code supports max 128 tools simultaneously

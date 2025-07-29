@@ -1,0 +1,196 @@
+{
+  "_meta": {
+    "description": "D365 Finance & Operations object creation templates and configurations",
+    "version": "1.0.0",
+    "lastUpdated": "2025-07-29",
+    "purpose": "Unified template system for creating all types of D365 F&O objects"
+  },
+  "objectTypes": {
+    "model": {
+      "displayName": "D365 Model",
+      "description": "Create a new D365 Finance & Operations model container",
+      "category": "container",
+      "requiredParams": ["objectName"],
+      "optionalParams": ["publisher", "version", "layer", "dependencies", "outputPath"],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the model to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "publisher": {
+          "type": "string",
+          "description": "Publisher name for the model",
+          "default": "YourCompany"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version number for the model (e.g., '1.0.0.0')",
+          "default": "1.0.0.0",
+          "validation": "^\\d+\\.\\d+\\.\\d+\\.\\d+$"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the model",
+          "dynamic": "layers",
+          "default": "usr"
+        },
+        "dependencies": {
+          "type": "array",
+          "description": "List of model dependencies",
+          "default": ["ApplicationPlatform", "ApplicationFoundation"]
+        },
+        "outputPath": {
+          "type": "string",
+          "description": "Output path for the model structure (relative to X++ metadata folder root, leave empty for container root)",
+          "default": ""
+        }
+      },
+      "templates": {
+        "descriptor": "modelDescriptorTemplate"
+      },
+      "creationStrategy": "model"
+    },
+    "class": {
+      "displayName": "X++ Class",
+      "description": "Create a new X++ class with basic structure",
+      "category": "code",
+      "requiredParams": ["objectName", "modelName"],
+      "optionalParams": ["extends", "implements", "isAbstract", "isFinal", "layer"],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the class to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the class will be created"
+        },
+        "extends": {
+          "type": "string",
+          "description": "Base class to extend from (optional)"
+        },
+        "implements": {
+          "type": "array",
+          "description": "Interfaces to implement (optional)"
+        },
+        "isAbstract": {
+          "type": "boolean",
+          "description": "Whether the class is abstract",
+          "default": false
+        },
+        "isFinal": {
+          "type": "boolean",
+          "description": "Whether the class is final",
+          "default": false
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the class",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "classMetadataTemplate",
+        "source": "classSourceTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "table": {
+      "displayName": "Table",
+      "description": "Create a new D365 table with basic structure",
+      "category": "data",
+      "requiredParams": ["objectName", "modelName"],
+      "optionalParams": ["extends", "label", "helpText", "layer"],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the table to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the table will be created"
+        },
+        "extends": {
+          "type": "string",
+          "description": "Base table to extend from (optional)"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for the table"
+        },
+        "helpText": {
+          "type": "string",
+          "description": "Help text for the table"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the table",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "tableMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "enum": {
+      "displayName": "Enumeration",
+      "description": "Create a new enumeration with basic structure",
+      "category": "data",
+      "requiredParams": ["objectName", "modelName"],
+      "optionalParams": ["label", "helpText", "layer"],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the enum to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the enum will be created"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for the enum"
+        },
+        "helpText": {
+          "type": "string",
+          "description": "Help text for the enum"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the enum",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "enumMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    }
+  },
+  "templates": {
+    "classSourceTemplate": {
+      "extension": ".xpp",
+      "content": "/// <summary>\n/// {{description}}\n/// </summary>\n{{#if isAbstract}}abstract {{/if}}{{#if isFinal}}final {{/if}}class {{className}}{{#if extends}} extends {{extends}}{{/if}}{{#if implements}}\n    implements {{#each implements}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}\n{\n    /// <summary>\n    /// Class constructor\n    /// </summary>\n    public void new()\n    {\n        {{#if extends}}super();{{/if}}\n    }\n\n    /// <summary>\n    /// Main method - entry point for batch jobs\n    /// </summary>\n    public static void main(Args _args)\n    {\n        {{className}} instance = new {{className}}();\n        instance.run();\n    }\n\n    /// <summary>\n    /// Main execution logic\n    /// </summary>\n    public void run()\n    {\n        // TODO: Implement your logic here\n        info(\"{{className}} executed successfully\");\n    }\n}"
+    },
+    "classMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxClass xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <Name>{{className}}</Name>\n    <SourceCode>\n        <Declaration><![CDATA[\n/// <summary>\n/// {{description}}\n/// </summary>\n{{#if isAbstract}}abstract {{/if}}{{#if isFinal}}final {{/if}}class {{className}}{{#if extends}} extends {{extends}}{{/if}}{{#if implements}}\n    implements {{#each implements}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}\n{\n}\n        ]]></Declaration>\n    </SourceCode>\n</AxClass>"
+    },
+    "tableMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxTable xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <Name>{{tableName}}</Name>\n    {{#if label}}<Label>{{label}}</Label>{{/if}}\n    {{#if helpText}}<HelpText>{{helpText}}</HelpText>{{/if}}\n    {{#if extends}}<Extends>{{extends}}</Extends>{{/if}}\n    <Fields>\n        <AxTableField i:type=\"AxTableFieldInt64\">\n            <Name>RecId</Name>\n            <ExtendedDataType>RecId</ExtendedDataType>\n        </AxTableField>\n    </Fields>\n    <Indexes>\n        <AxTableIndex>\n            <Name>RecIDIdx</Name>\n            <Fields>\n                <AxTableIndexField>\n                    <DataField>RecId</DataField>\n                </AxTableIndexField>\n            </Fields>\n        </AxTableIndex>\n    </Indexes>\n</AxTable>"
+    },
+    "enumMetadataTemplate": {
+      "extension": ".xml", 
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxEnum xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <Name>{{enumName}}</Name>\n    {{#if label}}<Label>{{label}}</Label>{{/if}}\n    {{#if helpText}}<HelpText>{{helpText}}</HelpText>{{/if}}\n    <EnumValues>\n        <AxEnumValue>\n            <Name>None</Name>\n            <Value>0</Value>\n        </AxEnumValue>\n    </EnumValues>\n</AxEnum>"
+    }
+  }
+}
