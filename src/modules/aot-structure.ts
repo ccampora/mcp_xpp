@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import { join, dirname, extname } from "path";
 import { fileURLToPath } from "url";
 import { AOTStructure, AOTNodeConfig, DiscoveredTypeInfo } from "./types.js";
+import { loadAOTStructure, loadD365ModelConfig, loadD365ObjectTemplates } from "./config-loader.js";
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -14,9 +15,7 @@ export class AOTStructureManager {
 
   static async loadStructure(): Promise<void> {
     try {
-      const structureFile = join(__dirname, '..', 'config', 'aot-structure.json');
-      const content = await fs.readFile(structureFile, 'utf-8');
-      this.aotStructure = JSON.parse(content);
+      this.aotStructure = await loadAOTStructure<AOTStructure>();
     } catch (error) {
       console.error('Failed to load AOT structure:', error);
       // Fallback to minimal structure
@@ -278,9 +277,7 @@ export class AOTStructureManager {
   // Get AOT directories from configuration
   static async getAOTDirectories(): Promise<string[]> {
     try {
-      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
-      const configContent = await fs.readFile(configFile, 'utf-8');
-      const config = JSON.parse(configContent);
+      const config = await loadD365ModelConfig<{ aotDirectories?: string[] }>();
       return config.aotDirectories || [];
     } catch (error) {
       console.error('Failed to load AOT directories from config:', error);
@@ -292,9 +289,7 @@ export class AOTStructureManager {
   // Get XppMetadata directories from configuration
   static async getXppMetadataDirectories(): Promise<string[]> {
     try {
-      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
-      const configContent = await fs.readFile(configFile, 'utf-8');
-      const config = JSON.parse(configContent);
+      const config = await loadD365ModelConfig<{ xppMetadataDirectories?: string[] }>();
       return config.xppMetadataDirectories || [];
     } catch (error) {
       console.error('Failed to load XppMetadata directories from config:', error);
@@ -306,9 +301,7 @@ export class AOTStructureManager {
   // Get numeric layer value from configuration
   static async getLayerNumber(layerCode: string): Promise<number> {
     try {
-      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
-      const configContent = await fs.readFile(configFile, 'utf-8');
-      const config = JSON.parse(configContent);
+      const config = await loadD365ModelConfig<{ layerMapping?: Record<string, number> }>();
       return config.layerMapping?.[layerCode.toLowerCase()] ?? 14; // Default to USR (14)
     } catch (error) {
       console.error('Failed to load layer mapping from config:', error);
@@ -319,9 +312,7 @@ export class AOTStructureManager {
   // Get model descriptor template from configuration
   static async getModelDescriptorTemplate(): Promise<any> {
     try {
-      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
-      const configContent = await fs.readFile(configFile, 'utf-8');
-      const config = JSON.parse(configContent);
+      const config = await loadD365ModelConfig<{ modelDescriptorTemplate?: any }>();
       return config.modelDescriptorTemplate;
     } catch (error) {
       console.error('Failed to load model descriptor template from config:', error);
@@ -406,9 +397,7 @@ export class AOTStructureManager {
 
   static async getObjectTemplates(): Promise<any> {
     try {
-      const templatesFile = join(__dirname, '..', 'config', 'd365-object-templates.json');
-      const content = await fs.readFile(templatesFile, 'utf-8');
-      return JSON.parse(content);
+      return await loadD365ObjectTemplates();
     } catch (error) {
       console.error('Failed to load D365 object templates:', error);
       return null;
@@ -433,9 +422,7 @@ export class AOTStructureManager {
 
   private static async getD365ModelConfig(): Promise<any> {
     try {
-      const configFile = join(__dirname, '..', 'config', 'd365-model-config.json');
-      const content = await fs.readFile(configFile, 'utf-8');
-      return JSON.parse(content);
+      return await loadD365ModelConfig();
     } catch (error) {
       console.error('Failed to load D365 model configuration:', error);
       return null;
