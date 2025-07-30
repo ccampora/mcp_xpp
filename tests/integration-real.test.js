@@ -19,35 +19,51 @@ import {
 import { setXppCodebasePath, getXppCodebasePath } from '../src/modules/config.js';
 import { ObjectIndexManager } from '../src/modules/object-index.js';
 
+// Import test configuration
+import { TEST_CONFIG, initializeTestConfig, getTestArgs } from './test-config.js';
+
 // Configuration from .vscode/mcp.json
 let mcpConfig;
 let realXppPath;
 let server;
 
 beforeAll(async () => {
+  // Initialize test configuration and show warnings
+  initializeTestConfig();
+  
   // Read the real MCP configuration
   const mcpConfigPath = join(process.cwd(), '.vscode', 'mcp.json');
   const mcpConfigContent = await fs.readFile(mcpConfigPath, 'utf-8');
   mcpConfig = JSON.parse(mcpConfigContent.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''));
   
-  // Get the real D365 path from command line arguments
+  // Get the real D365 path from command line arguments or environment
   const serverConfig = mcpConfig.servers['mcp-xpp-server'];
   const xppPathIndex = serverConfig.args.findIndex(arg => arg === '--xpp-path');
   if (xppPathIndex !== -1 && xppPathIndex + 1 < serverConfig.args.length) {
     realXppPath = serverConfig.args[xppPathIndex + 1];
+  } else if (TEST_CONFIG.DEFAULT_XPP_PATH) {
+    realXppPath = TEST_CONFIG.DEFAULT_XPP_PATH;
   } else {
-    throw new Error('XPP codebase path not found in mcp.json configuration. Expected --xpp-path argument.');
+    throw new Error('XPP codebase path not found in mcp.json configuration or environment variables. Expected --xpp-path argument or XPP_CODEBASE_PATH environment variable.');
   }
 
   
   console.log(`🔧 Using real D365 path: ${realXppPath}`);
+  console.log(`🔧 Using writable metadata path: ${TEST_CONFIG.WRITABLE_METADATA_PATH}`);
   
-  // Verify the path exists
+  // Verify the paths exist
   try {
     await fs.access(realXppPath);
     console.log('✅ D365 path is accessible');
   } catch (error) {
     console.warn('⚠️ D365 path may not be accessible, tests may fail');
+  }
+  
+  try {
+    await fs.access(TEST_CONFIG.WRITABLE_METADATA_PATH);
+    console.log('✅ Writable metadata path is accessible');
+  } catch (error) {
+    console.warn('⚠️ Writable metadata path may not be accessible, some tests may fail');
   }
   
   // Set up the real configuration
@@ -360,11 +376,7 @@ test('REAL: get_current_config tool functionality', async () => {
     
     // Initialize with test configuration
     const originalArgv = process.argv;
-    process.argv = [
-      'node', 'index.js',
-      '--xpp-path', realXppPath,
-      '--xpp-metadata-folder', 'C:\\CustomXppMetadata1x4ye02p.ocz'
-    ];
+    process.argv = getTestArgs(realXppPath);
     
     await AppConfig.initialize();
     
@@ -380,7 +392,7 @@ test('REAL: get_current_config tool functionality', async () => {
     
     // Validate server configuration
     expect(config.serverConfig.xppPath).toBe(realXppPath);
-    expect(config.serverConfig.xppMetadataFolder).toBe('C:\\CustomXppMetadata1x4ye02p.ocz');
+    expect(config.serverConfig.xppMetadataFolder).toBe(TEST_CONFIG.WRITABLE_METADATA_PATH);
     
     // Validate application info
     expect(config.applicationInfo.name).toBe('MCP X++ Server');
@@ -536,11 +548,7 @@ test('REAL: get_current_config JSON Output Validation - MCP Tool Response Format
     
     // Initialize with test configuration
     const originalArgv = process.argv;
-    process.argv = [
-      'node', 'index.js',
-      '--xpp-path', realXppPath,
-      '--xpp-metadata-folder', 'C:\\CustomXppMetadata1x4ye02p.ocz'
-    ];
+    process.argv = getTestArgs(realXppPath);
     
     await AppConfig.initialize();
     
@@ -677,11 +685,7 @@ test('REAL: Model Discovery JSON Validation - Enhanced get_current_config Models
     
     // Initialize with test configuration
     const originalArgv = process.argv;
-    process.argv = [
-      'node', 'index.js',
-      '--xpp-path', realXppPath,
-      '--xpp-metadata-folder', 'C:\\CustomXppMetadata1x4ye02p.ocz'
-    ];
+    process.argv = getTestArgs(realXppPath);
     
     await AppConfig.initialize();
     
@@ -1318,7 +1322,7 @@ test('REAL: Edge Case JSON Validation for Tool Robustness', async () => {
 
 test('REAL: create_standalone_model - Create model named "jj"', async () => {
   // Define the writable metadata directory (not the read-only PackagesLocalDirectory!)
-  const writableMetadataPath = "C:\\CustomXppMetadata1x4ye02p.ocz";
+  const writableMetadataPath = TEST_CONFIG.WRITABLE_METADATA_PATH;
   
   // Skip if writable metadata path doesn't exist
   try {
