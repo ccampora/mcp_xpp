@@ -10,8 +10,16 @@
       "displayName": "D365 Model",
       "description": "Create a new D365 Finance & Operations model container",
       "category": "container",
-      "requiredParams": ["objectName"],
-      "optionalParams": ["publisher", "version", "layer", "dependencies", "outputPath"],
+      "requiredParams": [
+        "objectName"
+      ],
+      "optionalParams": [
+        "publisher",
+        "version",
+        "layer",
+        "dependencies",
+        "outputPath"
+      ],
       "parameterDefinitions": {
         "objectName": {
           "type": "string",
@@ -38,7 +46,10 @@
         "dependencies": {
           "type": "array",
           "description": "List of model dependencies",
-          "default": ["ApplicationPlatform", "ApplicationFoundation"]
+          "default": [
+            "ApplicationPlatform",
+            "ApplicationFoundation"
+          ]
         },
         "outputPath": {
           "type": "string",
@@ -55,8 +66,17 @@
       "displayName": "X++ Class",
       "description": "Create a new X++ class with basic structure",
       "category": "code",
-      "requiredParams": ["objectName", "modelName"],
-      "optionalParams": ["extends", "implements", "isAbstract", "isFinal", "layer"],
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "extends",
+        "implements",
+        "isAbstract",
+        "isFinal",
+        "layer"
+      ],
       "parameterDefinitions": {
         "objectName": {
           "type": "string",
@@ -102,8 +122,16 @@
       "displayName": "Table",
       "description": "Create a new D365 table with basic structure",
       "category": "data",
-      "requiredParams": ["objectName", "modelName"],
-      "optionalParams": ["extends", "label", "helpText", "layer"],
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "extends",
+        "label",
+        "helpText",
+        "layer"
+      ],
       "parameterDefinitions": {
         "objectName": {
           "type": "string",
@@ -142,8 +170,15 @@
       "displayName": "Enumeration",
       "description": "Create a new enumeration with basic structure",
       "category": "data",
-      "requiredParams": ["objectName", "modelName"],
-      "optionalParams": ["label", "helpText", "layer"],
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "label",
+        "helpText",
+        "layer"
+      ],
       "parameterDefinitions": {
         "objectName": {
           "type": "string",
@@ -173,6 +208,1287 @@
         "metadata": "enumMetadataTemplate"
       },
       "creationStrategy": "xppObject"
+    },
+    "enumExtension": {
+      "displayName": "Enum Extension",
+      "description": "Create a new enumeration extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetEnum"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the enum extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the enum extension will be created"
+        },
+        "targetEnum": {
+          "type": "string",
+          "description": "The enum to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the enum extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "enumExtensionMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "edt": {
+      "displayName": "Extended Data Type",
+      "description": "Create a new extended data type",
+      "category": "data",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "baseType"
+      ],
+      "optionalParams": [
+        "label",
+        "helpText",
+        "stringSize",
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the EDT to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the EDT will be created"
+        },
+        "baseType": {
+          "type": "string",
+          "description": "Base type for the EDT (e.g., str, int, real)",
+          "default": "str"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for the EDT"
+        },
+        "helpText": {
+          "type": "string",
+          "description": "Help text for the EDT"
+        },
+        "stringSize": {
+          "type": "number",
+          "description": "String size (for string-based EDTs)"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the EDT",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "edtMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "edtExtension": {
+      "displayName": "EDT Extension",
+      "description": "Create a new extended data type extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetEdt"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the EDT extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the EDT extension will be created"
+        },
+        "targetEdt": {
+          "type": "string",
+          "description": "The EDT to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the EDT extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "edtExtensionMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "view": {
+      "displayName": "View",
+      "description": "Create a new view",
+      "category": "data",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "label",
+        "helpText",
+        "dataSource",
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the view to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the view will be created"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for the view"
+        },
+        "helpText": {
+          "type": "string",
+          "description": "Help text for the view"
+        },
+        "dataSource": {
+          "type": "string",
+          "description": "Primary data source for the view"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the view",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "viewMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "form": {
+      "displayName": "Form",
+      "description": "Create a new form",
+      "category": "ui",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "label",
+        "helpText",
+        "dataSource",
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the form to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the form will be created"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for the form"
+        },
+        "helpText": {
+          "type": "string",
+          "description": "Help text for the form"
+        },
+        "dataSource": {
+          "type": "string",
+          "description": "Primary data source for the form"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the form",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "formMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "report": {
+      "displayName": "Report",
+      "description": "Create a new report",
+      "category": "ui",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "label",
+        "helpText",
+        "dataSource",
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the report to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the report will be created"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for the report"
+        },
+        "helpText": {
+          "type": "string",
+          "description": "Help text for the report"
+        },
+        "dataSource": {
+          "type": "string",
+          "description": "Primary data source for the report"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the report",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "reportMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "query": {
+      "displayName": "Query",
+      "description": "Create a new query",
+      "category": "data",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "label",
+        "helpText",
+        "dataSource",
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the query to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the query will be created"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for the query"
+        },
+        "helpText": {
+          "type": "string",
+          "description": "Help text for the query"
+        },
+        "dataSource": {
+          "type": "string",
+          "description": "Primary data source for the query"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the query",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "queryMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "macro": {
+      "displayName": "Macro",
+      "description": "Create a new macro",
+      "category": "code",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the macro to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the macro will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the macro",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "macroMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "tableExtension": {
+      "displayName": "Table Extension",
+      "description": "Create a new table extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetTable"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the table extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the table extension will be created"
+        },
+        "targetTable": {
+          "type": "string",
+          "description": "The table to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the table extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "targetTableMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "viewExtension": {
+      "displayName": "View Extension",
+      "description": "Create a new view extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetView"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the view extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the view extension will be created"
+        },
+        "targetView": {
+          "type": "string",
+          "description": "The view to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the view extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "targetViewMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "queryExtension": {
+      "displayName": "Query Extension",
+      "description": "Create a new query extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetQuery"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the query extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the query extension will be created"
+        },
+        "targetQuery": {
+          "type": "string",
+          "description": "The query to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the query extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "targetQueryMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "dataEntity": {
+      "displayName": "Data Entity",
+      "description": "Create a new data entity",
+      "category": "data",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the data entity to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the data entity will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the data entity",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "data EntityMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "dataEntityExtension": {
+      "displayName": "Data Entity Extension",
+      "description": "Create a new data entity extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetDataEntity"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the data entity extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the data entity extension will be created"
+        },
+        "targetDataEntity": {
+          "type": "string",
+          "description": "The data entity to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the data entity extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "targetDataEntityMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "compositeDataEntity": {
+      "displayName": "Composite Data Entity",
+      "description": "Create a new composite data entity",
+      "category": "data",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the composite data entity to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the composite data entity will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the composite data entity",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "composite Data EntityMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "aggregateDataEntity": {
+      "displayName": "Aggregate Data Entity",
+      "description": "Create a new aggregate data entity",
+      "category": "data",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the aggregate data entity to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the aggregate data entity will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the aggregate data entity",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "aggregate Data EntityMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "map": {
+      "displayName": "Map",
+      "description": "Create a new map",
+      "category": "data",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the map to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the map will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the map",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "mapMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "formExtension": {
+      "displayName": "Form Extension",
+      "description": "Create a new form extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetForm"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the form extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the form extension will be created"
+        },
+        "targetForm": {
+          "type": "string",
+          "description": "The form to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the form extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "targetFormMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "tile": {
+      "displayName": "Tile",
+      "description": "Create a new tile",
+      "category": "ui",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the tile to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the tile will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the tile",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "tileMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "menu": {
+      "displayName": "Menu",
+      "description": "Create a new menu",
+      "category": "ui",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the menu to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the menu will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the menu",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "menuMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "menuExtension": {
+      "displayName": "Menu Extension",
+      "description": "Create a new menu extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetMenu"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the menu extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the menu extension will be created"
+        },
+        "targetMenu": {
+          "type": "string",
+          "description": "The menu to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the menu extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "targetMenuMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "menuItem": {
+      "displayName": "Menu Item",
+      "description": "Create a new menu item",
+      "category": "ui",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the menu item to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the menu item will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the menu item",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "menu ItemMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "menuItemExtension": {
+      "displayName": "Menu Item Extension",
+      "description": "Create a new menu item extension",
+      "category": "extension",
+      "requiredParams": [
+        "objectName",
+        "modelName",
+        "targetMenuItem"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the menu item extension to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the menu item extension will be created"
+        },
+        "targetMenuItem": {
+          "type": "string",
+          "description": "The menu item to extend"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the menu item extension",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "targetMenuItemMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "perspective": {
+      "displayName": "Perspective",
+      "description": "Create a new perspective",
+      "category": "analytics",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the perspective to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the perspective will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the perspective",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "perspectiveMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "kpi": {
+      "displayName": "KPI",
+      "description": "Create a new kpi",
+      "category": "analytics",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the kpi to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the kpi will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the kpi",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "kPIMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "workflow": {
+      "displayName": "Workflow",
+      "description": "Create a new workflow",
+      "category": "workflow",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the workflow to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the workflow will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the workflow",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "workflowMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "labelFile": {
+      "displayName": "Label File",
+      "description": "Create a new label file",
+      "category": "localization",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the label file to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the label file will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the label file",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "label FileMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "resource": {
+      "displayName": "Resource",
+      "description": "Create a new resource",
+      "category": "resource",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the resource to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the resource will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the resource",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "resourceMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "configurationKey": {
+      "displayName": "Configuration Key",
+      "description": "Create a new configuration key",
+      "category": "configuration",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the configuration key to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the configuration key will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the configuration key",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "configuration KeyMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "securityKey": {
+      "displayName": "Security Key",
+      "description": "Create a new security key",
+      "category": "security",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the security key to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the security key will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the security key",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "security KeyMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "securityDuty": {
+      "displayName": "Security Duty",
+      "description": "Create a new security duty",
+      "category": "security",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the security duty to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the security duty will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the security duty",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "security DutyMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "securityPrivilege": {
+      "displayName": "Security Privilege",
+      "description": "Create a new security privilege",
+      "category": "security",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the security privilege to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the security privilege will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the security privilege",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "security PrivilegeMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "securityRole": {
+      "displayName": "Security Role",
+      "description": "Create a new security role",
+      "category": "security",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the security role to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the security role will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the security role",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "security RoleMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "securityPolicy": {
+      "displayName": "Security Policy",
+      "description": "Create a new security policy",
+      "category": "security",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the security policy to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the security policy will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the security policy",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "security PolicyMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "serviceGroup": {
+      "displayName": "Service Group",
+      "description": "Create a new service group",
+      "category": "service",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the service group to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the service group will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the service group",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "service GroupMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
+    },
+    "service": {
+      "displayName": "Service",
+      "description": "Create a new service",
+      "category": "service",
+      "requiredParams": [
+        "objectName",
+        "modelName"
+      ],
+      "optionalParams": [
+        "layer"
+      ],
+      "parameterDefinitions": {
+        "objectName": {
+          "type": "string",
+          "description": "Name of the service to create",
+          "validation": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Target model where the service will be created"
+        },
+        "layer": {
+          "type": "string",
+          "description": "Application layer for the service",
+          "dynamic": "layers",
+          "default": "usr"
+        }
+      },
+      "templates": {
+        "metadata": "serviceMetadataTemplate"
+      },
+      "creationStrategy": "xppObject"
     }
   },
   "templates": {
@@ -189,8 +1505,148 @@
       "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxTable xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <Name>{{tableName}}</Name>\n    {{#if label}}<Label>{{label}}</Label>{{/if}}\n    {{#if helpText}}<HelpText>{{helpText}}</HelpText>{{/if}}\n    {{#if extends}}<Extends>{{extends}}</Extends>{{/if}}\n    <Fields>\n        <AxTableField i:type=\"AxTableFieldInt64\">\n            <Name>RecId</Name>\n            <ExtendedDataType>RecId</ExtendedDataType>\n        </AxTableField>\n    </Fields>\n    <Indexes>\n        <AxTableIndex>\n            <Name>RecIDIdx</Name>\n            <Fields>\n                <AxTableIndexField>\n                    <DataField>RecId</DataField>\n                </AxTableIndexField>\n            </Fields>\n        </AxTableIndex>\n    </Indexes>\n</AxTable>"
     },
     "enumMetadataTemplate": {
-      "extension": ".xml", 
+      "extension": ".xml",
       "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxEnum xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <Name>{{enumName}}</Name>\n    {{#if label}}<Label>{{label}}</Label>{{/if}}\n    {{#if helpText}}<HelpText>{{helpText}}</HelpText>{{/if}}\n    <EnumValues>\n        <AxEnumValue>\n            <Name>None</Name>\n            <Value>0</Value>\n        </AxEnumValue>\n    </EnumValues>\n</AxEnum>"
+    },
+    "enumExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxEnumExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <TargetEnum>{{targetEnum}}</TargetEnum>\n    <EnumValues>\n        <!-- Add new enum values here -->\n    </EnumValues>\n</AxEnumExtension>"
+    },
+    "edtMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxEdt xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    {{#if label}}<Label>{{label}}</Label>{{/if}}\n    {{#if helpText}}<HelpText>{{helpText}}</HelpText>{{/if}}\n    <BaseType>{{baseType}}</BaseType>\n    {{#if stringSize}}<StringSize>{{stringSize}}</StringSize>{{/if}}\n</AxEdt>"
+    },
+    "edtExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxEdtExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <TargetEdt>{{targetEdt}}</TargetEdt>\n    <!-- Add extensions here -->\n</AxEdtExtension>"
+    },
+    "viewMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxView xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    {{#if label}}<Label>{{label}}</Label>{{/if}}\n    {{#if helpText}}<HelpText>{{helpText}}</HelpText>{{/if}}\n    <DataSources>\n        {{#if dataSource}}<AxViewDataSource>\n            <n>{{dataSource}}</n>\n            <Table>{{dataSource}}</Table>\n        </AxViewDataSource>{{else}}<!-- Add data sources here -->{{/if}}\n    </DataSources>\n    <Fields>\n        <!-- Add fields here -->\n    </Fields>\n</AxView>"
+    },
+    "formMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxForm xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    {{#if label}}<Caption>{{label}}</Caption>{{/if}}\n    {{#if helpText}}<HelpText>{{helpText}}</HelpText>{{/if}}\n    {{#if dataSource}}<DataSources>\n        <AxFormDataSource>\n            <n>{{dataSource}}</n>\n            <Table>{{dataSource}}</Table>\n        </AxFormDataSource>\n    </DataSources>{{/if}}\n    <Design>\n        <Pattern>SimpleList</Pattern>\n        <Controls>\n            <!-- Add form controls here -->\n        </Controls>\n    </Design>\n</AxForm>"
+    },
+    "reportMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxReport xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    {{#if label}}<Caption>{{label}}</Caption>{{/if}}\n    {{#if helpText}}<HelpText>{{helpText}}</HelpText>{{/if}}\n    {{#if dataSource}}<DataSources>\n        <AxReportDataSource>\n            <n>{{dataSource}}</n>\n            <Table>{{dataSource}}</Table>\n        </AxReportDataSource>\n    </DataSources>{{/if}}\n    <Designs>\n        <AxReportDesign>\n            <n>ReportDesign</n>\n            <!-- Add report design here -->\n        </AxReportDesign>\n    </Designs>\n</AxReport>"
+    },
+    "queryMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxQuery xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    {{#if label}}<Title>{{label}}</Title>{{/if}}\n    {{#if helpText}}<Description>{{helpText}}</Description>{{/if}}\n    {{#if dataSource}}<DataSources>\n        <AxQuerySimpleRootDataSource>\n            <n>{{dataSource}}</n>\n            <Table>{{dataSource}}</Table>\n        </AxQuerySimpleRootDataSource>\n    </DataSources>{{/if}}\n</AxQuery>"
+    },
+    "macroMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<AxMacro xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <SourceCode>\n        <Declaration><![CDATA[\n#if.{{objectName}}\n#define.{{objectName}}(1)\n// Add macro definition here\n#endif\n        ]]></Declaration>\n    </SourceCode>\n</AxMacro>"
+    },
+    "tableExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for tableExtension -->\n<!-- TODO: Implement proper tableExtension template -->\n<AxTableExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add tableExtension specific properties here -->\n</AxTableExtension>"
+    },
+    "viewExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for viewExtension -->\n<!-- TODO: Implement proper viewExtension template -->\n<AxViewExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add viewExtension specific properties here -->\n</AxViewExtension>"
+    },
+    "queryExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for queryExtension -->\n<!-- TODO: Implement proper queryExtension template -->\n<AxQueryExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add queryExtension specific properties here -->\n</AxQueryExtension>"
+    },
+    "dataEntityMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for dataEntity -->\n<!-- TODO: Implement proper dataEntity template -->\n<AxDataEntity xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add dataEntity specific properties here -->\n</AxDataEntity>"
+    },
+    "dataEntityExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for dataEntityExtension -->\n<!-- TODO: Implement proper dataEntityExtension template -->\n<AxDataEntityExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add dataEntityExtension specific properties here -->\n</AxDataEntityExtension>"
+    },
+    "compositeDataEntityMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for compositeDataEntity -->\n<!-- TODO: Implement proper compositeDataEntity template -->\n<AxCompositeDataEntity xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add compositeDataEntity specific properties here -->\n</AxCompositeDataEntity>"
+    },
+    "aggregateDataEntityMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for aggregateDataEntity -->\n<!-- TODO: Implement proper aggregateDataEntity template -->\n<AxAggregateDataEntity xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add aggregateDataEntity specific properties here -->\n</AxAggregateDataEntity>"
+    },
+    "mapMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for map -->\n<!-- TODO: Implement proper map template -->\n<AxMap xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add map specific properties here -->\n</AxMap>"
+    },
+    "formExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for formExtension -->\n<!-- TODO: Implement proper formExtension template -->\n<AxFormExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add formExtension specific properties here -->\n</AxFormExtension>"
+    },
+    "tileMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for tile -->\n<!-- TODO: Implement proper tile template -->\n<AxTile xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add tile specific properties here -->\n</AxTile>"
+    },
+    "menuMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for menu -->\n<!-- TODO: Implement proper menu template -->\n<AxMenu xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add menu specific properties here -->\n</AxMenu>"
+    },
+    "menuExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for menuExtension -->\n<!-- TODO: Implement proper menuExtension template -->\n<AxMenuExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add menuExtension specific properties here -->\n</AxMenuExtension>"
+    },
+    "menuItemMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for menuItem -->\n<!-- TODO: Implement proper menuItem template -->\n<AxMenuItem xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add menuItem specific properties here -->\n</AxMenuItem>"
+    },
+    "menuItemExtensionMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for menuItemExtension -->\n<!-- TODO: Implement proper menuItemExtension template -->\n<AxMenuItemExtension xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add menuItemExtension specific properties here -->\n</AxMenuItemExtension>"
+    },
+    "perspectiveMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for perspective -->\n<!-- TODO: Implement proper perspective template -->\n<AxPerspective xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add perspective specific properties here -->\n</AxPerspective>"
+    },
+    "kpiMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for kpi -->\n<!-- TODO: Implement proper kpi template -->\n<AxKpi xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add kpi specific properties here -->\n</AxKpi>"
+    },
+    "workflowMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for workflow -->\n<!-- TODO: Implement proper workflow template -->\n<AxWorkflow xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add workflow specific properties here -->\n</AxWorkflow>"
+    },
+    "labelFileMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for labelFile -->\n<!-- TODO: Implement proper labelFile template -->\n<AxLabelFile xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add labelFile specific properties here -->\n</AxLabelFile>"
+    },
+    "resourceMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for resource -->\n<!-- TODO: Implement proper resource template -->\n<AxResource xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add resource specific properties here -->\n</AxResource>"
+    },
+    "configurationKeyMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for configurationKey -->\n<!-- TODO: Implement proper configurationKey template -->\n<AxConfigurationKey xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add configurationKey specific properties here -->\n</AxConfigurationKey>"
+    },
+    "securityKeyMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for securityKey -->\n<!-- TODO: Implement proper securityKey template -->\n<AxSecurityKey xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add securityKey specific properties here -->\n</AxSecurityKey>"
+    },
+    "securityDutyMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for securityDuty -->\n<!-- TODO: Implement proper securityDuty template -->\n<AxSecurityDuty xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add securityDuty specific properties here -->\n</AxSecurityDuty>"
+    },
+    "securityPrivilegeMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for securityPrivilege -->\n<!-- TODO: Implement proper securityPrivilege template -->\n<AxSecurityPrivilege xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add securityPrivilege specific properties here -->\n</AxSecurityPrivilege>"
+    },
+    "securityRoleMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for securityRole -->\n<!-- TODO: Implement proper securityRole template -->\n<AxSecurityRole xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add securityRole specific properties here -->\n</AxSecurityRole>"
+    },
+    "securityPolicyMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for securityPolicy -->\n<!-- TODO: Implement proper securityPolicy template -->\n<AxSecurityPolicy xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add securityPolicy specific properties here -->\n</AxSecurityPolicy>"
+    },
+    "serviceGroupMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for serviceGroup -->\n<!-- TODO: Implement proper serviceGroup template -->\n<AxServiceGroup xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add serviceGroup specific properties here -->\n</AxServiceGroup>"
+    },
+    "serviceMetadataTemplate": {
+      "extension": ".xml",
+      "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Placeholder template for service -->\n<!-- TODO: Implement proper service template -->\n<AxService xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\">\n    <n>{{objectName}}</n>\n    <!-- Add service specific properties here -->\n</AxService>"
     }
   }
 }
