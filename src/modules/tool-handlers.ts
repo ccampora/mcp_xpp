@@ -54,36 +54,6 @@ export class ToolHandlers {
     return await createLoggedResponse(content, requestId, "create_xpp_object");
   }
 
-  static async setXppCodebasePath(args: any, requestId: string): Promise<any> {
-    const schema = z.object({
-      path: z.string(),
-    });
-    const { path } = schema.parse(args);
-    
-    // Validate path exists
-    try {
-      const { promises: fs } = await import("fs");
-      const stats = await fs.stat(path);
-      if (!stats.isDirectory()) {
-        throw new Error("Path is not a directory");
-      }
-    } catch (error) {
-      throw new Error(`Invalid path: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-    
-    setXppCodebasePath(path);
-    ObjectIndexManager.setIndexPath(path);
-    await ObjectIndexManager.loadIndex();
-    
-    const content = `X++ codebase path set to: ${path}
-
-Index will be maintained at: ${join(path, '.mcp-index.json')}
-
-Use build_object_index to create an index for faster searching.`;
-    
-    return await createLoggedResponse(content, requestId, "set_xpp_codebase_path");
-  }
-
   static async browseDirectory(args: any, requestId: string): Promise<any> {
     const schema = z.object({
       path: z.string().optional().default(""),

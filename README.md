@@ -117,26 +117,31 @@ This section will be updated as documentation becomes available.
 
 ## Available Tools
 
+The MCP X++ Server provides 12 comprehensive tools for D365 F&O codebase analysis and management:
+
+### Configuration & Setup
+- `get_current_config`: Get comprehensive server configuration including paths, index statistics, and system information
+
+### Object Creation
+- `create_xpp_object`: Create D365 F&O objects (models, classes, tables, enums) with unified interface supporting multiple layers and dependencies
+
 ### File System Operations
-- `browse_directory`: List directory contents with X++ file identification
-- `read_file`: Read and display file contents
-- `search_files`: Text search across X++ files
+- `browse_directory`: Browse directories with optional hidden file display
+- `read_file`: Read file contents with path validation and size limits
+- `search_files`: Search for text within X++ codebase files with configurable extensions
 
 ### Object Discovery & Analysis
-- `find_xpp_object`: Find X++ objects by name and type (classes, tables, etc.)
-- `get_class_methods`: Analyze class methods, inheritance, and signatures
-- `get_table_structure`: Parse table fields, indexes, and metadata
-- `validate_object_exists`: Quickly validate if objects exist in codebase
-- `discover_object_types`: Discover available X++ object types in the codebase
-- `discover_object_types_json`: Get raw JSON structure from AOT analysis
+- `find_xpp_object`: Find and analyze X++ objects by name with optional type filtering (CLASSES, TABLES, FORMS, etc.)
+- `get_class_methods`: Get detailed method signatures and information for specific X++ classes
+- `get_table_structure`: Get detailed table structure including fields, indexes, and relations
+- `discover_object_types_json`: Return the raw JSON structure from aot-structure.json file
 
 ### Index Management & Search
-- `build_object_index`: Build searchable index for optimal performance
-- `get_index_stats`: Monitor index performance and statistics
-- `list_objects_by_type`: List all objects of a specific type with JSON response format
-- `smart_search`: Perform intelligent search across the codebase using multiple strategies
+- `build_object_index`: Build or update the object index for faster searches with optional type-specific or force rebuild options
+- `list_objects_by_type`: List all objects of a specific type from the index with sorting and pagination
+- `smart_search`: Perform intelligent search across the X++ codebase using multiple strategies with configurable results
 
-**New JSON Response Format for `list_objects_by_type`:**
+**JSON Response Format for `list_objects_by_type`:**
 ```json
 {
   "objectType": "CLASSES",
@@ -145,12 +150,127 @@ This section will be updated as documentation becomes available.
     {
       "name": "AADAuthenticationMonitoringAndDiagnostics",
       "package": "ApplicationFoundation",
-      "path": "/path/to/class.xml",
+      "path": "/ApplicationFoundation/AAD/Classes/AADAuth.xml",
       "size": 2048
     }
   ]
 }
 ```
+
+**Supported Object Types:**
+- CLASSES, TABLES, FORMS, REPORTS, ENUMS, EDTS, VIEWS, MAPS, SERVICES, WORKFLOWS, QUERIES, MENUS, MENUITEM
+
+**Available Application Layers:**
+- usr, cus, var, isv, slp, gls, fp, sys
+
+## Tool Reference
+
+### Configuration Tools
+
+#### `get_current_config`
+Get comprehensive server configuration and statistics.
+- **Parameters**: None
+- **Returns**: JSON with paths, index statistics, available layers, and system information
+- **Use Case**: Monitor server state and troubleshoot configuration issues
+
+### Object Creation
+
+#### `create_xpp_object`
+Create new D365 F&O objects with full metadata support.
+- **Parameters**: 
+  - `objectName` (string, required) - Name of the object
+  - `objectType` (string, required) - Type: "model", "class", "table", "enum"
+  - `layer` (string, optional) - Application layer (usr, cus, var, etc.)
+  - `publisher` (string, optional) - Publisher name (default: "YourCompany")
+  - `version` (string, optional) - Version string (default: "1.0.0.0")
+  - `dependencies` (array, optional) - Dependencies (default: ["ApplicationPlatform", "ApplicationFoundation"])
+  - `outputPath` (string, optional) - Output path (default: "Models")
+- **Returns**: Created object structure with file paths
+- **Use Case**: Generate new X++ objects with proper D365 structure
+
+### File System Tools
+
+#### `browse_directory`
+Navigate and list directory contents with X++ file recognition.
+- **Parameters**: 
+  - `path` (string, optional) - Relative path from codebase root (empty for root)
+  - `showHidden` (boolean, optional) - Show hidden files (default: false)
+- **Returns**: Directory listing with file types and icons
+- **Use Case**: Explore D365 package structure and navigate codebases
+
+#### `read_file`
+Read file contents with security validation and size limits.
+- **Parameters**: `path` (string, required) - Relative path to file
+- **Returns**: File contents with encoding detection
+- **Limits**: 500KB maximum file size
+- **Use Case**: View X++ source code, XML metadata, and configuration files
+
+#### `search_files`
+Search text within files using case-insensitive matching.
+- **Parameters**: 
+  - `searchTerm` (string, required) - Text to search for
+  - `path` (string, optional) - Relative search path (empty for entire codebase)
+  - `extensions` (array, optional) - File extensions filter (e.g., ['.xpp', '.xml'])
+- **Returns**: Search results with file paths and match context
+- **Use Case**: Find code patterns, method names, or configuration values
+
+### Object Discovery Tools
+
+#### `find_xpp_object`
+Locate X++ objects by name with optional type filtering.
+- **Parameters**: 
+  - `objectName` (string, required) - Name of object to find
+  - `objectType` (string, optional) - Object type filter (CLASSES, TABLES, etc.)
+- **Returns**: Object locations with paths and metadata
+- **Use Case**: Validate object existence and locate object files
+
+#### `get_class_methods`
+Analyze class structure with detailed method information.
+- **Parameters**: `className` (string, required) - Name of class to analyze
+- **Returns**: Class methods with signatures, inheritance, and metadata
+- **Use Case**: Understand class APIs and inheritance relationships
+
+#### `get_table_structure`
+Parse table metadata including fields, indexes, and relations.
+- **Parameters**: `tableName` (string, required) - Name of table to analyze
+- **Returns**: Complete table structure with fields, types, and indexes
+- **Use Case**: Understand database schema and table relationships
+
+#### `discover_object_types_json`
+Get raw AOT structure configuration.
+- **Parameters**: None
+- **Returns**: Complete AOT structure JSON from configuration
+- **Use Case**: Access full object type hierarchy and structure definitions
+
+### Index and Search Tools
+
+#### `build_object_index`
+Build or update searchable object index for performance optimization.
+- **Parameters**: 
+  - `objectType` (string, optional) - Specific type to index (empty for all)
+  - `forceRebuild` (boolean, optional) - Force complete rebuild (default: false)
+- **Returns**: Index statistics with object counts by type
+- **Performance**: Processes 70K+ objects in ~30 seconds
+- **Use Case**: Initialize search capabilities and improve query performance
+
+#### `list_objects_by_type`
+Query indexed objects with JSON response format.
+- **Parameters**: 
+  - `objectType` (string, required) - Object type to list
+  - `sortBy` (string, optional) - Sort criteria: "name", "package", "size" (default: "name")
+  - `limit` (number, optional) - Maximum results to return
+- **Returns**: JSON with totalCount and object array
+- **Use Case**: Browse objects by type with pagination and metadata
+
+#### `smart_search`
+Intelligent multi-strategy search with result prioritization.
+- **Parameters**: 
+  - `searchTerm` (string, required) - Term to search for
+  - `searchPath` (string, optional) - Relative path to search within
+  - `extensions` (array, optional) - File extensions to include
+  - `maxResults` (number, optional) - Maximum results (default: 50)
+- **Returns**: Prioritized results with object matches before file content matches
+- **Use Case**: Comprehensive codebase search with intelligent ranking
 
 ## Supported File Types
 
@@ -215,46 +335,59 @@ To use this server with Claude Desktop, Visual Studio, or other MCP clients:
 2. Use the available tools to browse and analyze your X++ code
 3. Use `get_current_config` to verify server configuration and monitor index statistics
 
-## Available Tools
+## Project Architecture
 
-### Project Structure
+## Project Architecture
 
-- `src/` - Main server implementation and modules
-  - `modules/` - Modular architecture
-    - `aot-structure.ts` - AOT structure management
-    - `config.ts` - Configuration management
-    - `file-utils.ts` - File system utilities
-    - `logger.ts` - Logging system
-    - `object-index.ts` - Object indexing
-    - `parsers.ts` - X++ file parsers
-    - `search.ts` - Search functionality
-    - `types.ts` - Type definitions
-    - `utils.ts` - General utilities
-- `config/` - Contains JSON or JS files for runtime configuration.
-  - `aot-structure.json`: Predefined AOT structure tree
-  - Any other custom configuration files used by your deployment or scripts
-- `tests/` - Jest test suite
-  - `helpers/` - Test utilities
-  - `mcp-server.test.js` - Integration tests
-  - `performance.test.js` - Performance tests
-  - `setup.js` - Jest configuration
-- `build/` - Compiled JavaScript output
-- `.github/` - GitHub configuration and Copilot instructions
-  - `copilot-instructions.md`
-- `jest.config.js` - Jest configuration
-- `package.json` - Project manifest
-- `tsconfig.json` - TypeScript configuration
-- `README.md` - Project documentation
+### Modular Architecture (5 Core Modules)
 
-### Development Commands
-- `npm run dev`: Watch mode for development
-- `npm run build`: Build the TypeScript project
-- `npm start`: Run the compiled server
+**Server Management:**
+- `src/index.ts` - Main entry point and server initialization
+- `src/modules/server-manager.ts` - Server lifecycle and request handling
+- `src/modules/tool-definitions.ts` - MCP tool schema definitions (12 tools)
+- `src/modules/tool-handlers.ts` - Tool implementation and request routing
+
+**Core Functionality:**
+- `src/modules/config-loader.ts` - Centralized configuration with caching
+- `src/modules/object-index.ts` - High-performance object indexing
+- `src/modules/file-utils.ts` - Secure file system operations
+- `src/modules/parsers.ts` - X++ code analysis and parsing
+- `src/modules/search.ts` - Multi-strategy search implementation
+
+**Supporting Systems:**
+- `src/modules/logger.ts` - Request/response logging with JSON serialization
+- `src/modules/object-creators.ts` - D365 object generation templates
+- `src/modules/aot-structure.ts` - AOT structure management
+- `src/modules/app-config.ts` - Application configuration
+- `src/modules/cache.ts` - Performance optimization
+
+### Configuration System
+
+**JSON Configuration Files:**
+- `config/aot-structure.json` - AOT object type definitions and structure
+- `config/d365-model-config.json` - D365 model templates and metadata
+- `config/d365-object-templates.json` - Object creation templates
+
+**Environment Variables:**
+- `XPP_CODEBASE_PATH` - Primary D365 codebase path
+- `XPP_METADATA_FOLDER` - Custom metadata directory
+- `WRITABLE_METADATA_PATH` - Output path for generated objects
+
+### Build and Test Structure
+- `build/` - Compiled TypeScript output with source maps
+- `tests/` - Vitest test suite (23 tests)
+  - `integration-real.test.js` - Real D365 integration tests (6 tests)
+  - `test-config.js` - Centralized test configuration
+- `cache/` - Runtime index cache files
+
+## Development Commands
+- `npm run build`: Build the TypeScript project to JavaScript
+- `npm start`: Run the compiled MCP server
 - `npm test`: Run comprehensive test suite (23 tests including real D365 integration)
-- `npm run test:watch`: Run tests in watch mode
+- `npm run test:watch`: Run tests in watch mode for development
 - `npm run test:ui`: Open Vitest web interface for interactive testing
 
-### Testing Architecture
+## Testing Architecture
 The project includes comprehensive testing with both mock and real integration tests:
 
 **Mock Unit Tests (17 tests):**
@@ -297,18 +430,65 @@ Real-world performance with actual D365 environment:
 
 ## Example Workflow
 
-**Quick Start with Real D365 Data:**
-1. **Initialize**: Set your F&O codebase path using `set_xpp_codebase_path`
-2. **Index**: Build object index with `build_object_index` (indexes 70K+ objects)
-3. **Query**: List objects with `list_objects_by_type` - returns JSON with totalCount
-4. **Search**: Find objects with `smart_search` - prioritized results with metadata
-5. **Analyze**: Get detailed structure with `get_table_structure` or `get_class_methods`
+### Quick Start with Real D365 Data
 
-**Example JSON Response:**
+**1. Server Configuration**
 ```bash
-# Query for classes
-> list_objects_by_type CLASSES limit=5 sortBy=size
+# Start the server with your D365 codebase path (path configured at startup)
+# Server started with: node build/index.js --xpp-path "C:\\AOSService\\PackagesLocalDirectory"
 
+# Verify configuration
+> get_current_config
+# Returns: paths, available layers, index statistics
+```
+
+**2. Index Building for Performance**
+```bash
+# Build complete object index (processes 70K+ objects)
+> build_object_index
+
+# Or build specific object type index
+> build_object_index objectType="CLASSES" forceRebuild=true
+```
+
+**3. Object Discovery and Analysis**
+```bash
+# List classes with pagination
+> list_objects_by_type objectType="CLASSES" limit=10 sortBy="size"
+
+# Find specific objects
+> find_xpp_object objectName="CustTable" objectType="TABLES"
+
+# Analyze class structure
+> get_class_methods className="CustTable"
+
+# Analyze table structure  
+> get_table_structure tableName="CustTable"
+```
+
+**4. Search and Content Discovery**
+```bash
+# Intelligent search with prioritization
+> smart_search searchTerm="validateField" maxResults=20
+
+# Text search in specific files
+> search_files searchTerm="runbase" extensions=[".xpp"] path="Classes"
+
+# Browse directory structure
+> browse_directory path="ApplicationSuite/Tables"
+```
+
+**5. Object Creation**
+```bash
+# Create new class in custom layer
+> create_xpp_object objectName="MyCustomClass" objectType="class" layer="cus"
+
+# Create new model
+> create_xpp_object objectName="MyModel" objectType="model" publisher="MyCompany"
+```
+
+### Example JSON Response from `list_objects_by_type`
+```json
 {
   "objectType": "CLASSES", 
   "totalCount": 31258,
@@ -318,11 +498,22 @@ Real-world performance with actual D365 environment:
       "package": "ApplicationFoundation", 
       "path": "/ApplicationFoundation/AAD/Classes/AADAuth.xml",
       "size": 2048
+    },
+    {
+      "name": "CustTable",
+      "package": "ApplicationSuite",
+      "path": "/ApplicationSuite/Tables/CustTable.xml", 
+      "size": 15360
     }
-    // ... 4 more objects
   ]
 }
 ```
+
+### Performance Metrics
+- **Index Loading**: 72,708 objects in ~500ms
+- **Object Queries**: <50ms response time
+- **JSON Responses**: 2,300+ character structured data
+- **Directory Scanning**: 169 D365 packages validated
 
 ## Troubleshooting
 
@@ -332,7 +523,7 @@ Real-world performance with actual D365 environment:
 
 **Performance & Data Issues:**
 - "No objects found": Run `build_object_index()` to index your 70K+ objects
-- "X++ codebase path not set": Configure with `set_xpp_codebase_path()`
+- "X++ codebase path not set": Configure path with `--xpp-path` argument when starting the server
 - "Index not built": Use `build_object_index()` - processes 70K+ objects in ~30 seconds
 - "Empty JSON response": Check `totalCount` field - may indicate filtering or missing index
 
@@ -370,3 +561,331 @@ This project is experimental and under active development. If you have feedback,
 
 Thank you for your interest in this project.
 *Note: Advanced code parsing, relationship analysis, and intelligent object understanding are planned for future development phases.*
+<!--=========================README TEMPLATE INSTRUCTIONS=============================
+======================================================================================
+
+- THIS README TEMPLATE LARGELY CONSISTS OF COMMENTED OUT TEXT. THIS UNRENDERED TEXT IS MEANT TO BE LEFT IN AS A GUIDE 
+  THROUGHOUT THE REPOSITORY'S LIFE WHILE END USERS ONLY SEE THE RENDERED PAGE CONTENT. 
+- Any italicized text rendered in the initial template is intended to be replaced IMMEDIATELY upon repository creation.
+
+- This template is default but not mandatory. It was designed to compensate for typical gaps in Microsoft READMEs 
+  that slow the pace of work. You may delete it if you have a fully populated README to replace it with.
+
+- Most README sections below are commented out as they are not known early in a repository's life. Others are commented 
+  out as they do not apply to every repository. If a section will be appropriate later but not known now, consider 
+  leaving it in commented out and adding an issue as a reminder.
+- There are additional optional README sections in the external instruction link below. These include; "citation",  
+  "built with", "acknowledgments", "folder structure", etc.
+- You can easily find the places to add content that will be rendered to the end user by searching 
+within the file for "TODO".
+
+
+
+- ADDITIONAL EXTERNAL TEMPLATE INSTRUCTIONS:
+  -  https://aka.ms/StartRight/README-Template/Instructions
+
+======================================================================================
+====================================================================================-->
+
+
+<!---------------------[  Description  ]------------------<recommended> section below------------------>
+
+# mcp_xpp
+
+<!-- 
+INSTRUCTIONS:
+- Write description paragraph(s) that can stand alone. Remember 1st paragraph may be consumed by aggregators to improve 
+  search experience.
+- You description should allow any reader to figure out:
+    1. What it does?
+    2. Why was it was created?
+    3. Who created?
+    4. What is it's maturity?
+    5. What is the larger context?
+- Write for a reasonable person with zero context regarding your product, org, and team. The person may be evaluating if 
+this is something they can use.
+
+How to Evaluate & Examples: 
+  - https://aka.ms/StartRight/README-Template/Instructions#description
+-->
+
+IDE Agnostic MCP Server for x++
+
+-----------------------------------------------------------------
+<!-----------------------[  License  ]----------------------<optional> section below--------------------->
+
+<!-- 
+## License 
+--> 
+
+<!-- 
+INSTRUCTIONS:
+- Licensing is mostly irrelevant within the company for purely internal code. Use this section to prevent potential 
+  confusion around:
+  - Open source in internal code repository.
+  - Multiple licensed code in same repository. 
+  - Internal fork of public open source code.
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#license
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+
+<!-----------------------[  Getting Started  ]--------------<recommended> section below------------------>
+## Getting Started
+
+<!-- 
+INSTRUCTIONS:
+  - Write instructions such that any new user can get the project up & running on their machine.
+  - This section has subsections described further down of "Prerequisites", "Installing", and "Deployment". 
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#getting-started
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+*Description of how to install and use the code or content goes here*
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[ Prerequisites  ]-----------------<optional> section below--------------------->
+### Prerequisites
+
+<!--------------------------------------------------------
+INSTRUCTIONS:
+- Describe what things a new user needs to install in order to install and use the repository. 
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#prerequisites
+---------------------------------------------------------->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+There are no prerequisites required to run this code or use this repository.
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[  Installing  ]-------------------<optional> section below------------------>
+### Installing
+
+<!--
+INSTRUCTIONS:
+- A step by step series of examples that tell you how to get a development environment and your code running. 
+- Best practice is to include examples that can be copy and pasted directly from the README into a terminal.
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#installing
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+This repository does not hold installable content.
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[  Tests  ]------------------------<optional> section below--------------------->
+<!-- 
+## Tests
+ -->
+
+<!--
+INSTRUCTIONS:
+- Explain how to run the tests for this project. You may want to link here from Deployment (CI/CD) or Contributing sections.
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#tests
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+<!--
+
+*Explain what these tests test and why* 
+
+```
+Give an example
+``` 
+
+-->
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[  Deployment (CI/CD)  ]-----------<optional> section below--------------------->
+### Deployment (CI/CD)
+
+<!-- 
+INSTRUCTIONS:
+- Describe how to deploy if applicable. Deployment includes website deployment, packages, or artifacts.
+- Avoid potential new contributor frustrations by making it easy to know about all compliance and continuous integration 
+    that will be run before pull request approval.
+- NOTE: Setting up an Azure DevOps pipeline gets you all 1ES compliance and build tooling such as component governance. 
+  - More info: https://aka.ms/StartRight/README-Template/integrate-ado
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#deployment-and-continuous-integration
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+_At this time, the repository does not use continuous integration or produce a website, artifact, or anything deployed._
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[  Versioning and Changelog  ]-----<optional> section below--------------------->
+
+<!-- ### Versioning and Changelog -->
+
+<!-- 
+INSTRUCTIONS:
+- If there is any information on a changelog, history, versioning style, roadmap or any related content tied to the 
+  history and/or future of your project, this is a section for it.
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#versioning-and-changelog
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+<!-- We use [SemVer](https://aka.ms/StartRight/README-Template/semver) for versioning. -->
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+-----------------------------------------------
+
+<!-----------------------[  Access  ]-----------------------<recommended> section below------------------>
+## Access
+
+<!-- 
+INSTRUCTIONS:
+- Please use this section to reduce the all-too-common friction & pain of getting read access and role-based permissions 
+  to repos inside Microsoft. Please cover (a) Gaining a role with read, write, other permissions. (b) sharing a link to 
+  this repository such that people who are not members of the organization can access it.
+- If the repository is set to internalVisibility, you may also want to refer to the "Sharing a Link to this Repository" sub-section 
+of the [README-Template instructions](https://aka.ms/StartRight/README-Template/Instructions#sharing-a-link-to-this-repository) so new GitHub EMU users know to get 1ES-Enterprise-Visibility MyAccess group access and therefore will have read rights to any repo set to internalVisibility.
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#how-to-share-an-accessible-link-to-this-repository
+-->
+
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[  Contributing  ]-----------------<recommended> section below------------------>
+## Contributing
+
+<!--
+INSTRUCTIONS: 
+- Establish expectations and processes for existing & new developers to contribute to the repository.
+  - Describe whether first step should be email, teams message, issue, or direct to pull request.
+  - Express whether fork or branch preferred.
+- CONTRIBUTING content Location:
+  - You can tell users how to contribute in the README directly or link to a separate CONTRIBUTING.md file.
+  - The README sections "Contacts" and "Reuse Expectations" can be seen as subsections to CONTRIBUTING.
+  
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#contributing
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+_This repository prefers outside contributors start forks rather than branches. For pull requests more complicated 
+than typos, it is often best to submit an issue first._
+
+If you are a new potential collaborator who finds reaching out or contributing to another project awkward, you may find 
+it useful to read these [tips & tricks](https://aka.ms/StartRight/README-Template/innerSource/2021_02_TipsAndTricksForCollaboration) 
+on InnerSource Communication.
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[  Contacts  ]---------------------<recommended> section below------------------>
+<!-- 
+#### Contacts  
+-->
+<!--
+INSTRUCTIONS: 
+- To lower friction for new users and contributors, provide a preferred contact(s) and method (email, TEAMS, issue, etc.)
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#contacts
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[  Support & Reuse Expectations  ]-----<recommended> section below-------------->
+ 
+### Support & Reuse Expectations
+
+ 
+<!-- 
+INSTRUCTIONS:
+- To avoid misalignments use this section to set expectations in regards to current and future state of:
+  - The level of support the owning team provides new users/contributors and 
+  - The owning team's expectations in terms of incoming InnerSource requests and contributions.
+
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#support-and-reuse-expectations
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+
+_The creators of this repository **DO NOT EXPECT REUSE**._
+
+If you do use it, please let us know via an email or 
+leave a note in an issue, so we can best understand the value of this repository.
+<!------====-- CONTENT GOES ABOVE ------->
+
+
+<!-----------------------[  Limitations  ]----------------------<optional> section below----------------->
+
+<!-- 
+### Limitations 
+--> 
+
+<!-- 
+INSTRUCTIONS:
+- Use this section to make readers aware of any complications or limitations that they need to be made aware of.
+  - State:
+    - Export restrictions
+    - If telemetry is collected
+    - Dependencies with non-typical license requirements or limitations that need to not be missed. 
+    - trademark limitations
+ 
+How to Evaluate & Examples:
+  - https://aka.ms/StartRight/README-Template/Instructions#limitations
+-->
+
+<!---- [TODO]  CONTENT GOES BELOW ------->
+
+<!------====-- CONTENT GOES ABOVE ------->
+
+--------------------------------------------
+
+
+<!-----------------------[  Links to Platform Policies  ]-------<recommended> section below-------------->
+## How to Accomplish Common User Actions
+<!-- 
+INSTRUCTIONS: 
+- This section links to information useful to any user of this repository new to internal GitHub policies & workflows.
+-->
+
+ If you have trouble doing something related to this repository, please keep in mind that the following actions require 
+ using [GitHub inside Microsoft (GiM) tooling](https://aka.ms/gim/docs) and not the normal GitHub visible user interface!
+- [Switching between EMU GitHub and normal GitHub without logging out and back in constantly](https://aka.ms/StartRight/README-Template/maintainingMultipleAccount)
+- [Creating a repository](https://aka.ms/StartRight)
+- [Changing repository visibility](https://aka.ms/StartRight/README-Template/policies/jit) 
+- [Gaining repository permissions, access, and roles](https://aka.ms/StartRight/README-TEmplates/gim/policies/access)
+- [Enabling easy access to your low sensitivity and widely applicable repository by setting it to Internal Visibility and having any FTE who wants to see it join the 1ES Enterprise Visibility MyAccess Group](https://aka.ms/StartRight/README-Template/gim/innersource-access)
+- [Migrating repositories](https://aka.ms/StartRight/README-Template/troubleshoot/migration)
+- [Setting branch protection](https://aka.ms/StartRight/README-Template/gim/policies/branch-protection)
+- [Setting up GitHubActions](https://aka.ms/StartRight/README-Template/policies/actions)
+- [and other actions](https://aka.ms/StartRight/README-Template/gim/policies)
+
+This README started as a template provided as part of the 
+[StartRight](https://aka.ms/gim/docs/startright) tool that is used to create new repositories safely. Feedback on the
+[README template](https://aka.ms/StartRight/README-Template) used in this repository is requested as an issue. 
+
+<!-- version: 2023-04-07 [Do not delete this line, it is used for analytics that drive template improvements] -->

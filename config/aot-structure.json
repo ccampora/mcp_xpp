@@ -6,22 +6,26 @@
         "Base Enums": {
           "folderPatterns": ["AxEnum"],
           "fileExtensions": [".xml"],
-          "objectType": "BASE_ENUMS"
+          "objectType": "enum",
+          "creatable": true
         },
         "Base Enum Extensions": {
           "folderPatterns": ["AxEnumExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "BASE_ENUM_EXTENSIONS"
+          "objectType": "enumExtension",
+          "creatable": true
         },
         "Extended Data Types": {
           "folderPatterns": ["AxEdt"],
           "fileExtensions": [".xml"],
-          "objectType": "EXTENDED_DATA_TYPES"
+          "objectType": "edt",
+          "creatable": true
         },
         "Extended Data Type Extensions": {
           "folderPatterns": ["AxEdtExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "EXTENDED_DATA_TYPE_EXTENSIONS"
+          "objectType": "edtExtension",
+          "creatable": true
         }
       }
     },
@@ -31,62 +35,74 @@
         "Tables": {
           "folderPatterns": ["AxTable"],
           "fileExtensions": [".xml"],
-          "objectType": "TABLES"
+          "objectType": "table",
+          "creatable": true
         },
         "Table Extensions": {
           "folderPatterns": ["AxTableExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "TABLE_EXTENSIONS"
+          "objectType": "tableExtension",
+          "creatable": true
         },
         "Views": {
           "folderPatterns": ["AxView"],
           "fileExtensions": [".xml"],
-          "objectType": "VIEWS"
+          "objectType": "view",
+          "creatable": true
         },
         "View Extensions": {
           "folderPatterns": ["AxViewExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "VIEW_EXTENSIONS"
+          "objectType": "viewExtension",
+          "creatable": true
         },
         "Queries": {
           "folderPatterns": ["AxQuery"],
           "fileExtensions": [".xml"],
-          "objectType": "QUERIES"
+          "objectType": "query",
+          "creatable": true
         },
         "Query Extensions": {
           "folderPatterns": ["AxQueryExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "QUERY_EXTENSIONS"
+          "objectType": "queryExtension",
+          "creatable": true
         },
         "Data Entities": {
           "folderPatterns": ["AxDataEntity"],
           "fileExtensions": [".xml"],
-          "objectType": "DATA_ENTITIES"
+          "objectType": "dataEntity",
+          "creatable": true
         },
         "Data Entity Extensions": {
           "folderPatterns": ["AxDataEntityExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "DATA_ENTITY_EXTENSIONS"
+          "objectType": "dataEntityExtension",
+          "creatable": true
         },
         "Composite Data Entities": {
           "folderPatterns": ["AxCompositeDataEntity"],
           "fileExtensions": [".xml"],
-          "objectType": "COMPOSITE_DATA_ENTITIES"
+          "objectType": "compositeDataEntity",
+          "creatable": true
         },
         "Aggregate Data Entities": {
           "folderPatterns": ["AxAggregateDataEntity"],
           "fileExtensions": [".xml"],
-          "objectType": "AGGREGATE_DATA_ENTITIES"
+          "objectType": "aggregateDataEntity",
+          "creatable": true
         },
         "Maps": {
           "folderPatterns": ["AxMap"],
           "fileExtensions": [".xml"],
-          "objectType": "MAPS"
+          "objectType": "map",
+          "creatable": true
         },
         "Table Collections": {
           "folderPatterns": ["AxTableCollection"],
           "fileExtensions": [".xml"],
-          "objectType": "TABLE_COLLECTIONS"
+          "objectType": "tableCollection",
+          "creatable": false
         }
       }
     },
@@ -96,12 +112,14 @@
         "Classes": {
           "folderPatterns": ["AxClass"],
           "fileExtensions": [".xml", ".xpp"],
-          "objectType": "CLASSES"
+          "objectType": "class",
+          "creatable": true
         },
         "Macros": {
           "folderPatterns": ["AxMacro"],
           "fileExtensions": [".xml"],
-          "objectType": "MACROS"
+          "objectType": "macro",
+          "creatable": true
         }
       }
     },
@@ -111,37 +129,44 @@
         "Forms": {
           "folderPatterns": ["AxForm"],
           "fileExtensions": [".xml"],
-          "objectType": "FORMS"
+          "objectType": "form",
+          "creatable": true
         },
         "Form Extensions": {
           "folderPatterns": ["AxFormExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "FORM_EXTENSIONS"
+          "objectType": "formExtension",
+          "creatable": true
         },
         "Tiles": {
           "folderPatterns": ["AxTile"],
           "fileExtensions": [".xml"],
-          "objectType": "TILES"
+          "objectType": "tile",
+          "creatable": true
         },
         "Menus": {
           "folderPatterns": ["AxMenu"],
           "fileExtensions": [".xml"],
-          "objectType": "MENUS"
+          "objectType": "menu",
+          "creatable": true
         },
         "Menu Extensions": {
           "folderPatterns": ["AxMenuExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "MENU_EXTENSIONS"
+          "objectType": "menuExtension",
+          "creatable": true
         },
         "Menu Items": {
           "folderPatterns": ["AxMenuItems"],
           "fileExtensions": [".xml"],
-          "objectType": "MENU_ITEMS"
+          "objectType": "menuItem",
+          "creatable": true
         },
         "Menu Item Extensions": {
           "folderPatterns": ["AxMenuItemExtension"],
           "fileExtensions": [".xml"],
-          "objectType": "MENU_ITEM_EXTENSIONS"
+          "objectType": "menuItemExtension",
+          "creatable": true
         }
       }
     },
@@ -151,17 +176,20 @@
         "Perspectives": {
           "folderPatterns": ["AxPerspective"],
           "fileExtensions": [".xml"],
-          "objectType": "PERSPECTIVES"
+          "objectType": "perspective",
+          "creatable": true
         },
         "Key Performance Indicators (KPI)": {
           "folderPatterns": ["AxKpi"],
           "fileExtensions": [".xml"],
-          "objectType": "KPIS"
+          "objectType": "kpi",
+          "creatable": true
         },
         "Reports": {
           "folderPatterns": ["AxReport"],
           "fileExtensions": [".xml"],
-          "objectType": "REPORTS"
+          "objectType": "report",
+          "creatable": true
         }
       }
     },
@@ -171,19 +199,22 @@
         "Workflows": {
           "folderPatterns": ["AxWorkflow"],
           "fileExtensions": [".xml"],
-          "objectType": "WORKFLOWS"
+          "objectType": "workflow",
+          "creatable": true
         }
       }
     },
     "Label Files": {
       "folderPatterns": ["LabelFiles"],
       "fileExtensions": [".xml", ".txt"],
-      "objectType": "LABEL_FILES"
+      "objectType": "labelFile",
+      "creatable": true
     },
     "Resources": {
       "folderPatterns": ["Resources"],
       "fileExtensions": [".xml", ".png", ".jpg", ".gif", ".ico"],
-      "objectType": "RESOURCES"
+      "objectType": "resource",
+      "creatable": true
     },
     "Configuration": {
       "folderPatterns": ["Configuration"],
@@ -191,12 +222,14 @@
         "Configuration Keys": {
           "folderPatterns": ["AxConfigurationKey"],
           "fileExtensions": [".xml"],
-          "objectType": "CONFIGURATION_KEYS"
+          "objectType": "configurationKey",
+          "creatable": true
         },
         "Security Keys": {
           "folderPatterns": ["AxSecurityKey"],
           "fileExtensions": [".xml"],
-          "objectType": "SECURITY_KEYS"
+          "objectType": "securityKey",
+          "creatable": true
         }
       }
     },
@@ -206,29 +239,34 @@
         "Duties": {
           "folderPatterns": ["AxSecurityDuty"],
           "fileExtensions": [".xml"],
-          "objectType": "SECURITY_DUTIES"
+          "objectType": "securityDuty",
+          "creatable": true
         },
         "Privileges": {
           "folderPatterns": ["AxSecurityPrivilege"],
           "fileExtensions": [".xml"],
-          "objectType": "SECURITY_PRIVILEGES"
+          "objectType": "securityPrivilege",
+          "creatable": true
         },
         "Roles": {
           "folderPatterns": ["AxSecurityRole"],
           "fileExtensions": [".xml"],
-          "objectType": "SECURITY_ROLES"
+          "objectType": "securityRole",
+          "creatable": true
         },
         "Policies": {
           "folderPatterns": ["AxSecurityPolicy"],
           "fileExtensions": [".xml"],
-          "objectType": "SECURITY_POLICIES"
+          "objectType": "securityPolicy",
+          "creatable": true
         }
       }
     },
     "References": {
       "folderPatterns": ["References"],
       "fileExtensions": [".xml"],
-      "objectType": "REFERENCES"
+      "objectType": "reference",
+      "creatable": false
     },
     "Services": {
       "folderPatterns": ["Services"],
@@ -236,19 +274,22 @@
         "Service Groups": {
           "folderPatterns": ["AxServiceGroup"],
           "fileExtensions": [".xml"],
-          "objectType": "SERVICE_GROUPS"
+          "objectType": "serviceGroup",
+          "creatable": true
         },
         "Services": {
           "folderPatterns": ["AxService"],
           "fileExtensions": [".xml"],
-          "objectType": "SERVICES"
+          "objectType": "service",
+          "creatable": true
         }
       }
     },
     "System Documentation": {
       "folderPatterns": ["SystemDocumentation"],
       "fileExtensions": [".xml", ".md", ".txt"],
-      "objectType": "SYSTEM_DOCUMENTATION"
+      "objectType": "systemDocumentation",
+      "creatable": false
     }
   }
 }

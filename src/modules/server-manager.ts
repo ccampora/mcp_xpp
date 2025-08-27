@@ -70,9 +70,6 @@ export class ServerManager {
           case "create_xpp_object":
             return await ToolHandlers.createXppObject(args, requestId);
           
-          case "set_xpp_codebase_path":
-            return await ToolHandlers.setXppCodebasePath(args, requestId);
-          
           case "browse_directory":
             return await ToolHandlers.browseDirectory(args, requestId);
           
