@@ -2,11 +2,36 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import { AppConfig } from "./app-config.js";
 import { AOTStructureManager } from "./aot-structure.js";
+import { 
+  D365ObjectCreationManager, 
+  createDefaultStrategyManager, 
+  D365ObjectOptions 
+} from "./strategies/index.js";
+import { DiskLogger } from "./logger.js";
 
 /**
  * Object creation handlers for different D365 object types
+ * 
+ * This class now uses the Strategy Pattern for flexible object creation
+ * while maintaining backward compatibility with existing MCP tool interfaces.
  */
 export class ObjectCreators {
+  private static strategyManager: D365ObjectCreationManager | null = null;
+
+  /**
+   * Get or create the strategy manager instance
+   */
+  private static async getStrategyManager(): Promise<D365ObjectCreationManager> {
+    if (!this.strategyManager) {
+      await DiskLogger.logDebug('Initializing D365 object creation strategy manager');
+      this.strategyManager = await createDefaultStrategyManager({
+        enableAutoFallback: true,
+        selectionTimeoutMs: 10000,
+        cacheAvailabilityChecks: true
+      });
+    }
+    return this.strategyManager!; // Non-null assertion since we just created it
+  }
   
   /**
    * Create a model with all required structure
@@ -18,87 +43,111 @@ export class ObjectCreators {
     dependencies: string[];
     outputPath: string;
   }): Promise<string> {
-    const { layer = "usr", publisher, version, dependencies, outputPath } = options;
-    
-    // Use the writable metadata folder, not the read-only codebase path
-    const metadataPath = AppConfig.getXppMetadataFolder();
-    if (!metadataPath) {
-      throw new Error("X++ metadata folder not configured. Use --xpp-metadata-folder argument when starting the server.");
-    }
-    
-    const fullOutputPath = join(metadataPath, modelName);
-    
     try {
-      // Create directory structure
-      await fs.mkdir(fullOutputPath, { recursive: true });
-      await fs.mkdir(join(fullOutputPath, "XppMetadata"), { recursive: true });
-      await fs.mkdir(join(fullOutputPath, "XppSource"), { recursive: true });
-      await fs.mkdir(join(fullOutputPath, "Descriptor"), { recursive: true });
+      const manager = await this.getStrategyManager();
       
-      // Generate model descriptor XML using template system
-      const descriptorXml = await AOTStructureManager.generateModelDescriptorXml({
-        modelName,
-        layer: layer.toUpperCase(),
-        publisher,
-        version,
-        dependencies
-      });
+      const objectOptions: D365ObjectOptions = {
+        objectName: modelName,
+        objectType: 'model',
+        layer: options.layer,
+        publisher: options.publisher,
+        version: options.version,
+        dependencies: options.dependencies,
+        outputPath: options.outputPath
+      };
+
+      const result = await manager.createObject(objectOptions);
       
-      // Write descriptor file
-      await fs.writeFile(join(fullOutputPath, "Descriptor", `${modelName}.xml`), descriptorXml, 'utf8');
-      
-      // Create basic AOT folder structure in XppMetadata
-      const aotFolders = [
-        "Classes", "Tables", "Forms", "Reports", "Enums", "ExtendedDataTypes",
-        "Views", "Maps", "Services", "Workflows", "Queries", "Menus", "MenuItems"
-      ];
-      
-      for (const folder of aotFolders) {
-        await fs.mkdir(join(fullOutputPath, "XppMetadata", folder), { recursive: true });
-        await fs.mkdir(join(fullOutputPath, "XppSource", folder), { recursive: true });
+      if (result.success) {
+        return result.message;
+      } else {
+        throw new Error(result.message);
       }
-      
-      return `Successfully created model: ${modelName}
-
-Location: ${fullOutputPath}
-
-Model Details:
-- Publisher: ${publisher}
-- Version: ${version}
-- Layer: ${layer.toUpperCase()}
-- Dependencies: ${dependencies.join(', ')}
-
-Created Structure:
-✓ Descriptor/${modelName}.xml - Model descriptor with dependencies
-✓ XppMetadata/ - Folder for compiled metadata
-✓ XppSource/ - Folder for X++ source files
-✓ AOT folder structure for all object types
-
-The model is ready for development. Add your X++ objects to the appropriate folders.`;
-      
     } catch (error) {
-      throw new Error(`Failed to create model structure: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      await DiskLogger.logError(error, 'Model creation failed');
+      throw new Error(`Failed to create model: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
-   * Create a class (placeholder implementation)
+   * Create a class using the strategy pattern
    */
   static async createClass(className: string, options: { layer?: string; outputPath: string }): Promise<string> {
-    return `Class creation for ${className} not yet implemented. Layer: ${options.layer || 'usr'}`;
+    try {
+      const manager = await this.getStrategyManager();
+      
+      const objectOptions: D365ObjectOptions = {
+        objectName: className,
+        objectType: 'class',
+        layer: options.layer,
+        outputPath: options.outputPath
+      };
+
+      const result = await manager.createObject(objectOptions);
+      return result.message;
+    } catch (error) {
+      await DiskLogger.logError(error, 'Class creation failed');
+      return `Class creation for ${className} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
   }
 
   /**
-   * Create a table (placeholder implementation)
+   * Create a table using the strategy pattern
    */
   static async createTable(tableName: string, options: { layer?: string; outputPath: string }): Promise<string> {
-    return `Table creation for ${tableName} not yet implemented. Layer: ${options.layer || 'usr'}`;
+    try {
+      const manager = await this.getStrategyManager();
+      
+      const objectOptions: D365ObjectOptions = {
+        objectName: tableName,
+        objectType: 'table',
+        layer: options.layer,
+        outputPath: options.outputPath
+      };
+
+      const result = await manager.createObject(objectOptions);
+      return result.message;
+    } catch (error) {
+      await DiskLogger.logError(error, 'Table creation failed');
+      return `Table creation for ${tableName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
   }
 
   /**
-   * Create an enum (placeholder implementation)
+   * Create an enum using the strategy pattern
    */
   static async createEnum(enumName: string, options: { layer?: string; outputPath: string }): Promise<string> {
-    return `Enum creation for ${enumName} not yet implemented. Layer: ${options.layer || 'usr'}`;
+    try {
+      const manager = await this.getStrategyManager();
+      
+      const objectOptions: D365ObjectOptions = {
+        objectName: enumName,
+        objectType: 'enum',
+        layer: options.layer,
+        outputPath: options.outputPath
+      };
+
+      const result = await manager.createObject(objectOptions);
+      return result.message;
+    } catch (error) {
+      await DiskLogger.logError(error, 'Enum creation failed');
+      return `Enum creation for ${enumName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
+
+  /**
+   * Get strategy manager status and diagnostics
+   */
+  static async getStrategyStatus() {
+    try {
+      const manager = await this.getStrategyManager();
+      return await manager.getStrategyStatus();
+    } catch (error) {
+      await DiskLogger.logError(error, 'Failed to get strategy status');
+      return {
+        error: 'Failed to get strategy status',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 }
