@@ -24,7 +24,7 @@
 				"-ExecutionPolicy",
 				"RemoteSigned",
 				"-Command",
-				"npm run build; if ($LASTEXITCODE -eq 0) { node ./build/index.js --xpp-path 'C:\\Users\\ccampora\\AppData\\Local\\Microsoft\\Dynamics365\\10.0.2015.54\\PackagesLocalDirectory' --xpp-metadata-folder 'C:\\CustomXppMetadata1x4ye02p.ocz' }"
+				"npm run build; if ($LASTEXITCODE -eq 0) { node ./build/index.js --xpp-path 'C:\\Users\\ccampora\\AppData\\Local\\Microsoft\\Dynamics365\\10.0.2015.54\\PackagesLocalDirectory' --xpp-metadata-folder 'C:\\CustomXppMetadata1x4ye02p.ocz' --vs2022-extension-path 'C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\Common7\\IDE\\Extensions\\bwowldxc.vmc' }"
 			],
 			"group": "build",
 			"problemMatcher": [

@@ -46,6 +46,11 @@ async function runServer() {
       if (metadataFolder) {
         console.error(`XPP metadata folder configured: ${metadataFolder}`);
       }
+
+      const vs2022ExtensionPath = AppConfig.getVS2022ExtensionPath();
+      if (vs2022ExtensionPath) {
+        console.error(`VS2022 extension path configured: ${vs2022ExtensionPath}`);
+      }
     }
 
     // Initialize ObjectIndexManager if path is available

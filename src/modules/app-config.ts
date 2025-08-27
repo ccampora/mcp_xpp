@@ -8,6 +8,7 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import { DiskLogger } from "./logger.js";
 import { ObjectIndexManager } from "./object-index.js";
+import { autoDetectVS2022ExtensionPath } from "./vs2022-config.js";
 
 // Import server start time function
 let getServerStartTime: (() => Date | null) | null = null;
@@ -33,6 +34,7 @@ async function importServerStartTime() {
 export interface ServerConfiguration {
   xppPath?: string;
   xppMetadataFolder?: string;
+  vs2022ExtensionPath?: string;
   d365Url?: string; // Future use
 }
 
@@ -106,6 +108,12 @@ class AppConfigManager {
             i++; // Skip the next argument as it's the value
           }
           break;
+        case '--vs2022-extension-path':
+          if (i + 1 < args.length) {
+            parsedConfig.vs2022ExtensionPath = args[i + 1];
+            i++; // Skip the next argument as it's the value
+          }
+          break;
         case '--d365-url':
           if (i + 1 < args.length) {
             parsedConfig.d365Url = args[i + 1];
@@ -132,6 +140,45 @@ class AppConfigManager {
     // Create XPP metadata folder if specified and doesn't exist
     if (this.config.xppMetadataFolder) {
       await this.ensureDirectoryExists(this.config.xppMetadataFolder);
+    }
+
+    // Handle VS2022 extension path - validate if provided, or auto-detect if not
+    if (this.config.vs2022ExtensionPath) {
+      try {
+        await fs.access(this.config.vs2022ExtensionPath);
+        await DiskLogger.logDebug(`VS2022 extension path validated: ${this.config.vs2022ExtensionPath}`);
+        
+        // Also check if the templates subdirectory exists
+        const templatesPath = join(this.config.vs2022ExtensionPath, "Templates", "ProjectItems", "FinanceOperations", "Dynamics 365 Items");
+        try {
+          await fs.access(templatesPath);
+          await DiskLogger.logDebug(`VS2022 templates directory validated: ${templatesPath}`);
+        } catch (error) {
+          const warningMsg = `VS2022 templates directory not found: ${templatesPath}`;
+          await DiskLogger.logDebug(warningMsg);
+          console.warn(`⚠️ ${warningMsg}`);
+        }
+      } catch (error) {
+        const errorMsg = `VS2022 extension path does not exist: ${this.config.vs2022ExtensionPath}`;
+        await DiskLogger.logError(new Error(errorMsg), "vs2022-path-validation");
+        throw new Error(errorMsg);
+      }
+    } else {
+      // Try to auto-detect VS2022 extension path
+      try {
+        const autoDetectedPath = await autoDetectVS2022ExtensionPath();
+        if (autoDetectedPath) {
+          this.config.vs2022ExtensionPath = autoDetectedPath;
+          await DiskLogger.logDebug(`VS2022 extension path auto-detected: ${autoDetectedPath}`);
+          console.log(`✅ Auto-detected VS2022 extension path: ${autoDetectedPath}`);
+        } else {
+          await DiskLogger.logDebug("VS2022 extension path not provided and auto-detection failed");
+          console.log("ℹ️ VS2022 extension path not provided and could not be auto-detected");
+        }
+      } catch (error) {
+        await DiskLogger.logDebug(`VS2022 auto-detection failed: ${error}`);
+        console.warn(`⚠️ VS2022 auto-detection failed: ${error}`);
+      }
     }
 
     // Log configuration
@@ -176,6 +223,13 @@ class AppConfigManager {
    */
   public getXppMetadataFolder(): string | undefined {
     return this.config.xppMetadataFolder;
+  }
+
+  /**
+   * Get VS2022 extension path
+   */
+  public getVS2022ExtensionPath(): string | undefined {
+    return this.config.vs2022ExtensionPath;
   }
 
   /**

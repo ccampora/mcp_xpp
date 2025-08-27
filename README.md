@@ -310,6 +310,21 @@ With optional metadata folder:
 node build/index.js --xpp-path "C:\path\to\PackagesLocalDirectory" --xpp-metadata-folder "C:\custom\metadata"
 ```
 
+With optional VS2022 extension path for template and icon access:
+```bash
+node build/index.js --xpp-path "C:\path\to\PackagesLocalDirectory" --xpp-metadata-folder "C:\custom\metadata" --vs2022-extension-path "C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\{GUID}"
+```
+
+#### Command Line Parameters
+
+| Parameter | Description | Required | Example |
+|-----------|-------------|----------|---------|
+| `--xpp-path` | Path to D365 PackagesLocalDirectory | Yes | `C:\D365\PackagesLocalDirectory` |
+| `--xpp-metadata-folder` | Custom metadata output directory | No | `C:\CustomMetadata` |
+| `--vs2022-extension-path` | VS2022 D365 extension base directory | No | `C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\{GUID}` |
+
+**Note**: The server automatically appends the templates subdirectory path when accessing VS2022 templates and icons.
+
 ### VS Code Integration
 
 Configure in `.vscode/mcp.json`:
@@ -321,7 +336,8 @@ Configure in `.vscode/mcp.json`:
       "args": [
         "./build/index.js",
         "--xpp-path", "C:\\path\\to\\PackagesLocalDirectory",
-        "--xpp-metadata-folder", "C:\\custom\\metadata"  
+        "--xpp-metadata-folder", "C:\\custom\\metadata",
+        "--vs2022-extension-path", "C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\Common7\\IDE\\Extensions\\{GUID}"
       ],
       "cwd": "${workspaceFolder}",
       "type": "stdio"
@@ -329,6 +345,8 @@ Configure in `.vscode/mcp.json`:
   }
 }
 ```
+
+**Note**: Replace `{GUID}` with your actual VS2022 extension GUID. You can find this by exploring the Extensions directory.
 
 ### Integration with MCP Clients
 
