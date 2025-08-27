@@ -1,0 +1,63 @@
+{
+  "strategy": {
+    "description": "Strategy Pattern configuration for D365 Object Creation",
+    "defaultStrategy": "auto",
+    "enableAutoFallback": true,
+    "selectionTimeoutMs": 10000,
+    "cacheAvailabilityChecks": true,
+    "verboseLogging": false,
+    "fallbackOrder": [
+      "microsoft-api",
+      "template", 
+      "custom"
+    ],
+    "strategyConfigs": {
+      "microsoft-api": {
+        "description": "Microsoft Metadata API-based object creation",
+        "requiresD365Environment": true,
+        "powershellExecutionPolicy": "RemoteSigned",
+        "metadataDllPath": "auto-detect",
+        "supportedEnvironments": ["Development", "Build"]
+      },
+      "template": {
+        "description": "XML template-based object creation",
+        "requiresMetadataFolder": true,
+        "templatePath": "config/d365-object-templates.json",
+        "validateTemplates": true
+      },
+      "custom": {
+        "description": "User-defined custom object creation strategies",
+        "enabled": false,
+        "customStrategiesPath": "custom-strategies"
+      }
+    }
+  },
+  "performance": {
+    "description": "Performance optimization settings",
+    "maxConcurrentOperations": 5,
+    "strategyAvailabilityCache": {
+      "enabled": true,
+      "ttlMinutes": 5
+    },
+    "objectCreationTimeout": {
+      "defaultMs": 30000,
+      "modelMs": 60000,
+      "largeObjectMs": 120000
+    }
+  },
+  "validation": {
+    "description": "Object creation validation settings",
+    "validateObjectNames": true,
+    "validateDependencies": true,
+    "allowedLayers": ["usr", "cus", "var", "isv"],
+    "maxObjectNameLength": 80,
+    "objectNamePattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+  },
+  "logging": {
+    "description": "Strategy-specific logging configuration",
+    "logStrategySelection": true,
+    "logPerformanceMetrics": true,
+    "logObjectCreation": true,
+    "detailedErrorLogging": true
+  }
+}
