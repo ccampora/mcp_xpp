@@ -22,7 +22,7 @@ body:
     id: duration
     attributes:
       label: Duration (hours)
-      description: How long do you need access for? The duration you select is in hours. 
+      description: How long do you need access for? The duration you select is in hours.
       options:
         - 1
         - 2
