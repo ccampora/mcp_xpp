@@ -104,7 +104,9 @@ This MCP server provides:
 
 ## Documentation
 
-This section will be updated as documentation becomes available.
+Comprehensive documentation is available in the `docs/` folder:
+
+- [Unified Developer Experience Guide](docs/UNIFIED_DEVELOPER_EXPERIENCE_GUIDE_Version2.md) - Complete guide for development workflows, best practices, and integration patterns
 
 ## Available Tools
 
