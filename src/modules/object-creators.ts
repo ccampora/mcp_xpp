@@ -5,7 +5,8 @@ import { AOTStructureManager } from "./aot-structure.js";
 import { 
   D365ObjectCreationManager, 
   createDefaultStrategyManager, 
-  D365ObjectOptions 
+  D365ObjectOptions,
+  StrategySelectionCriteria
 } from "./strategies/index.js";
 import { DiskLogger } from "./logger.js";
 
@@ -24,13 +25,45 @@ export class ObjectCreators {
   private static async getStrategyManager(): Promise<D365ObjectCreationManager> {
     if (!this.strategyManager) {
       await DiskLogger.logDebug('Initializing D365 object creation strategy manager');
+      
+      // Get configuration from AppConfig
+      const preferredStrategy = AppConfig.getObjectCreationStrategy();
+      const enableFallback = AppConfig.isStrategyFallbackEnabled();
+      const strategyTimeout = AppConfig.getStrategyTimeout();
+      const verboseLogging = AppConfig.isVerboseStrategyLoggingEnabled();
+      
+      // Determine fallback order based on preferred strategy
+      let fallbackOrder: string[] = ['template', 'microsoft-api', 'custom']; // Default order
+      if (preferredStrategy && preferredStrategy !== 'auto') {
+        // Put preferred strategy first, then others
+        fallbackOrder = [preferredStrategy, ...fallbackOrder.filter(s => s !== preferredStrategy)];
+      }
+      
       this.strategyManager = await createDefaultStrategyManager({
-        enableAutoFallback: true,
-        selectionTimeoutMs: 10000,
-        cacheAvailabilityChecks: true
+        defaultStrategy: preferredStrategy && preferredStrategy !== 'auto' ? preferredStrategy : undefined,
+        enableAutoFallback: enableFallback,
+        selectionTimeoutMs: strategyTimeout,
+        cacheAvailabilityChecks: true,
+        fallbackOrder: fallbackOrder
       });
+      
+      if (verboseLogging) {
+        await DiskLogger.logDebug(`Strategy manager initialized with preferences: strategy=${preferredStrategy}, fallback=${enableFallback}, timeout=${strategyTimeout}ms`);
+      }
     }
     return this.strategyManager!; // Non-null assertion since we just created it
+  }
+
+  /**
+   * Create selection criteria based on app configuration
+   */
+  private static createSelectionCriteria(objectType: string): StrategySelectionCriteria {
+    return {
+      preferredStrategy: AppConfig.getObjectCreationStrategy(),
+      objectType: objectType,
+      enableFallback: AppConfig.isStrategyFallbackEnabled(),
+      timeoutMs: AppConfig.getStrategyTimeout()
+    };
   }
   
   /**
@@ -56,7 +89,10 @@ export class ObjectCreators {
         outputPath: options.outputPath
       };
 
-      const result = await manager.createObject(objectOptions);
+      // Create selection criteria based on app configuration
+      const selectionCriteria = this.createSelectionCriteria('model');
+
+      const result = await manager.createObject(objectOptions, selectionCriteria);
       
       if (result.success) {
         return result.message;
@@ -83,7 +119,8 @@ export class ObjectCreators {
         outputPath: options.outputPath
       };
 
-      const result = await manager.createObject(objectOptions);
+      const selectionCriteria = this.createSelectionCriteria('class');
+      const result = await manager.createObject(objectOptions, selectionCriteria);
       return result.message;
     } catch (error) {
       await DiskLogger.logError(error, 'Class creation failed');
@@ -105,7 +142,8 @@ export class ObjectCreators {
         outputPath: options.outputPath
       };
 
-      const result = await manager.createObject(objectOptions);
+      const selectionCriteria = this.createSelectionCriteria('table');
+      const result = await manager.createObject(objectOptions, selectionCriteria);
       return result.message;
     } catch (error) {
       await DiskLogger.logError(error, 'Table creation failed');
@@ -127,7 +165,8 @@ export class ObjectCreators {
         outputPath: options.outputPath
       };
 
-      const result = await manager.createObject(objectOptions);
+      const selectionCriteria = this.createSelectionCriteria('enum');
+      const result = await manager.createObject(objectOptions, selectionCriteria);
       return result.message;
     } catch (error) {
       await DiskLogger.logError(error, 'Enum creation failed');
