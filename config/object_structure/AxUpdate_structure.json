@@ -1,0 +1,134 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxUpdate",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxUpdate",
+    "DiscoveryDate":  "2025-08-28T23:17:03",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+
+                                 ],
+                       "Code":  [
+
+                                ],
+                       "Identity":  [
+                                        {
+                                            "FullType":  "System.String",
+                                            "CanWrite":  true,
+                                            "Type":  "String",
+                                            "CanRead":  true,
+                                            "Category":  "Identity",
+                                            "IsEnum":  false,
+                                            "EnumValues":  [
+
+                                                           ],
+                                            "Name":  "Name",
+                                            "IsCollection":  false
+                                        }
+                                    ],
+                       "Other":  [
+                                     {
+                                         "FullType":  "System.DateTime",
+                                         "CanWrite":  true,
+                                         "Type":  "DateTime",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "AppliedDateTime",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+
+                                 ],
+                       "Collections":  [
+                                           {
+                                               "FullType":  "System.Collections.Generic.IList`1[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                                               "CanWrite":  true,
+                                               "Type":  "IList`1",
+                                               "CanRead":  true,
+                                               "Category":  "Collection",
+                                               "IsEnum":  false,
+                                               "EnumValues":  [
+
+                                                              ],
+                                               "Name":  "KBNumbers",
+                                               "IsCollection":  true
+                                           },
+                                           {
+                                               "FullType":  "System.Collections.Generic.IList`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxUpdateSortedCollection, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                                               "CanWrite":  true,
+                                               "Type":  "IList`1",
+                                               "CanRead":  true,
+                                               "Category":  "Collection",
+                                               "IsEnum":  false,
+                                               "EnumValues":  [
+
+                                                              ],
+                                               "Name":  "SortedCollections",
+                                               "IsCollection":  true
+                                           }
+                                       ]
+                   },
+    "AllProperties":  [
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Identity",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Name",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Collections.Generic.IList`1[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                              "CanWrite":  true,
+                              "Type":  "IList`1",
+                              "CanRead":  true,
+                              "Category":  "Collection",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "KBNumbers",
+                              "IsCollection":  true
+                          },
+                          {
+                              "FullType":  "System.DateTime",
+                              "CanWrite":  true,
+                              "Type":  "DateTime",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "AppliedDateTime",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Collections.Generic.IList`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxUpdateSortedCollection, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                              "CanWrite":  true,
+                              "Type":  "IList`1",
+                              "CanRead":  true,
+                              "Category":  "Collection",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "SortedCollections",
+                              "IsCollection":  true
+                          }
+                      ],
+    "PropertyCount":  4
+}

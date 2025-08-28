@@ -1,0 +1,134 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportSeparatorLine",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxReportSeparatorLine",
+    "DiscoveryDate":  "2025-08-28T23:17:01",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+                                     {
+                                         "FullType":  "System.Boolean",
+                                         "CanWrite":  true,
+                                         "Type":  "Boolean",
+                                         "CanRead":  true,
+                                         "Category":  "Flag",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Visible",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Code":  [
+
+                                ],
+                       "Identity":  [
+                                        {
+                                            "FullType":  "System.String",
+                                            "CanWrite":  true,
+                                            "Type":  "String",
+                                            "CanRead":  true,
+                                            "Category":  "Identity",
+                                            "IsEnum":  false,
+                                            "EnumValues":  [
+
+                                                           ],
+                                            "Name":  "Name",
+                                            "IsCollection":  false
+                                        }
+                                    ],
+                       "Other":  [
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Tags",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportLineStyle",
+                                         "CanWrite":  true,
+                                         "Type":  "AxReportLineStyle",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "LineStyle",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+
+                                 ],
+                       "Collections":  [
+
+                                       ]
+                   },
+    "AllProperties":  [
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Identity",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Name",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Tags",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Boolean",
+                              "CanWrite":  true,
+                              "Type":  "Boolean",
+                              "CanRead":  true,
+                              "Category":  "Flag",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Visible",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportLineStyle",
+                              "CanWrite":  true,
+                              "Type":  "AxReportLineStyle",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "LineStyle",
+                              "IsCollection":  false
+                          }
+                      ],
+    "PropertyCount":  4
+}

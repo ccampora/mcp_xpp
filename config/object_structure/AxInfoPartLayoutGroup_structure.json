@@ -1,0 +1,382 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxInfoPartLayoutGroup",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxInfoPartLayoutGroup",
+    "DiscoveryDate":  "2025-08-28T23:16:56",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+
+                                 ],
+                       "Code":  [
+                                    {
+                                        "FullType":  "System.String",
+                                        "CanWrite":  true,
+                                        "Type":  "String",
+                                        "CanRead":  true,
+                                        "Category":  "Code",
+                                        "IsEnum":  false,
+                                        "EnumValues":  [
+
+                                                       ],
+                                        "Name":  "DataSource",
+                                        "IsCollection":  false
+                                    }
+                                ],
+                       "Identity":  [
+                                        {
+                                            "FullType":  "System.String",
+                                            "CanWrite":  true,
+                                            "Type":  "String",
+                                            "CanRead":  true,
+                                            "Category":  "Identity",
+                                            "IsEnum":  false,
+                                            "EnumValues":  [
+
+                                                           ],
+                                            "Name":  "Name",
+                                            "IsCollection":  false
+                                        }
+                                    ],
+                       "Other":  [
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Caption",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "DataGroup",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.Int32",
+                                         "CanWrite":  true,
+                                         "Type":  "Int32",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "RowCountWhenSmall",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.Int32",
+                                         "CanWrite":  true,
+                                         "Type":  "Int32",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "ElementPosition",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "VerticalSpacing",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "ShowLabels",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.LabelPosition_ITxt",
+                                         "CanWrite":  true,
+                                         "Type":  "LabelPosition_ITxt",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "Left",
+                                                            "Above"
+                                                        ],
+                                         "Name":  "LabelPosition",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "Repeating",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.InfoPartWhenVisibleSize",
+                                         "CanWrite":  true,
+                                         "Type":  "InfoPartWhenVisibleSize",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "Always",
+                                                            "Small",
+                                                            "Medium",
+                                                            "Large"
+                                                        ],
+                                         "Name":  "ShowWhenPartSize",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "ShowCaption",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Collections":  [
+                                           {
+                                               "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.Collections.KeyedObjectCollection`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxInfoPartLayoutGroupField, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                                               "CanWrite":  true,
+                                               "Type":  "KeyedObjectCollection`1",
+                                               "CanRead":  true,
+                                               "Category":  "Collection",
+                                               "IsEnum":  false,
+                                               "EnumValues":  [
+
+                                                              ],
+                                               "Name":  "Fields",
+                                               "IsCollection":  true
+                                           }
+                                       ]
+                   },
+    "AllProperties":  [
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Identity",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Name",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Caption",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "VerticalSpacing",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "ShowLabels",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.LabelPosition_ITxt",
+                              "CanWrite":  true,
+                              "Type":  "LabelPosition_ITxt",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "Left",
+                                                 "Above"
+                                             ],
+                              "Name":  "LabelPosition",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Code",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "DataSource",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "DataGroup",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "Repeating",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Int32",
+                              "CanWrite":  true,
+                              "Type":  "Int32",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "RowCountWhenSmall",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.InfoPartWhenVisibleSize",
+                              "CanWrite":  true,
+                              "Type":  "InfoPartWhenVisibleSize",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "Always",
+                                                 "Small",
+                                                 "Medium",
+                                                 "Large"
+                                             ],
+                              "Name":  "ShowWhenPartSize",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "ShowCaption",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Int32",
+                              "CanWrite":  true,
+                              "Type":  "Int32",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "ElementPosition",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.Collections.KeyedObjectCollection`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxInfoPartLayoutGroupField, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                              "CanWrite":  true,
+                              "Type":  "KeyedObjectCollection`1",
+                              "CanRead":  true,
+                              "Category":  "Collection",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Fields",
+                              "IsCollection":  true
+                          }
+                      ],
+    "PropertyCount":  13
+}

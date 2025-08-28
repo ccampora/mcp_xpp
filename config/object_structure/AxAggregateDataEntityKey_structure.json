@@ -1,0 +1,217 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxAggregateDataEntityKey",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxAggregateDataEntityKey",
+    "DiscoveryDate":  "2025-08-28T23:16:51",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+
+                                 ],
+                       "Code":  [
+
+                                ],
+                       "Identity":  [
+                                        {
+                                            "FullType":  "System.String",
+                                            "CanWrite":  true,
+                                            "Type":  "String",
+                                            "CanRead":  true,
+                                            "Category":  "Identity",
+                                            "IsEnum":  false,
+                                            "EnumValues":  [
+
+                                                           ],
+                                            "Name":  "Name",
+                                            "IsCollection":  false
+                                        }
+                                    ],
+                       "Other":  [
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Tags",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "ConfigurationKey",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "Enabled",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "ValidTimeStateKey",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.ValidTimeStateMode",
+                                         "CanWrite":  true,
+                                         "Type":  "ValidTimeStateMode",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "NoGap",
+                                                            "Gap"
+                                                        ],
+                                         "Name":  "ValidTimeStateMode",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Collections":  [
+                                           {
+                                               "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.Collections.KeyedObjectCollection`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxDataEntityViewKeyField, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                                               "CanWrite":  true,
+                                               "Type":  "KeyedObjectCollection`1",
+                                               "CanRead":  true,
+                                               "Category":  "Collection",
+                                               "IsEnum":  false,
+                                               "EnumValues":  [
+
+                                                              ],
+                                               "Name":  "Fields",
+                                               "IsCollection":  true
+                                           }
+                                       ]
+                   },
+    "AllProperties":  [
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Identity",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Name",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Tags",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "Enabled",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "ConfigurationKey",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "ValidTimeStateKey",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.ValidTimeStateMode",
+                              "CanWrite":  true,
+                              "Type":  "ValidTimeStateMode",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "NoGap",
+                                                 "Gap"
+                                             ],
+                              "Name":  "ValidTimeStateMode",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.Collections.KeyedObjectCollection`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxDataEntityViewKeyField, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                              "CanWrite":  true,
+                              "Type":  "KeyedObjectCollection`1",
+                              "CanRead":  true,
+                              "Category":  "Collection",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Fields",
+                              "IsCollection":  true
+                          }
+                      ],
+    "PropertyCount":  7
+}

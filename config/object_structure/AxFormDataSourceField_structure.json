@@ -1,0 +1,329 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormDataSourceField",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxFormDataSourceField",
+    "DiscoveryDate":  "2025-08-28T23:16:55",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+
+                                 ],
+                       "Code":  [
+
+                                ],
+                       "Identity":  [
+                                        {
+                                            "FullType":  "System.String",
+                                            "CanWrite":  true,
+                                            "Type":  "String",
+                                            "CanRead":  true,
+                                            "Category":  "Identity",
+                                            "IsEnum":  false,
+                                            "EnumValues":  [
+
+                                                           ],
+                                            "Name":  "Name",
+                                            "IsCollection":  false
+                                        }
+                                    ],
+                       "Other":  [
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Tags",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "DataField",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxMethodsContainer",
+                                         "CanWrite":  true,
+                                         "Type":  "AxMethodsContainer",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "DeltaMethods",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "AllowEdit",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "Enabled",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "Skip",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "Visible",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.AllowAdd_ITxt",
+                                         "CanWrite":  true,
+                                         "Type":  "AllowAdd_ITxt",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Restricted",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "AllowAdd",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                                         "CanWrite":  true,
+                                         "Type":  "NoYes",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "No",
+                                                            "Yes"
+                                                        ],
+                                         "Name":  "Mandatory",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Collections":  [
+                                           {
+                                               "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.Collections.KeyedObjectCollection`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxMethod, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                                               "CanWrite":  true,
+                                               "Type":  "KeyedObjectCollection`1",
+                                               "CanRead":  true,
+                                               "Category":  "Collection",
+                                               "IsEnum":  false,
+                                               "EnumValues":  [
+
+                                                              ],
+                                               "Name":  "Methods",
+                                               "IsCollection":  true
+                                           }
+                                       ]
+                   },
+    "AllProperties":  [
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Tags",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "DataField",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "AllowEdit",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "Enabled",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "Skip",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "Visible",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.AllowAdd_ITxt",
+                              "CanWrite":  true,
+                              "Type":  "AllowAdd_ITxt",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Restricted",
+                                                 "Yes"
+                                             ],
+                              "Name":  "AllowAdd",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.NoYes",
+                              "CanWrite":  true,
+                              "Type":  "NoYes",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "No",
+                                                 "Yes"
+                                             ],
+                              "Name":  "Mandatory",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.Collections.KeyedObjectCollection`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxMethod, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                              "CanWrite":  true,
+                              "Type":  "KeyedObjectCollection`1",
+                              "CanRead":  true,
+                              "Category":  "Collection",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Methods",
+                              "IsCollection":  true
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxMethodsContainer",
+                              "CanWrite":  true,
+                              "Type":  "AxMethodsContainer",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "DeltaMethods",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Identity",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Name",
+                              "IsCollection":  false
+                          }
+                      ],
+    "PropertyCount":  11
+}

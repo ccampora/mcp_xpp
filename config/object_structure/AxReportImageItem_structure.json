@@ -1,0 +1,528 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportImageItem",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxReportImageItem",
+    "DiscoveryDate":  "2025-08-28T23:17:00",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+                                     {
+                                         "FullType":  "System.Boolean",
+                                         "CanWrite":  true,
+                                         "Type":  "Boolean",
+                                         "CanRead":  true,
+                                         "Category":  "Flag",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "BorderWidthOverridden",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.Boolean",
+                                         "CanWrite":  true,
+                                         "Type":  "Boolean",
+                                         "CanRead":  true,
+                                         "Category":  "Flag",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "BorderColorOverridden",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.Boolean",
+                                         "CanWrite":  true,
+                                         "Type":  "Boolean",
+                                         "CanRead":  true,
+                                         "Category":  "Flag",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "BorderStyleOverridden",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.Boolean",
+                                         "CanWrite":  true,
+                                         "Type":  "Boolean",
+                                         "CanRead":  true,
+                                         "Category":  "Flag",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "CaptionOverridden",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Code":  [
+                                    {
+                                        "FullType":  "System.String",
+                                        "CanWrite":  true,
+                                        "Type":  "String",
+                                        "CanRead":  true,
+                                        "Category":  "Code",
+                                        "IsEnum":  false,
+                                        "EnumValues":  [
+
+                                                       ],
+                                        "Name":  "Source",
+                                        "IsCollection":  false
+                                    }
+                                ],
+                       "Identity":  [
+                                        {
+                                            "FullType":  "System.String",
+                                            "CanWrite":  true,
+                                            "Type":  "String",
+                                            "CanRead":  true,
+                                            "Category":  "Identity",
+                                            "IsEnum":  false,
+                                            "EnumValues":  [
+
+                                                           ],
+                                            "Name":  "Name",
+                                            "IsCollection":  false
+                                        }
+                                    ],
+                       "Other":  [
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Expression",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Visible",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Height",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Width",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "MimeType",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportBorderColor",
+                                         "CanWrite":  true,
+                                         "Type":  "AxReportBorderColor",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "BorderColor",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportBorderStyle",
+                                         "CanWrite":  true,
+                                         "Type":  "AxReportBorderStyle",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "BorderStyle",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportBorderWidth",
+                                         "CanWrite":  true,
+                                         "Type":  "AxReportBorderWidth",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "BorderWidth",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportDrillthroughActionBase",
+                                         "CanWrite":  true,
+                                         "Type":  "AxReportDrillthroughActionBase",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "DrillthroughAction",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportDrillthroughActionBase",
+                                         "CanWrite":  false,
+                                         "Type":  "AxReportDrillthroughActionBase",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "DrillthroughActionAdapter",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Tags",
+                                         "IsCollection":  false
+                                     },
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "Caption",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.ImageSizing",
+                                         "CanWrite":  true,
+                                         "Type":  "ImageSizing",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "AutoSize",
+                                                            "Fit",
+                                                            "FitProportional",
+                                                            "Clip"
+                                                        ],
+                                         "Name":  "ImageSizing",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Collections":  [
+
+                                       ]
+                   },
+    "AllProperties":  [
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.ImageSizing",
+                              "CanWrite":  true,
+                              "Type":  "ImageSizing",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "AutoSize",
+                                                 "Fit",
+                                                 "FitProportional",
+                                                 "Clip"
+                                             ],
+                              "Name":  "ImageSizing",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Boolean",
+                              "CanWrite":  true,
+                              "Type":  "Boolean",
+                              "CanRead":  true,
+                              "Category":  "Flag",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "BorderWidthOverridden",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Boolean",
+                              "CanWrite":  true,
+                              "Type":  "Boolean",
+                              "CanRead":  true,
+                              "Category":  "Flag",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "BorderColorOverridden",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Boolean",
+                              "CanWrite":  true,
+                              "Type":  "Boolean",
+                              "CanRead":  true,
+                              "Category":  "Flag",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "BorderStyleOverridden",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Expression",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Visible",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Height",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Width",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Code",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Source",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "MimeType",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportBorderColor",
+                              "CanWrite":  true,
+                              "Type":  "AxReportBorderColor",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "BorderColor",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportBorderStyle",
+                              "CanWrite":  true,
+                              "Type":  "AxReportBorderStyle",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "BorderStyle",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportBorderWidth",
+                              "CanWrite":  true,
+                              "Type":  "AxReportBorderWidth",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "BorderWidth",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportDrillthroughActionBase",
+                              "CanWrite":  true,
+                              "Type":  "AxReportDrillthroughActionBase",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "DrillthroughAction",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxReportDrillthroughActionBase",
+                              "CanWrite":  false,
+                              "Type":  "AxReportDrillthroughActionBase",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "DrillthroughActionAdapter",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Identity",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Name",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Tags",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Caption",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.Boolean",
+                              "CanWrite":  true,
+                              "Type":  "Boolean",
+                              "CanRead":  true,
+                              "Category":  "Flag",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "CaptionOverridden",
+                              "IsCollection":  false
+                          }
+                      ],
+    "PropertyCount":  19
+}

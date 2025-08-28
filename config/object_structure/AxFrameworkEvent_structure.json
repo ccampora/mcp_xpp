@@ -1,0 +1,34 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxFrameworkEvent",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxFrameworkEvent",
+    "DiscoveryDate":  "2025-08-28T23:16:56",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+
+                                 ],
+                       "Code":  [
+
+                                ],
+                       "Identity":  [
+
+                                    ],
+                       "Other":  [
+
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+
+                                 ],
+                       "Collections":  [
+
+                                       ]
+                   },
+    "AllProperties":  [
+
+                      ],
+    "PropertyCount":  0
+}

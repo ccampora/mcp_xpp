@@ -74,11 +74,11 @@ The **Microsoft Metadata API Integration** approach was selected based on the fo
 
 ---
 
-## Comprehensive API Discovery Results (August 27, 2025)
+## Comprehensive API Discovery Results (August 27-28, 2025)
 
-### Complete Namespace Enumeration
+### Complete Namespace Enumeration and Hierarchy Analysis
 
-Following the initial validation of 5 core object types, a comprehensive discovery process was conducted to map the entire Microsoft.Dynamics.AX.Metadata.MetaModel namespace:
+Following the initial validation of 5 core object types, a comprehensive discovery process was conducted to map the entire Microsoft.Dynamics.AX.Metadata.MetaModel namespace. This was further enhanced with complete inheritance hierarchy analysis to identify top-level objects.
 
 #### Discovery Methodology
 ```powershell
@@ -90,6 +90,17 @@ $axTypes = $assembly.GetTypes() | Where-Object {
     $_.IsPublic -and
     -not $_.IsAbstract
 }
+
+# Enhanced with inheritance hierarchy analysis
+foreach ($type in $axTypes) {
+    $inheritanceChain = @()
+    $currentType = $type
+    while ($currentType -and $currentType.Name -ne "Object") {
+        $inheritanceChain += $currentType.Name
+        $currentType = $currentType.BaseType
+    }
+    # Analyze top-level vs derived objects
+}
 ```
 
 #### Discovery Results Summary
@@ -97,6 +108,12 @@ $axTypes = $assembly.GetTypes() | Where-Object {
 - **467 types (84.5%) fully production-ready** - object creation, property configuration, and XML serialization all successful
 - **85 types (15.4%) creation-capable** - object creation and basic configuration successful, XML serialization requires additional setup
 - **1 type (0.1%) not applicable** - `AxYoursElementConflict` (conflict resolution mechanism, not a creatable object)
+
+#### Inheritance Hierarchy Analysis Results
+- **270 top-level objects (48.8%)** - Objects that inherit directly from `System.Object` with no Ax base classes
+- **283 derived objects (51.2%)** - Objects that inherit from other Ax objects
+- **Complete inheritance mapping** - Full inheritance chains documented for all objects
+- **Detailed analysis file**: `config/d365_hierarchy_analysis.json` with complete hierarchy data
 
 #### Major Object Categories Discovered
 
@@ -258,6 +275,116 @@ These object types support creation and basic configuration but require addition
 | **Report Objects** | 8+ | AxReport, AxReportParameterGroup | Creation ✅, Serialization ⚠️ | Data set configurations required |
 | **Map Objects** | 5+ | AxMap, AxMapExtension | Creation ✅, Serialization ⚠️ | Mapping configurations needed |
 | **Other Complex** | 5+ | AxTable, AxView, AxUpdate | Creation ✅, Serialization ⚠️ | Complex nested structures |
+
+### Top-Level Objects Analysis (August 28, 2025)
+
+#### Inheritance Hierarchy Discovery
+Through systematic analysis of the inheritance chains for all 553 D365 objects, we identified **270 top-level objects** that serve as the foundational building blocks of the D365 metadata model.
+
+#### Top-Level Object Definition
+**Top-level objects** are defined as D365 objects that:
+- Inherit directly from `System.Object`
+- Have no Ax base classes in their inheritance chain
+- Represent foundational object types in the D365 architecture
+
+#### Key Top-Level Objects by Category
+
+**Core Application Objects:**
+- `AxClass` - Classes with methods, members, attributes
+- `AxTable` - Tables with fields, indexes, relations
+- `AxForm` - Forms with controls, data sources, designs
+- `AxReport` - Reports with datasets, designs, parameters
+- `AxEnum` - Enumerations with values
+- `AxView` - Views with indexes, relations, ranges
+- `AxQuery` - Queries with data sources, fields
+- `AxMap` - Map objects with field mappings
+- `AxService` - Service contracts with operations
+- `AxEdt*` - Extended Data Types (String, Int, Real, etc.)
+
+**Security Framework Objects:**
+- `AxSecurityRole` - Security roles with duty references
+- `AxSecurityDuty` - Security duties with privilege references
+- `AxSecurityPrivilege` - Security privileges with entry points
+- `AxSecurityPolicy` - XDS security policies
+- `AxSecurityDataEntityPermission` - Data entity permissions
+
+**Workflow Engine Objects:**
+- `AxWorkflowTemplate` - Workflow templates
+- `AxWorkflowTask` - Workflow tasks with outcomes
+- `AxWorkflowApproval` - Workflow approvals
+- `AxWorkflowAutomatedTask` - Automated tasks
+- `AxWorkflowCategory` - Workflow categories
+
+**Extension Framework Objects:**
+- `AxTableExtension` - Table extensions
+- `AxFormExtension` - Form extensions
+- `AxEnumExtension` - Enum extensions
+- `AxViewExtension` - View extensions
+- `AxElementExtension` - Base extension framework
+
+**Modern D365 Features:**
+- `AxDataEntityView` - OData/DMF data entities
+- `AxAggregateDimension` - Analytics dimensions
+- `AxAggregateMeasurement` - Analytics measurements
+- `AxKPI` - Key Performance Indicators
+- `AxTile` - Workspace tiles
+- `AxPartCue` - Cue parts for workspaces
+
+**Configuration Objects:**
+- `AxConfigurationKey` - Feature configuration keys
+- `AxLicenseCode` - License codes
+- `AxRule` - Business rules
+- `AxStateMachine` - State machine objects
+- `AxResource` - Resources and references
+
+#### Inheritance Pattern Analysis
+**Inheritance Distribution:**
+- **48.8% Top-Level Objects (270)** - Direct System.Object inheritance
+- **51.2% Derived Objects (283)** - Inherit from other Ax objects
+
+**Common Inheritance Patterns:**
+- Most core objects (Classes, Tables, Forms, etc.) are top-level
+- Extension objects typically inherit from their base counterparts
+- Report objects share common styling base classes
+- UI components often have hierarchical inheritance structures
+
+#### Strategic Implications
+Understanding top-level objects is crucial for:
+- **Architecture Planning** - Identifying foundational vs specialized objects
+- **Extension Strategy** - Knowing which objects can be extended vs derived
+- **API Priority** - Focusing on top-level objects for maximum coverage
+- **Development Workflow** - Understanding D365's metadata architecture
+
+### Interactive Visualization Tools
+
+#### Complete D365 Object Browser
+To support exploration and analysis of the discovered metadata structure, interactive HTML-based visualization tools have been developed:
+
+**Features:**
+- **Complete Property Trees** - Inline display of all object properties, types, and metadata
+- **Interactive Navigation** - Expandable/collapsible tree views for complex structures  
+- **Search and Filtering** - Find objects by name, type, or category
+- **Real-time Statistics** - Property counts, categories, and hierarchy information
+- **No External Dependencies** - All data embedded directly in HTML files
+
+**Generated Visualization Files:**
+- `d365-object-browser-{timestamp}.html` - Complete interactive browser with all 553 objects
+- Individual structure files in `config/` folder for detailed analysis
+- Master index files for programmatic access to all discovered metadata
+
+**Usage:**
+1. Open the HTML file in any modern web browser
+2. Browse the sidebar to explore all 553 discovered D365 objects
+3. Click any object to view its complete property structure inline
+4. Use expand/collapse controls to navigate complex nested properties
+5. Search and filter to find specific objects or patterns
+
+**Data Sources:**
+- `config/AxClass_structure.json` - Example: AxClass with 24 properties across 6 categories
+- `config/d365_hierarchy_analysis.json` - Complete inheritance mapping for all objects
+- Individual JSON files for each of the 553 discovered objects
+
+This visualization system provides the most comprehensive view of D365's metadata structure available, enabling developers to understand object relationships, property structures, and inheritance patterns.
 
 #### Original Validated Object Types
 Initial breakthrough validation confirmed these core object types:

@@ -1,0 +1,109 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxSourcePropertyChange",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxSourcePropertyChange",
+    "DiscoveryDate":  "2025-08-28T23:17:02",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+
+                                 ],
+                       "Code":  [
+                                    {
+                                        "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.CDataString",
+                                        "CanWrite":  true,
+                                        "Type":  "CDataString",
+                                        "CanRead":  true,
+                                        "Category":  "Code",
+                                        "IsEnum":  false,
+                                        "EnumValues":  [
+
+                                                       ],
+                                        "Name":  "OriginalSource",
+                                        "IsCollection":  false
+                                    },
+                                    {
+                                        "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.CDataString",
+                                        "CanWrite":  true,
+                                        "Type":  "CDataString",
+                                        "CanRead":  true,
+                                        "Category":  "Code",
+                                        "IsEnum":  false,
+                                        "EnumValues":  [
+
+                                                       ],
+                                        "Name":  "CurrentSource",
+                                        "IsCollection":  false
+                                    }
+                                ],
+                       "Identity":  [
+
+                                    ],
+                       "Other":  [
+                                     {
+                                         "FullType":  "System.String",
+                                         "CanWrite":  true,
+                                         "Type":  "String",
+                                         "CanRead":  true,
+                                         "Category":  "Other",
+                                         "IsEnum":  false,
+                                         "EnumValues":  [
+
+                                                        ],
+                                         "Name":  "PropertyName",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+
+                                 ],
+                       "Collections":  [
+
+                                       ]
+                   },
+    "AllProperties":  [
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.CDataString",
+                              "CanWrite":  true,
+                              "Type":  "CDataString",
+                              "CanRead":  true,
+                              "Category":  "Code",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "OriginalSource",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.CDataString",
+                              "CanWrite":  true,
+                              "Type":  "CDataString",
+                              "CanRead":  true,
+                              "Category":  "Code",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "CurrentSource",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Other",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "PropertyName",
+                              "IsCollection":  false
+                          }
+                      ],
+    "PropertyCount":  3
+}

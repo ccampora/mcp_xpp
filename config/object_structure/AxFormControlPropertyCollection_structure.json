@@ -1,0 +1,200 @@
+﻿{
+    "FullTypeName":  "Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormControlPropertyCollection",
+    "Assembly":  "Microsoft.Dynamics.AX.Metadata",
+    "ObjectName":  "AxFormControlPropertyCollection",
+    "DiscoveryDate":  "2025-08-28T23:16:55",
+    "Namespace":  "Microsoft.Dynamics.AX.Metadata.MetaModel",
+    "Categories":  {
+                       "Flags":  [
+
+                                 ],
+                       "Code":  [
+
+                                ],
+                       "Identity":  [
+                                        {
+                                            "FullType":  "System.String",
+                                            "CanWrite":  true,
+                                            "Type":  "String",
+                                            "CanRead":  true,
+                                            "Category":  "Identity",
+                                            "IsEnum":  false,
+                                            "EnumValues":  [
+
+                                                           ],
+                                            "Name":  "Name",
+                                            "IsCollection":  false
+                                        }
+                                    ],
+                       "Other":  [
+
+                                 ],
+                       "Metadata":  [
+
+                                    ],
+                       "Enums":  [
+                                     {
+                                         "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.FormControlType",
+                                         "CanWrite":  true,
+                                         "Type":  "FormControlType",
+                                         "CanRead":  true,
+                                         "Category":  "Enum",
+                                         "IsEnum":  true,
+                                         "EnumValues":  [
+                                                            "StaticText",
+                                                            "String",
+                                                            "Tab",
+                                                            "CheckBox",
+                                                            "Group",
+                                                            "Button",
+                                                            "Real",
+                                                            "Integer",
+                                                            "ComboBox",
+                                                            "Image",
+                                                            "Date",
+                                                            "RadioButton",
+                                                            "Grid",
+                                                            "ButtonGroup",
+                                                            "TabPage",
+                                                            "CommandButton",
+                                                            "MenuButton",
+                                                            "MenuFunctionButton",
+                                                            "ListBox",
+                                                            "Time",
+                                                            "Table",
+                                                            "ButtonSeparator",
+                                                            "Tree",
+                                                            "ActiveX",
+                                                            "ListView",
+                                                            "Progress",
+                                                            "Animate",
+                                                            "HTML",
+                                                            "FileName",
+                                                            "SubForm",
+                                                            "Guid",
+                                                            "Int64",
+                                                            "DateTime",
+                                                            "ActionPane",
+                                                            "ActionPaneTab",
+                                                            "FilterPane",
+                                                            "ManagedHost",
+                                                            "SegmentedEntry",
+                                                            "DropDialogButton",
+                                                            "ReferenceGroup",
+                                                            "FastTabHeader",
+                                                            "RichText",
+                                                            "Container",
+                                                            "Custom",
+                                                            "None",
+                                                            "PlaceHolder",
+                                                            "PlaceHolderContent"
+                                                        ],
+                                         "Name":  "Type",
+                                         "IsCollection":  false
+                                     }
+                                 ],
+                       "Collections":  [
+                                           {
+                                               "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.Collections.KeyedObjectCollection`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxMethodPropertyCollection, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                                               "CanWrite":  true,
+                                               "Type":  "KeyedObjectCollection`1",
+                                               "CanRead":  true,
+                                               "Category":  "Collection",
+                                               "IsEnum":  false,
+                                               "EnumValues":  [
+
+                                                              ],
+                                               "Name":  "Methods",
+                                               "IsCollection":  true
+                                           }
+                                       ]
+                   },
+    "AllProperties":  [
+                          {
+                              "FullType":  "System.String",
+                              "CanWrite":  true,
+                              "Type":  "String",
+                              "CanRead":  true,
+                              "Category":  "Identity",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Name",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.MetaModel.FormControlType",
+                              "CanWrite":  true,
+                              "Type":  "FormControlType",
+                              "CanRead":  true,
+                              "Category":  "Enum",
+                              "IsEnum":  true,
+                              "EnumValues":  [
+                                                 "StaticText",
+                                                 "String",
+                                                 "Tab",
+                                                 "CheckBox",
+                                                 "Group",
+                                                 "Button",
+                                                 "Real",
+                                                 "Integer",
+                                                 "ComboBox",
+                                                 "Image",
+                                                 "Date",
+                                                 "RadioButton",
+                                                 "Grid",
+                                                 "ButtonGroup",
+                                                 "TabPage",
+                                                 "CommandButton",
+                                                 "MenuButton",
+                                                 "MenuFunctionButton",
+                                                 "ListBox",
+                                                 "Time",
+                                                 "Table",
+                                                 "ButtonSeparator",
+                                                 "Tree",
+                                                 "ActiveX",
+                                                 "ListView",
+                                                 "Progress",
+                                                 "Animate",
+                                                 "HTML",
+                                                 "FileName",
+                                                 "SubForm",
+                                                 "Guid",
+                                                 "Int64",
+                                                 "DateTime",
+                                                 "ActionPane",
+                                                 "ActionPaneTab",
+                                                 "FilterPane",
+                                                 "ManagedHost",
+                                                 "SegmentedEntry",
+                                                 "DropDialogButton",
+                                                 "ReferenceGroup",
+                                                 "FastTabHeader",
+                                                 "RichText",
+                                                 "Container",
+                                                 "Custom",
+                                                 "None",
+                                                 "PlaceHolder",
+                                                 "PlaceHolderContent"
+                                             ],
+                              "Name":  "Type",
+                              "IsCollection":  false
+                          },
+                          {
+                              "FullType":  "Microsoft.Dynamics.AX.Metadata.Core.Collections.KeyedObjectCollection`1[[Microsoft.Dynamics.AX.Metadata.MetaModel.AxMethodPropertyCollection, Microsoft.Dynamics.AX.Metadata, Version=7.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]",
+                              "CanWrite":  true,
+                              "Type":  "KeyedObjectCollection`1",
+                              "CanRead":  true,
+                              "Category":  "Collection",
+                              "IsEnum":  false,
+                              "EnumValues":  [
+
+                                             ],
+                              "Name":  "Methods",
+                              "IsCollection":  true
+                          }
+                      ],
+    "PropertyCount":  3
+}
