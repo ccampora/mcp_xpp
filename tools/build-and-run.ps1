@@ -375,7 +375,7 @@ try {
             
         } elseif ($Target -eq "csharp") {
             Write-Step "Starting C# Metadata Service"
-            Write-Host "Service will start on port $Port" -ForegroundColor Cyan
+            Write-Host "Service will use Named Pipes (not HTTP port)" -ForegroundColor Cyan
             Write-Host "Use Ctrl+C to stop the service" -ForegroundColor Cyan
             Write-Host ""
             

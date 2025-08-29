@@ -259,6 +259,7 @@ namespace D365MetadataService.Services
         {
             var startTime = DateTime.UtcNow;
             ServiceResponse response;
+            string requestId = null;
 
             try
             {
@@ -271,6 +272,7 @@ namespace D365MetadataService.Services
                 }
                 else
                 {
+                    requestId = request.Id; // Capture the request ID
                     response = await HandleRequestAsync(request);
                 }
             }
@@ -285,6 +287,9 @@ namespace D365MetadataService.Services
                 response = ServiceResponse.CreateError($"Internal server error: {ex.Message}");
             }
 
+            // Set the response ID to match the request ID
+            response.Id = requestId;
+            
             // Add performance timing
             response.ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
 
@@ -319,6 +324,9 @@ namespace D365MetadataService.Services
                     
                     case "models":
                         return HandleGetModelsAsync(request);
+                    
+                    case "setup":
+                        return HandleSetupInfoAsync(request);
                     
                     default:
                         return ServiceResponse.CreateError($"Unknown action: {request.Action}");
@@ -427,6 +435,78 @@ namespace D365MetadataService.Services
             {
                 _logger.Error(ex, "Failed to process models request");
                 return ServiceResponse.CreateError($"Models operation failed: {ex.Message}");
+            }
+        }
+
+        private ServiceResponse HandleSetupInfoAsync(ServiceRequest request)
+        {
+            try
+            {
+                _logger.Information("Handling Setup request: {@Request}", new { request.Action, request.Id });
+
+                var setupInfo = new
+                {
+                    PackagesLocalDirectory = _config.D365Config.PackagesLocalDirectory,
+                    CustomMetadataPath = _config.D365Config.CustomMetadataPath,
+                    DefaultModel = _config.D365Config.DefaultModel,
+                    MetadataAssemblyPath = _config.D365Config.MetadataAssemblyPath,
+                    ExtensionPath = GetVS2022ExtensionPath(),
+                    ServiceInfo = new
+                    {
+                        Transport = "NamedPipes",
+                        PipeName = _pipeName,
+                        MaxConnections = _config.MaxConnections,
+                        ServerVersion = "1.0.0"
+                    },
+                    Timestamp = DateTime.UtcNow
+                };
+
+                _logger.Information("Setup information retrieved successfully");
+                return ServiceResponse.CreateSuccess(setupInfo);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to process setup request");
+                return ServiceResponse.CreateError($"Setup operation failed: {ex.Message}");
+            }
+        }
+
+        private string GetVS2022ExtensionPath()
+        {
+            try
+            {
+                // Try to find VS2022 extension path from common locations
+                var commonPaths = new[]
+                {
+                    @"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions",
+                    @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions",
+                    @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions"
+                };
+
+                foreach (var basePath in commonPaths)
+                {
+                    if (Directory.Exists(basePath))
+                    {
+                        // Look for directories containing AX-related files
+                        var extensionDirs = Directory.GetDirectories(basePath, "*", SearchOption.TopDirectoryOnly);
+                        foreach (var dir in extensionDirs)
+                        {
+                            if (File.Exists(Path.Combine(dir, "Microsoft.Dynamics.AX.Metadata.dll")))
+                            {
+                                return dir;
+                            }
+                        }
+                    }
+                }
+
+                return _config.D365Config.MetadataAssemblyPath != null 
+                    ? Path.GetDirectoryName(_config.D365Config.MetadataAssemblyPath)
+                    : null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Failed to determine VS2022 extension path");
+                return null;
             }
         }
 

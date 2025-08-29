@@ -334,6 +334,58 @@ The MCP X++ Server provides 12 comprehensive tools for D365 F&O codebase analysi
 }
 ```
 
+**JSON Response Format for `get_current_config`:**
+```json
+{
+  "_meta": {
+    "type": "configuration",
+    "timestamp": "2025-08-29T10:30:00.000Z",
+    "version": "1.0.0"
+  },
+  "serverConfig": {
+    "xppPath": "C:\\D365\\PackagesLocalDirectory",
+    "xppMetadataFolder": "C:\\CustomMetadata"
+  },
+  "models": {
+    "custom": [
+      {
+        "name": "MyCustomModel",
+        "layer": "usr",
+        "publisher": "MyCompany",
+        "modelType": "custom",
+        "reason": "Custom layer: usr"
+      }
+    ],
+    "standard": [
+      {
+        "name": "ApplicationFoundation",
+        "layer": "slp",
+        "publisher": "Microsoft Corporation",
+        "modelType": "standard",
+        "reason": "Microsoft standard model in layer: slp"
+      }
+    ],
+    "summary": {
+      "totalModels": 120,
+      "customCount": 5,
+      "standardCount": 115
+    }
+  },
+  "vs2022Service": {
+    "status": "connected",
+    "modelsCount": 120,
+    "lastUpdated": "2025-08-29T10:30:00.000Z"
+  },
+  "summary": {
+    "totalModels": 120,
+    "customModels": 5,
+    "standardModels": 115,
+    "indexedObjects": 72708,
+    "serverStatus": "connected"
+  }
+}
+```
+
 **Supported Object Types:**
 - CLASSES, TABLES, FORMS, REPORTS, ENUMS, EDTS, VIEWS, MAPS, SERVICES, WORKFLOWS, QUERIES, MENUS, MENUITEM
 
@@ -345,10 +397,10 @@ The MCP X++ Server provides 12 comprehensive tools for D365 F&O codebase analysi
 ### Configuration Tools
 
 #### `get_current_config`
-Get comprehensive server configuration and statistics.
+Get comprehensive server configuration, VS2022 service status, and models grouped by type.
 - **Parameters**: None
-- **Returns**: JSON with paths, index statistics, available layers, and system information
-- **Use Case**: Monitor server state and troubleshoot configuration issues
+- **Returns**: JSON with paths, index statistics, VS2022 service status, models grouped by custom vs standard, system information, and summary statistics
+- **Use Case**: Monitor server state, troubleshoot configuration issues, view model organization, and check VS2022 service connectivity
 
 ### Object Creation
 

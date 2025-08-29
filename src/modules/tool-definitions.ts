@@ -241,7 +241,7 @@ export class ToolDefinitions {
         },
         {
           name: "get_current_config",
-          description: "Get comprehensive server configuration including paths, index statistics, and system information",
+          description: "Get comprehensive server configuration including paths, index statistics, VS2022 service status, and models grouped by custom vs standard",
           inputSchema: {
             type: "object",
             properties: {},

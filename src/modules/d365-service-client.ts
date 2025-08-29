@@ -1,5 +1,6 @@
 import { createConnection } from 'net';
 import { EventEmitter } from 'events';
+import { randomUUID } from 'crypto';
 
 /**
  * Named Pipe client for communicating with the C# D365 Metadata Service
@@ -10,7 +11,6 @@ export class D365ServiceClient extends EventEmitter {
     private isConnected: boolean = false;
     private responseBuffer: string = '';
     private pendingRequests: Map<string, { resolve: Function; reject: Function; timeout: NodeJS.Timeout }> = new Map();
-    private requestId: number = 0;
 
     constructor(
         private pipeName: string = 'mcp-xpp-d365-service',
@@ -92,12 +92,12 @@ export class D365ServiceClient extends EventEmitter {
             throw new Error('Not connected to Named Pipe server');
         }
 
-        const requestId = (++this.requestId).toString();
+        const requestId = randomUUID();
         const request = {
-            id: requestId,
-            action,
-            objectType,
-            parameters: parameters || {}
+            Id: requestId,
+            Action: action,
+            ObjectType: objectType || "",
+            Parameters: parameters || {}
         };
 
         return new Promise((resolve, reject) => {
@@ -158,6 +158,13 @@ export class D365ServiceClient extends EventEmitter {
     }
 
     /**
+     * Get setup information (paths, configuration)
+     */
+    async getSetupInfo(): Promise<any> {
+        return this.sendRequest('setup');
+    }
+
+    /**
      * Health check
      */
     async healthCheck(): Promise<any> {
@@ -212,16 +219,36 @@ export class D365ServiceClient extends EventEmitter {
     }
 
     private handleResponse(response: any): void {
-        const requestId = response.id;
-        if (requestId && this.pendingRequests.has(requestId)) {
+        const requestId = response.Id || response.id; // Handle both uppercase and lowercase
+        
+        // If ID is null and we have exactly one pending request, assume it's the response for that request
+        if (!requestId && this.pendingRequests.size === 1) {
+            const [singleRequestId] = this.pendingRequests.keys();
+            const request = this.pendingRequests.get(singleRequestId)!;
+            clearTimeout(request.timeout);
+            this.pendingRequests.delete(singleRequestId);
+
+            if (response.Success || response.success) {
+                // Return full response with ID for proper tracking
+                request.resolve({
+                    ...response,
+                    Id: singleRequestId // Add the request ID back
+                });
+            } else {
+                const errorMsg = response.Error || response.ErrorMessage || response.error || 'Unknown error';
+                request.reject(new Error(errorMsg));
+            }
+        } else if (requestId && this.pendingRequests.has(requestId)) {
             const request = this.pendingRequests.get(requestId)!;
             clearTimeout(request.timeout);
             this.pendingRequests.delete(requestId);
 
-            if (response.success) {
-                request.resolve(response.data);
+            if (response.Success || response.success) {
+                // Return full response to preserve ID and other metadata
+                request.resolve(response);
             } else {
-                request.reject(new Error(response.error || 'Unknown error'));
+                const errorMsg = response.Error || response.ErrorMessage || response.error || 'Unknown error';
+                request.reject(new Error(errorMsg));
             }
         } else {
             // Unmatched response

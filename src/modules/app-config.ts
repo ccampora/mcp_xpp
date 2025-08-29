@@ -9,6 +9,7 @@ import { join } from "path";
 import { DiskLogger } from "./logger.js";
 import { ObjectIndexManager } from "./object-index.js";
 import { autoDetectVS2022ExtensionPath } from "./vs2022-config.js";
+import { D365ServiceClient } from "./d365-service-client.js";
 
 // Import server start time function
 let getServerStartTime: (() => Date | null) | null = null;
@@ -36,12 +37,6 @@ export interface ServerConfiguration {
   xppMetadataFolder?: string;
   vs2022ExtensionPath?: string;
   d365Url?: string; // Future use
-  
-  // Strategy Pattern Configuration
-  objectCreationStrategy?: string; // Primary strategy preference ('microsoft-api', 'template', 'custom', 'auto')
-  enableStrategyFallback?: boolean; // Enable/disable fallback to alternative strategies
-  strategyTimeout?: number; // Maximum execution time per strategy attempt (ms)
-  verboseStrategyLogging?: boolean; // Enable detailed strategy selection and execution logging
 }
 
 export interface IndexStatistics {
@@ -82,22 +77,6 @@ export interface ApplicationConfiguration {
     nodeVersion: string;
     platform: string;
     architecture: string;
-  };
-  strategyInfo?: {
-    totalStrategies: number;
-    availableStrategies: number;
-    preferredStrategy?: string;
-    fallbackEnabled: boolean;
-    timeout: number;
-    verboseLogging: boolean;
-    strategyDetails: Array<{
-      name: string;
-      description: string;
-      available: boolean;
-      enabled: boolean;
-      supportedObjectTypes: string[];
-      priority: number;
-    }>;
   };
 }
 
@@ -142,39 +121,6 @@ class AppConfigManager {
             i++; // Skip the next argument as it's the value
           }
           break;
-        
-        // Strategy Pattern Configuration Arguments
-        case '--object-creation-strategy':
-          if (i + 1 < args.length) {
-            const strategyValue = args[i + 1];
-            if (['microsoft-api', 'template', 'custom', 'auto'].includes(strategyValue)) {
-              parsedConfig.objectCreationStrategy = strategyValue;
-            } else {
-              console.warn(`Warning: Invalid strategy value '${strategyValue}'. Valid options: microsoft-api, template, custom, auto`);
-            }
-            i++; // Skip the next argument as it's the value
-          }
-          break;
-        case '--enable-strategy-fallback':
-          parsedConfig.enableStrategyFallback = true;
-          break;
-        case '--disable-strategy-fallback':
-          parsedConfig.enableStrategyFallback = false;
-          break;
-        case '--strategy-timeout':
-          if (i + 1 < args.length) {
-            const timeoutValue = parseInt(args[i + 1]);
-            if (!isNaN(timeoutValue) && timeoutValue > 0) {
-              parsedConfig.strategyTimeout = timeoutValue;
-            } else {
-              console.warn(`Warning: Invalid timeout value '${args[i + 1]}'. Must be a positive number.`);
-            }
-            i++; // Skip the next argument as it's the value
-          }
-          break;
-        case '--verbose-strategy-logging':
-          parsedConfig.verboseStrategyLogging = true;
-          break;
       }
     }
 
@@ -187,9 +133,36 @@ class AppConfigManager {
   public async initialize(): Promise<void> {
     this.parseCommandLineArgs();
 
+    // First, try to get configuration from VS2022 service with 30-second timeout
+    let setupFromService = false;
+    if (!this.config.xppPath || !this.config.xppMetadataFolder) {
+      try {
+        await DiskLogger.logDebug("Attempting to get setup configuration from VS2022 service...");
+        console.log("🔍 Attempting to get setup configuration from VS2022 service (30s timeout)...");
+        
+        const setupInfo = await this.getSetupFromVS2022Service(30000); // 30 second timeout
+        if (setupInfo) {
+          // Update configuration with service-provided values
+          this.config.xppPath = this.config.xppPath || setupInfo.PackagesLocalDirectory;
+          this.config.xppMetadataFolder = this.config.xppMetadataFolder || setupInfo.CustomMetadataPath;
+          this.config.vs2022ExtensionPath = this.config.vs2022ExtensionPath || setupInfo.ExtensionPath;
+          
+          setupFromService = true;
+          console.log("✅ Setup configuration retrieved from VS2022 service");
+          await DiskLogger.logDebug(`Setup from VS2022 service: ${JSON.stringify(setupInfo, null, 2)}`);
+        }
+      } catch (error) {
+        await DiskLogger.logDebug(`Failed to get setup from VS2022 service: ${error}`);
+        console.log("⚠️ Could not get setup from VS2022 service, falling back to manual configuration");
+      }
+    }
+
     // Validate required configuration
     if (!this.config.xppPath) {
-      throw new Error("XPP codebase path not provided. Use --xpp-path argument to specify the path.");
+      const errorMsg = setupFromService 
+        ? "XPP codebase path not available from VS2022 service. Ensure the service is running with proper configuration."
+        : "XPP codebase path not provided. Use --xpp-path argument or ensure VS2022 service is running.";
+      throw new Error(errorMsg);
     }
 
     // Create XPP metadata folder if specified and doesn't exist
@@ -260,6 +233,40 @@ class AppConfigManager {
   }
 
   /**
+   * Get setup configuration from VS2022 service
+   */
+  private async getSetupFromVS2022Service(timeoutMs: number): Promise<any | null> {
+    const client = new D365ServiceClient('mcp-xpp-d365-service', timeoutMs, timeoutMs);
+    
+    try {
+      await DiskLogger.logDebug(`Connecting to VS2022 service with ${timeoutMs}ms timeout...`);
+      await client.connect();
+      
+      await DiskLogger.logDebug("Requesting setup information from VS2022 service...");
+      const setupInfo = await client.getSetupInfo();
+      
+      await client.disconnect();
+      
+      if (setupInfo && setupInfo.Data) {
+        await DiskLogger.logDebug("Setup information received successfully");
+        return setupInfo.Data;
+      } else {
+        await DiskLogger.logDebug("Setup response received but no data available");
+        return null;
+      }
+    } catch (error) {
+      try {
+        await client.disconnect();
+      } catch (disconnectError) {
+        // Ignore disconnect errors
+      }
+      
+      await DiskLogger.logDebug(`VS2022 service setup request failed: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
    * Get current server configuration
    */
   public getServerConfig(): ServerConfiguration {
@@ -295,34 +302,6 @@ class AppConfigManager {
   }
 
   /**
-   * Get object creation strategy preference
-   */
-  public getObjectCreationStrategy(): string | undefined {
-    return this.config.objectCreationStrategy;
-  }
-
-  /**
-   * Check if strategy fallback is enabled
-   */
-  public isStrategyFallbackEnabled(): boolean {
-    return this.config.enableStrategyFallback !== false; // Default to true if not specified
-  }
-
-  /**
-   * Get strategy timeout in milliseconds
-   */
-  public getStrategyTimeout(): number {
-    return this.config.strategyTimeout || 10000; // Default to 10 seconds
-  }
-
-  /**
-   * Check if verbose strategy logging is enabled
-   */
-  public isVerboseStrategyLoggingEnabled(): boolean {
-    return this.config.verboseStrategyLogging === true;
-  }
-
-  /**
    * Get comprehensive application configuration for JSON response
    */
   public async getApplicationConfiguration(): Promise<ApplicationConfiguration> {
@@ -333,33 +312,6 @@ class AppConfigManager {
     const getServerStartTimeFn = await importServerStartTime();
     const actualStartTime = getServerStartTimeFn?.() || this.startTime;
     const uptime = Date.now() - actualStartTime.getTime();
-
-    // Get strategy information if ObjectCreators is available
-    let strategyInfo;
-    try {
-      const { ObjectCreators } = await import('./object-creators.js');
-      const strategyStatus = await ObjectCreators.getStrategyStatus();
-      
-      strategyInfo = {
-        totalStrategies: strategyStatus.totalStrategies,
-        availableStrategies: strategyStatus.availableStrategies,
-        preferredStrategy: this.getObjectCreationStrategy(),
-        fallbackEnabled: this.isStrategyFallbackEnabled(),
-        timeout: this.getStrategyTimeout(),
-        verboseLogging: this.isVerboseStrategyLoggingEnabled(),
-        strategyDetails: strategyStatus.strategyDetails.map((strategy: any) => ({
-          name: strategy.name,
-          description: strategy.description,
-          available: strategy.available,
-          enabled: strategy.enabled,
-          supportedObjectTypes: strategy.supportedObjectTypes,
-          priority: strategy.priority
-        }))
-      };
-    } catch (error) {
-      // Strategy information not available, continue without it
-      await DiskLogger.logDebug(`Strategy information not available: ${error}`);
-    }
 
     return {
       serverConfig: this.getServerConfig(),
@@ -375,8 +327,7 @@ class AppConfigManager {
         nodeVersion: process.version,
         platform: process.platform,
         architecture: process.arch
-      },
-      ...(strategyInfo && { strategyInfo })
+      }
     };
   }
 

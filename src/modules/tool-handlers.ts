@@ -10,24 +10,6 @@ import { EnhancedSearchManager } from "./search.js";
 import { parseXppClass, parseXppTable, findXppObject } from "./parsers.js";
 import { safeReadFile, getDirectoryListing, searchInFiles } from "./file-utils.js";
 import { ObjectCreators } from "./object-creators.js";
-import { ObjectDescriptionManager } from "./object-creation/object-description-manager.js";
-import { TemplateFirstEngine } from "./object-creation/template-first-engine.js";
-
-// Template-First Architecture - Global instances
-let descriptionManager: ObjectDescriptionManager | null = null;
-let templateEngine: TemplateFirstEngine | null = null;
-
-/**
- * Initialize Template-First Architecture components
- */
-async function initializeTemplateFirst(): Promise<void> {
-  if (!descriptionManager) {
-    console.log('🏛️ Initializing Template-First Architecture...');
-    descriptionManager = new ObjectDescriptionManager();
-    templateEngine = new TemplateFirstEngine(descriptionManager);
-    await templateEngine.initialize();
-  }
-}
 
 /**
  * Tool handlers for all MCP tools
@@ -52,68 +34,13 @@ export class ToolHandlers {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
+    console.log(`🏗️ Creating ${params.objectType} '${params.objectName}' using direct VS2022 service integration...`);
+    
+    let content: string;
+    const startTime = Date.now();
+    
     try {
-      // Initialize Template-First Architecture
-      await initializeTemplateFirst();
-      
-      console.log(`🏗️ Creating ${params.objectType} '${params.objectName}' using Template-First Architecture...`);
-      
-      // Use Template-First Engine for object creation
-      const result = await templateEngine!.createObject(params);
-      
-      let content: string;
-      
-      if (result.success) {
-        content = `✅ Successfully created ${result.objectType} '${result.objectName}'\n\n`;
-        content += `📊 Performance: ${result.executionTime}ms using ${result.strategy} strategy\n`;
-        content += `📁 Files generated: ${result.filesGenerated?.length || 0}\n\n`;
-        
-        if (result.filesGenerated && result.filesGenerated.length > 0) {
-          content += `📄 Generated files:\n`;
-          for (const file of result.filesGenerated) {
-            content += `   • ${file}\n`;
-          }
-          content += `\n`;
-        }
-        
-        if (result.metadata?.validation && result.metadata.validation.length > 0) {
-          content += `⚠️ Validation warnings:\n`;
-          for (const warning of result.metadata.validation) {
-            content += `   • ${warning}\n`;
-          }
-          content += `\n`;
-        }
-        
-        content += `🎯 Template-First Architecture: Zero external API dependencies\n`;
-        content += `⚡ Performance target: <100ms (actual: ${result.executionTime}ms)\n`;
-        
-      } else {
-        content = `❌ Failed to create ${result.objectType} '${result.objectName}'\n\n`;
-        content += `Error: ${result.error}\n\n`;
-        
-        if (result.troubleshooting && result.troubleshooting.length > 0) {
-          content += `🔧 Troubleshooting suggestions:\n`;
-          for (const suggestion of result.troubleshooting) {
-            content += `   • ${suggestion}\n`;
-          }
-          content += `\n`;
-        }
-        
-        content += `📊 Execution time: ${result.executionTime}ms\n`;
-        content += `🎯 Strategy attempted: ${result.strategy}\n`;
-      }
-      
-      return await createLoggedResponse(content, requestId, "create_xpp_object");
-      
-    } catch (error) {
-      // Fallback to legacy ObjectCreators for backward compatibility
-      console.log(`🔄 Template-First failed, falling back to legacy ObjectCreators...`);
-      
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.warn(`Template-First error: ${errorMsg}`);
-      
-      // Legacy route based on objectType
-      let content: string;
+      // Direct VS2022 service integration based on objectType
       switch (params.objectType.toLowerCase()) {
         case "model":
           content = await ObjectCreators.createModel(params.objectName, { 
@@ -143,12 +70,23 @@ export class ToolHandlers {
           });
           break;
         default:
-          throw new Error(`Unsupported object type: ${params.objectType}. Template-First Architecture supports 553+ object types, but this type may not have a description file yet.`);
+          throw new Error(`Unsupported object type: ${params.objectType}. Supported types: model, class, table, enum`);
       }
       
-      // Add legacy notice to response
-      content += `\n\n⚠️ Created using legacy ObjectCreators (Template-First Architecture failed)\n`;
-      content += `🔧 Consider updating object description files for better performance\n`;
+      const executionTime = Date.now() - startTime;
+      content += `\n\n📊 Performance: ${executionTime}ms using direct VS2022 service integration\n`;
+      content += `🎯 Direct Microsoft API: Zero configuration overhead\n`;
+      
+      return await createLoggedResponse(content, requestId, "create_xpp_object");
+      
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      
+      content = `❌ Failed to create ${params.objectType} '${params.objectName}'\n\n`;
+      content += `Error: ${errorMsg}\n\n`;
+      content += `� Execution time: ${executionTime}ms\n`;
+      content += `🔧 Ensure VS2022 service is running and object type is supported\n`;
       
       return await createLoggedResponse(content, requestId, "create_xpp_object");
     }
@@ -486,13 +424,55 @@ export class ToolHandlers {
   static async getCurrentConfig(args: any, requestId: string): Promise<any> {
     try {
       const config = await AppConfig.getApplicationConfiguration();
+      
+      // Group models by type (custom vs standard)
+      const groupedModels = ToolHandlers.groupModelsByType(config.models);
+      
+      // Try to get additional information from VS2022 service if available
+      let vs2022ServiceInfo = null;
+      try {
+        const { D365ServiceClient } = await import('./d365-service-client.js');
+        const client = new D365ServiceClient();
+        await client.connect();
+        
+        // Get service health and models from VS2022 service
+        const [healthStatus, serviceModels] = await Promise.all([
+          client.healthCheck().catch(() => ({ status: 'unavailable' })),
+          client.getModels().catch(() => null)
+        ]);
+        
+        vs2022ServiceInfo = {
+          status: healthStatus.status || 'connected',
+          modelsCount: serviceModels?.length || 0,
+          serviceModels: serviceModels || [],
+          lastUpdated: new Date().toISOString()
+        };
+        
+        await client.disconnect();
+      } catch (error) {
+        vs2022ServiceInfo = {
+          status: 'unavailable',
+          error: error instanceof Error ? error.message : 'Service connection failed',
+          lastUpdated: new Date().toISOString()
+        };
+      }
+      
       const response = {
         _meta: {
           type: "configuration",
           timestamp: new Date().toISOString(),
           version: "1.0.0"
         },
-        ...config
+        ...config,
+        models: groupedModels, // Replace flat models list with grouped structure
+        vs2022Service: vs2022ServiceInfo,
+        summary: {
+          totalModels: config.models.length,
+          customModels: groupedModels.custom.length,
+          standardModels: groupedModels.standard.length,
+          indexedObjects: config.indexStats.totalObjects,
+          serverStatus: vs2022ServiceInfo?.status || 'unknown'
+        }
       };
       
       return await createLoggedResponse(JSON.stringify(response, null, 2), requestId, "get_current_config");
@@ -500,5 +480,55 @@ export class ToolHandlers {
       const errorMsg = `Error retrieving configuration: ${error instanceof Error ? error.message : 'Unknown error'}`;
       return await createLoggedResponse(errorMsg, requestId, "get_current_config");
     }
+  }
+
+  /**
+   * Group models by custom vs standard based on layer and publisher
+   */
+  private static groupModelsByType(models: any[]): { custom: any[], standard: any[], summary: any } {
+    const customLayers = ['usr', 'cus', 'var', 'isv'];
+    const microsoftPublishers = ['Microsoft Corporation', 'Microsoft', 'Microsoft Dynamics'];
+    
+    const custom: any[] = [];
+    const standard: any[] = [];
+    
+    for (const model of models) {
+      const isCustomLayer = customLayers.includes(model.layer?.toLowerCase());
+      const isMicrosoftPublisher = microsoftPublishers.some(pub => 
+        model.publisher?.toLowerCase().includes(pub.toLowerCase())
+      );
+      
+      // Consider it custom if it's in a custom layer OR not published by Microsoft
+      if (isCustomLayer || !isMicrosoftPublisher) {
+        custom.push({
+          ...model,
+          modelType: 'custom',
+          reason: isCustomLayer ? `Custom layer: ${model.layer}` : `Non-Microsoft publisher: ${model.publisher}`
+        });
+      } else {
+        standard.push({
+          ...model,
+          modelType: 'standard',
+          reason: `Microsoft standard model in layer: ${model.layer}`
+        });
+      }
+    }
+    
+    // Sort each group by name
+    custom.sort((a, b) => a.name.localeCompare(b.name));
+    standard.sort((a, b) => a.name.localeCompare(b.name));
+    
+    return {
+      custom,
+      standard,
+      summary: {
+        totalModels: models.length,
+        customCount: custom.length,
+        standardCount: standard.length,
+        customLayers: [...new Set(custom.map(m => m.layer).filter(Boolean))],
+        standardLayers: [...new Set(standard.map(m => m.layer).filter(Boolean))],
+        publishers: [...new Set(models.map(m => m.publisher).filter(Boolean))]
+      }
+    };
   }
 }
