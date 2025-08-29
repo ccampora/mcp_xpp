@@ -146,6 +146,7 @@ The unified `build-and-run.ps1` script supports multiple actions and targets:
 - **Updates project files** with correct paths for your machine
 - **Verifies all required DLLs** are available
 - **Builds both** TypeScript MCP server and C# metadata service
+- **Configures automatic path detection** - No manual path configuration required
 
 ## 🏆 Current Experimental Status
 
@@ -525,9 +526,19 @@ Recognized file extensions:
 
 ## Usage
 
+**Enhanced Configuration**: The server now integrates with a C# D365MetadataService that automatically detects VS2022 installation and D365 paths. No manual path configuration required in most cases.
+
 ### Running the Server
 
-Start the MCP server with required configuration:
+**Automatic Configuration (Recommended)**
+Start the MCP server with automatic path detection via VS2022 extension:
+```bash
+node build/index.js
+```
+*All D365 paths, metadata folders, and VS2022 extension paths are automatically detected from your VS2022 installation.*
+
+**Manual Configuration (Legacy)**
+For advanced scenarios or when VS2022 auto-detection fails:
 ```bash
 node build/index.js --xpp-path "C:\path\to\PackagesLocalDirectory"
 ```
@@ -546,15 +557,33 @@ node build/index.js --xpp-path "C:\path\to\PackagesLocalDirectory" --xpp-metadat
 
 | Parameter | Description | Required | Example |
 |-----------|-------------|----------|---------|
-| `--xpp-path` | Path to D365 PackagesLocalDirectory | Yes | `C:\D365\PackagesLocalDirectory` |
+| `--xpp-path` | Path to D365 PackagesLocalDirectory | **No*** | `C:\D365\PackagesLocalDirectory` |
 | `--xpp-metadata-folder` | Custom metadata output directory | No | `C:\CustomMetadata` |
-| `--vs2022-extension-path` | VS2022 D365 extension base directory | No | `C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\{GUID}` |
+| `--vs2022-extension-path` | VS2022 D365 extension base directory | **No*** | `C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\{GUID}` |
+
+***Automatic Detection**: All paths are automatically detected from VS2022 extension when available. Manual parameters only needed for advanced scenarios or when auto-detection fails.
 
 **Note**: The server automatically appends the templates subdirectory path when accessing VS2022 templates and icons.
 
 ### VS Code Integration
 
-Configure in `.vscode/mcp.json`:
+**Automatic Configuration (Recommended)**
+Configure in `.vscode/mcp.json` with automatic path detection:
+```json
+{
+  "servers": {
+    "mcp-xpp-server": {
+      "command": "node",
+      "args": ["./build/index.js"],
+      "cwd": "${workspaceFolder}",
+      "type": "stdio"
+    }
+  }
+}
+```
+
+**Manual Configuration (Legacy)**
+For advanced scenarios:
 ```json
 {
   "servers": {
@@ -573,14 +602,15 @@ Configure in `.vscode/mcp.json`:
 }
 ```
 
-**Note**: Replace `{GUID}` with your actual VS2022 extension GUID. You can find this by exploring the Extensions directory.
+**Note**: With automatic detection, all D365 paths are retrieved from VS2022 extension during startup. Manual configuration is only needed for custom scenarios.
 
 ### Integration with MCP Clients
 
 To use this server with Claude Desktop, Visual Studio, or other MCP clients:
-1. Configure the MCP client with the server details and provide the X++ codebase path via `--xpp-path` argument
-2. Use the available tools to browse and analyze your X++ code
-3. Use `get_current_config` to verify server configuration and monitor index statistics
+1. **Recommended**: Use automatic configuration - the server will detect all required paths from VS2022 extension
+2. **Alternative**: For custom scenarios, provide the X++ codebase path via `--xpp-path` argument  
+3. Use the available tools to browse and analyze your X++ code
+4. Use `get_current_config` to verify server configuration and monitor index statistics
 
 ## Project Architecture
 
@@ -770,7 +800,7 @@ Real-world performance with actual D365 environment:
 
 **Performance & Data Issues:**
 - "No objects found": Run `build_object_index()` to index your 70K+ objects
-- "X++ codebase path not set": Configure path with `--xpp-path` argument when starting the server
+- "Configuration not found": With automatic detection, ensure VS2022 with D365 tools is installed. For manual configuration, use `--xpp-path` argument
 - "Index not built": Use `build_object_index()` - processes 70K+ objects in ~30 seconds
 - "Empty JSON response": Check `totalCount` field - may indicate filtering or missing index
 
