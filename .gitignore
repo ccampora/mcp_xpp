@@ -124,3 +124,10 @@ misc
 misc/*
 
 .vscode/tasks.json
+ms-api-server/bin/*
+ms-api-server/obj/*
+
+# Generated configuration files (use templates instead)
+ms-api-server/app.config
+ms-api-server/D365MetadataService.csproj
+ms-api-server/appsettings.json

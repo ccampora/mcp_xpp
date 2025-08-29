@@ -1,0 +1,134 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <startup>
+    <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" />
+  </startup>
+  
+  <runtime>
+    <assemblyBinding xmlns="urn:schemas-microsoft-com:asm.v1">
+      <probing privatePath="lib;C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/" />
+      
+      <!-- Fix Microsoft.Extensions.Logging version conflicts -->
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Extensions.Logging.Abstractions" publicKeyToken="adb9793829ddae60" />
+        <bindingRedirect oldVersion="0.0.0.0-8.0.0.0" newVersion="6.0.0.0" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Extensions.Logging" publicKeyToken="adb9793829ddae60" />
+        <bindingRedirect oldVersion="0.0.0.0-8.0.0.0" newVersion="6.0.0.0" />
+      </dependentAssembly>
+      
+      <!-- Fix additional Microsoft.Extensions version conflicts -->
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Extensions.DependencyInjection.Abstractions" publicKeyToken="adb9793829ddae60" />
+        <bindingRedirect oldVersion="0.0.0.0-8.0.0.0" newVersion="6.0.0.0" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Extensions.DependencyInjection" publicKeyToken="adb9793829ddae60" />
+        <bindingRedirect oldVersion="0.0.0.0-8.0.0.0" newVersion="6.0.0.0" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Extensions.Options" publicKeyToken="adb9793829ddae60" />
+        <bindingRedirect oldVersion="0.0.0.0-8.0.0.0" newVersion="6.0.0.0" />
+      </dependentAssembly>
+      
+      <!-- Fix System assembly version conflicts -->
+      <dependentAssembly>
+        <assemblyIdentity name="System.Diagnostics.DiagnosticSource" publicKeyToken="cc7b13ffcd2ddd51" />
+        <bindingRedirect oldVersion="0.0.0.0-6.0.0.1" newVersion="6.0.0.0" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="System.Memory" publicKeyToken="cc7b13ffcd2ddd51" />
+        <bindingRedirect oldVersion="0.0.0.0-4.0.1.2" newVersion="4.0.1.1" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.dll" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Core" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Core.dll" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Core" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Core.dll" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Storage" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Storage.dll" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.ApplicationPlatform.XppServices.Instrumentation" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.ApplicationPlatform.XppServices.Instrumentation.dll" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Management.Delta" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Management.Delta.dll" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Management.Core" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Management.Core.dll" />
+      </dependentAssembly>
+      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Management.Diff" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Management.Diff.dll" />
+      </dependentAssembly>
+          
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Management.Merge" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Management.Merge.dll" />
+      </dependentAssembly>      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Management.Processing" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Management.Processing.dll" />
+      </dependentAssembly>      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Modeling" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Modeling.dll" />
+      </dependentAssembly>      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Navigation" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Navigation.dll" />
+      </dependentAssembly>      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.TypeSystem" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.TypeSystem.dll" />
+      </dependentAssembly>      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.AX.Metadata.Validation" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.AX.Metadata.Validation.dll" />
+      </dependentAssembly>      
+      <dependentAssembly>
+        <assemblyIdentity name="Microsoft.Dynamics.InstrumentationFramework" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-99.0.0.0" newVersion="7.0.0.0" />
+        <codeBase version="7.0.0.0" href="file:///C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/avm13osb.viu/Microsoft.Dynamics.InstrumentationFramework.dll" />
+      </dependentAssembly>
+        </assemblyBinding>
+  </runtime>
+</configuration>

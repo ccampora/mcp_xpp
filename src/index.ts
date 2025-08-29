@@ -1,5 +1,23 @@
 #!/usr/bin/env node
 
+/**
+ * MCP X++ Server - Template-First Architecture
+ * 
+ * 🏛️ FOUNDATIONAL DESIGN PRINCIPLE (August 29, 2025):
+ * 
+ * This server follows TEMPLATE-FIRST ARCHITECTURE:
+ * - Objects are essentially STATIC throughout VS2022 extension lifecycle
+ * - Object creation uses TEMPLATES (<100ms) NOT API calls (2000ms+)
+ * - Single Source of Truth: config/object_descriptions/{ObjectType}_description.json
+ * - PowerShell for synchronization ONLY (rare, on-demand)
+ * - Self-sufficient: Works offline without external APIs
+ * 
+ * Reference: misc/template-first-architecture-design.md
+ * 
+ * FORBIDDEN: Runtime Microsoft API calls for object creation
+ * REQUIRED: Template-based generation with <100ms performance
+ */
+
 // =============================================================================
 // IMPORTS
 // =============================================================================

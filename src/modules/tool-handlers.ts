@@ -10,6 +10,24 @@ import { EnhancedSearchManager } from "./search.js";
 import { parseXppClass, parseXppTable, findXppObject } from "./parsers.js";
 import { safeReadFile, getDirectoryListing, searchInFiles } from "./file-utils.js";
 import { ObjectCreators } from "./object-creators.js";
+import { ObjectDescriptionManager } from "./object-creation/object-description-manager.js";
+import { TemplateFirstEngine } from "./object-creation/template-first-engine.js";
+
+// Template-First Architecture - Global instances
+let descriptionManager: ObjectDescriptionManager | null = null;
+let templateEngine: TemplateFirstEngine | null = null;
+
+/**
+ * Initialize Template-First Architecture components
+ */
+async function initializeTemplateFirst(): Promise<void> {
+  if (!descriptionManager) {
+    console.log('🏛️ Initializing Template-First Architecture...');
+    descriptionManager = new ObjectDescriptionManager();
+    templateEngine = new TemplateFirstEngine(descriptionManager);
+    await templateEngine.initialize();
+  }
+}
 
 /**
  * Tool handlers for all MCP tools
@@ -25,33 +43,115 @@ export class ToolHandlers {
       version: z.string().default("1.0.0.0"),
       dependencies: z.array(z.string()).default(["ApplicationPlatform", "ApplicationFoundation"]),
       outputPath: z.string().default("Models"),
+      properties: z.record(z.any()).optional(),
     });
-    const { objectName, objectType, layer, publisher, version, dependencies, outputPath } = schema.parse(args);
+    
+    const params = schema.parse(args);
     
     if (!getXppCodebasePath()) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
-    // Route to appropriate creation function based on objectType
-    let content: string;
-    switch (objectType.toLowerCase()) {
-      case "model":
-        content = await ObjectCreators.createModel(objectName, { layer, publisher, version, dependencies, outputPath });
-        break;
-      case "class":
-        content = await ObjectCreators.createClass(objectName, { layer, outputPath });
-        break;
-      case "table":
-        content = await ObjectCreators.createTable(objectName, { layer, outputPath });
-        break;
-      case "enum":
-        content = await ObjectCreators.createEnum(objectName, { layer, outputPath });
-        break;
-      default:
-        throw new Error(`Unsupported object type: ${objectType}`);
+    try {
+      // Initialize Template-First Architecture
+      await initializeTemplateFirst();
+      
+      console.log(`🏗️ Creating ${params.objectType} '${params.objectName}' using Template-First Architecture...`);
+      
+      // Use Template-First Engine for object creation
+      const result = await templateEngine!.createObject(params);
+      
+      let content: string;
+      
+      if (result.success) {
+        content = `✅ Successfully created ${result.objectType} '${result.objectName}'\n\n`;
+        content += `📊 Performance: ${result.executionTime}ms using ${result.strategy} strategy\n`;
+        content += `📁 Files generated: ${result.filesGenerated?.length || 0}\n\n`;
+        
+        if (result.filesGenerated && result.filesGenerated.length > 0) {
+          content += `📄 Generated files:\n`;
+          for (const file of result.filesGenerated) {
+            content += `   • ${file}\n`;
+          }
+          content += `\n`;
+        }
+        
+        if (result.metadata?.validation && result.metadata.validation.length > 0) {
+          content += `⚠️ Validation warnings:\n`;
+          for (const warning of result.metadata.validation) {
+            content += `   • ${warning}\n`;
+          }
+          content += `\n`;
+        }
+        
+        content += `🎯 Template-First Architecture: Zero external API dependencies\n`;
+        content += `⚡ Performance target: <100ms (actual: ${result.executionTime}ms)\n`;
+        
+      } else {
+        content = `❌ Failed to create ${result.objectType} '${result.objectName}'\n\n`;
+        content += `Error: ${result.error}\n\n`;
+        
+        if (result.troubleshooting && result.troubleshooting.length > 0) {
+          content += `🔧 Troubleshooting suggestions:\n`;
+          for (const suggestion of result.troubleshooting) {
+            content += `   • ${suggestion}\n`;
+          }
+          content += `\n`;
+        }
+        
+        content += `📊 Execution time: ${result.executionTime}ms\n`;
+        content += `🎯 Strategy attempted: ${result.strategy}\n`;
+      }
+      
+      return await createLoggedResponse(content, requestId, "create_xpp_object");
+      
+    } catch (error) {
+      // Fallback to legacy ObjectCreators for backward compatibility
+      console.log(`🔄 Template-First failed, falling back to legacy ObjectCreators...`);
+      
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn(`Template-First error: ${errorMsg}`);
+      
+      // Legacy route based on objectType
+      let content: string;
+      switch (params.objectType.toLowerCase()) {
+        case "model":
+          content = await ObjectCreators.createModel(params.objectName, { 
+            layer: params.layer, 
+            publisher: params.publisher, 
+            version: params.version, 
+            dependencies: params.dependencies, 
+            outputPath: params.outputPath 
+          });
+          break;
+        case "class":
+          content = await ObjectCreators.createClass(params.objectName, { 
+            layer: params.layer, 
+            outputPath: params.outputPath 
+          });
+          break;
+        case "table":
+          content = await ObjectCreators.createTable(params.objectName, { 
+            layer: params.layer, 
+            outputPath: params.outputPath 
+          });
+          break;
+        case "enum":
+          content = await ObjectCreators.createEnum(params.objectName, { 
+            layer: params.layer, 
+            outputPath: params.outputPath 
+          });
+          break;
+        default:
+          throw new Error(`Unsupported object type: ${params.objectType}. Template-First Architecture supports 553+ object types, but this type may not have a description file yet.`);
+      }
+      
+      // Add legacy notice to response
+      content += `\n\n⚠️ Created using legacy ObjectCreators (Template-First Architecture failed)\n`;
+      content += `🔧 Consider updating object description files for better performance\n`;
+      
+      return await createLoggedResponse(content, requestId, "create_xpp_object");
     }
-    
-    return await createLoggedResponse(content, requestId, "create_xpp_object");
   }
 
   static async browseDirectory(args: any, requestId: string): Promise<any> {

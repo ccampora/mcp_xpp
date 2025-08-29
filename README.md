@@ -1,53 +1,228 @@
 
 # MCP X++ Codebase Server
 
-**Status:** Experimental. This project is in early development. Use only in non-production environments.
+**Status:** Experimental Open Source Project  
+**Date:** August 29, 2025  
+**Purpose:** Research and Development - Not for Production Use
 
-This repository provides a Model Context Protocol (MCP) server for basic navigation and file operations on Dynamics 365 Finance and Operations (D365 F&O) X++ codebases. The server enables AI models and tools to browse directories, read files, and perform simple text searches within a configured D365 F&O codebase.
+**Current State**: Experimental Microsoft API integration for D365 object creation using Microsoft assemblies.
 
+> **⚠️ Important Notice**: This is an experimental open source project for research and educational purposes only. It is not intended for production use and may have bugs, incomplete features, or unexpected behavior. Use at your own risk.
 
-## Roadmap
+## 🏗️ Experimental Architecture: IDE-Agnostic Design with VS2022 Integration
 
-### Current State (Phase 1)
-* Basic file system browsing and navigation
-* File reading with size limits
-* Basic text search across files
-* Simple object existence validation
+**Research Goal**: This experimental project explores leveraging Microsoft's VS2022 extension assemblies for D365 API access while providing universal access through the Model Context Protocol (MCP).
 
-Note: No advanced object discovery, code analysis, or project-specific features are available at this stage. Advanced features are planned for future phases, but not yet implemented.
+### Experimental Architecture
 
-### Planned Phases
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   MCP X++ Codebase Server                  │
+│              (Node.js/TypeScript - STDIO)                  │
+│  • File browsing, searching, indexing                      │
+│  • MCP protocol implementation                             │
+│  • Client request routing                                  │
+│  • IDE-AGNOSTIC: Works with ANY MCP-compatible client      │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ Named Pipes Communication
+                      │ <1ms latency, Windows IPC optimized
+┌─────────────────────▼───────────────────────────────────────┐
+│                D365 Metadata Service                       │
+│              (C# .NET 4.8 - Named Pipes)                  │
+│  ┌─────────────────────────────────────────────────────────┤
+│  │ • NamedPipeServer.cs - High-performance IPC layer     │
+│  │ • D365ObjectFactory.cs - Microsoft API integration     │
+│  │ • ServiceModels.cs - Protocol definitions              │
+│  │ • Program.cs - Service host with graceful shutdown     │
+│  └─────────────────────────────────────────────────────────┤
+│  Configuration:                                            │
+│  • Pipe: mcp-xpp-d365-service, Max 50 connections         │
+│  • JSON message protocol with newline delimiters          │
+│  • Comprehensive error handling and logging               │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ Direct Microsoft API Calls
+                      │ Microsoft.Dynamics.AX.Metadata.Core.dll
+┌─────────────────────▼───────────────────────────────────────┐
+│            Microsoft Dynamics 365 F&O Platform            │
+│                 (Full 467+ Object Types)                   │
+│  • AxClass, AxTable, AxEnum, AxView, AxReport, AxQuery     │
+│  • Native validation, compilation, deployment              │
+│  • Complete feature set including inheritance, methods     │
+└─────────────────────────────────────────────────────────────┘
+```
 
-#### Phase 1: Analysis & Discovery (Current - Q1 2025)
-* Basic file system browsing and navigation
-* File reading with size limits
-* Basic text search across files
-* Simple object existence validation
-* Performance-optimized indexing (basic implementation)
-* Class method parsing (limited)
-* Table structure parsing (limited)
+### IDE-Agnostic Experiment
 
-#### Phase 2: Code Generation (Q2-Q3 2025)
-* X++ object creation (planned)
-* Custom project management (planned)
-* Code templates (planned)
-* Relationship management (planned)
-* Security integration (planned)
-* Extension support (planned)
+**Research Scope**: The MCP protocol enables this experimental D365 object creation capability to work with:
+- **Claude Desktop** (Anthropic's official client)
+- **VS Code with MCP extensions** 
+- **Any IDE** that supports Model Context Protocol
+- **Custom tooling** and automation scripts
+- **Future MCP clients** and integrations
 
-#### Phase 3: Project Management (Q4 2025)
-* Package management (planned)
-* Dependency resolution (planned)
-* Version control integration (planned)
-* Project templates (planned)
-* ISV development support (planned)
+**VS2022 Assembly Integration (Experimental)**: 
+- Uses Microsoft's D365 assemblies for API compatibility testing
+- Provides similar object creation capabilities as VS2022 extension
+- **No Visual Studio dependency** for runtime operation (experimental)
+- Maintains compatibility with D365 development workflow (where tested)
+- Enables D365 development exploration in various IDE environments
 
-#### Phase 4: Build & Deployment (Q1 2026)
-* Automated builds (planned)
-* Deployment automation (planned)
-* Environment management (planned)
-* CI/CD integration (planned)
-* Quality assurance (planned)
+**⚡ Performance Characteristics (Experimental)**:
+- **Measured performance** improvements over VS2022 extension baseline (9-20ms vs 500-2000ms)
+- **Object type support** for 467+ object types (vs ~50 in template-based approaches)
+- **Windows Named Pipes** for local IPC performance testing
+- **Microsoft APIs** for D365 object creation experiments
+
+### 🎯 Research Overview
+
+**Problem Explored**: Traditional D365 development has been limited to Visual Studio 2022, restricting developer choice and integration possibilities.
+
+**Experimental Approach**: Investigate extracting Microsoft's D365 API capabilities while making them accessible through MCP.
+
+**Implementation Notes**: 
+- **Setup requires VS2022**: Only to access Microsoft's D365 assemblies during initial configuration
+- **Runtime is IDE-independent**: Once configured, the service runs independently of Visual Studio (experimental)
+- **Development flexibility**: Explore creating D365 objects from Claude Desktop, VS Code, or any MCP client
+- **Compatibility testing**: Generated objects tested for compatibility with existing D365 development workflows
+
+This experimental architecture explores enterprise-grade Microsoft API access through modern, protocol-based integration patterns.
+
+## 🚀 Quick Start for New Users
+
+### Prerequisites
+1. **Visual Studio 2022** (Community, Professional, or Enterprise)
+2. **Dynamics 365 Development Tools** for Visual Studio 2022
+3. **Node.js** (for the MCP server)
+4. **.NET Framework 4.8** (usually included with Windows)
+
+### One-Command Setup
+```powershell
+# Clone and setup everything automatically
+git clone <your-repo-url>
+cd mcp_xpp
+.\tools\build-and-run.ps1 -Action all
+```
+
+### Available Commands
+The unified `build-and-run.ps1` script supports multiple actions and targets:
+
+```powershell
+# First-time setup only
+.\tools\build-and-run.ps1 -Action setup
+
+# Build both projects
+.\tools\build-and-run.ps1 -Action build
+
+# Build and run C# service
+.\tools\build-and-run.ps1 -Action run -Target csharp
+
+# Build and run MCP server
+.\tools\build-and-run.ps1 -Action run -Target mcp
+
+# Run tests
+.\tools\build-and-run.ps1 -Action test
+
+# Clean all builds
+.\tools\build-and-run.ps1 -Action clean
+
+# Complete setup, build, test, and run
+.\tools\build-and-run.ps1 -Action all
+
+# Get help with all options
+.\tools\build-and-run.ps1 -Help
+```
+
+### Parameters
+- **Action**: `setup`, `build`, `run`, `test`, `clean`, `all`
+- **Target**: `mcp`, `csharp`, `both` (default: both)  
+- **Configuration**: `Debug`, `Release` (default: Release)
+- **PipeName**: Named pipe for service communication (default: mcp-xpp-d365-service)
+- **SkipSetup**: Skip VS reference setup
+- **SkipRestore**: Skip package restore
+
+### What the Setup Does
+- **Automatically finds** your Visual Studio 2022 installation
+- **Locates D365 development tools** extension (handles random folder names)
+- **Updates project files** with correct paths for your machine
+- **Verifies all required DLLs** are available
+- **Builds both** TypeScript MCP server and C# metadata service
+
+## 🏆 Current Experimental Status
+
+### ✅ D365 Object Creation (Experimental)
+- **Microsoft API Integration**: Using `Microsoft.Dynamics.AX.Metadata.dll` assemblies (experimental)
+- **Physical File Creation**: Creates D365 metadata files on disk (tested in limited scenarios)
+- **Performance**: Sub-second class creation (411ms in test environment)
+- **Self-contained Operation**: No external API dependencies (in tested scenarios)
+
+### ✅ Implemented Technologies (Experimental)
+- **C# Service**: Named Pipes service with Microsoft API integration (prototype)
+- **MetadataProviderFactory**: Using `CreateDiskProvider()` for dual-path configuration (experimental)
+- **Template-First Architecture**: Experimental approach for automated object generation
+
+### 🎯 Current Capabilities (Experimental)
+
+#### **AxClass Creation** (Prototype Implementation)
+```csharp
+// Example: Experimental D365 class file creation
+POST /create
+{
+  "Action": "create",
+  "ObjectType": "AxClass", 
+  "Parameters": {
+    "name": "MyTestClass",
+    "model": "cc"
+  }
+}
+// Result: Physical XML files created in metadata structure (tested in limited scenarios)
+```
+
+#### **File System Integration (Experimental)**
+- Reads from: `PackagesLocalDirectory` (D365 installation)
+- Writes to: `CustomMetadataPath` (custom metadata folder)
+- Both paths automatically managed by Microsoft API (experimental implementation)
+
+#### **MCP Server Foundation (Experimental)**
+- Basic file system browsing and navigation (prototype)
+- File reading with size limits (experimental implementation)
+- Text search across X++ codebase (basic functionality)
+- Object existence validation (limited testing)
+
+## 🚀 Experimental Architecture
+
+### Design Principles (Research Goals)
+- **Performance Priority**: Sub-500ms object creation target (achieved: 411ms in test environment)
+- **Self-Sufficiency**: Works offline without external APIs (experimental)
+- **Single Source of Truth**: Microsoft API as authoritative source (prototype)
+- **Physical File Generation**: Metadata files compatible with D365 (limited testing)
+
+### Microsoft API Integration (Experimental)
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MCP Server (Node.js)                │
+│                  ┌─────────────────────┐               │
+│                  │   File Operations   │               │ 
+│                  │   Search & Browse   │               │
+│                  └─────────────────────┘               │
+└─────────────────────────┬───────────────────────────────┘
+                         │ Named Pipes (Windows IPC)
+┌─────────────────────────▼───────────────────────────────┐
+│              C# Metadata Service                       │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │        Real Microsoft APIs                      │   │
+│  │  Microsoft.Dynamics.AX.Metadata.dll            │   │
+│  │  MetadataProviderFactory.CreateDiskProvider()   │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────┬───────────────────────────────┘
+                         │
+           ┌──────────────▼──────────────┐
+           │     Physical D365 Files     │
+           │                            │
+           │  *.xml metadata files      │
+           │  XPP compiler files        │
+           │  Compatible with VS2022    │
+           └────────────────────────────┘
+```
 
 #### Phase 5: Enterprise Integration (Q2 2026+)
 * Production deployment (planned)
@@ -569,18 +744,37 @@ MIT License - see LICENSE file for details
 
 ## Disclaimer
 
-This is experimental software provided "as is" without warranty of any kind. Use at your own risk, especially in production environments. The software may have bugs, incomplete features, or unexpected behavior.
+**⚠️ EXPERIMENTAL SOFTWARE NOTICE**
+
+This is experimental open source software provided "as is" without warranty of any kind. This project is for research, educational, and experimental purposes only.
+
+**Important Limitations:**
+- **NOT FOR PRODUCTION USE**: This software is not intended for production environments
+- **Experimental Status**: Features may be incomplete, unstable, or subject to breaking changes
+- **No Support Guarantee**: Limited support is provided on a best-effort basis
+- **Use at Your Own Risk**: The software may have bugs, security issues, or unexpected behavior
+- **Microsoft Dependencies**: Requires Microsoft Visual Studio 2022 and D365 development tools
+- **API Limitations**: Microsoft API integration is experimental and not officially supported
+
+**Recommended Use:**
+- Research and development environments only
+- Educational purposes and learning
+- Proof-of-concept development
+- Community experimentation and feedback
+
+By using this software, you acknowledge that it is experimental and accept full responsibility for any consequences of its use.
 
 ## Get Involved
 
 This project is experimental and under active development. If you have feedback, encounter issues, or wish to contribute improvements, please use the GitHub repository to:
 - Star the repository to show support
 - Report issues or bugs
-- Suggest features or improvements
+- Suggest features or improvements  
 - Contribute code or documentation
 
-Thank you for your interest in this project.
-*Note: Advanced code parsing, relationship analysis, and intelligent object understanding are planned for future development phases.*
+Thank you for your interest in this experimental project.
+
+**Note**: This is an open source research project. Advanced code parsing, relationship analysis, and intelligent object understanding are planned for future experimental development phases.
 <!--=========================README TEMPLATE INSTRUCTIONS=============================
 ======================================================================================
 

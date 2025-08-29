@@ -1,0 +1,9 @@
+{
+  "PipeName": "mcp-xpp-d365-service",
+  "MaxConnections": 10,
+  "D365Config": {
+    "DefaultModel": "ApplicationSuite",
+    "PackagesLocalDirectory": "{{PACKAGES_LOCAL_DIRECTORY}}",
+    "CustomMetadataPath": "{{CUSTOM_METADATA_PATH}}"
+  }
+}

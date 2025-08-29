@@ -9,11 +9,12 @@
 				"-ExecutionPolicy",
 				"RemoteSigned",
 				"-Command",
-				"npm run build"
+				".\\tools\\build-and-run.ps1 -Action build"
 			],
 			"group": "build",
 			"problemMatcher": [
-				"$tsc"
+				"$tsc",
+				"$msCompile"
 			]
 		},
 		{
@@ -24,7 +25,7 @@
 				"-ExecutionPolicy",
 				"RemoteSigned",
 				"-Command",
-				"npm run build; if ($LASTEXITCODE -eq 0) { node ./build/index.js --xpp-path 'C:\\Users\\ccampora\\AppData\\Local\\Microsoft\\Dynamics365\\10.0.2015.54\\PackagesLocalDirectory' --xpp-metadata-folder 'C:\\CustomXppMetadata1x4ye02p.ocz' --vs2022-extension-path 'C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\Common7\\IDE\\Extensions\\bwowldxc.vmc' }"
+				".\\tools\\build-and-run.ps1 -Action run -Target mcp"
 			],
 			"group": "build",
 			"problemMatcher": [
@@ -122,6 +123,96 @@
 			],
 			"group": "test",
 			"dependsOn": "Build and Run MCP Server"
+		},
+		{
+			"label": "Build C# Service",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				".\\tools\\build-and-run.ps1 -Action build -Target csharp"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "Run C# Service",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				".\\tools\\build-and-run.ps1 -Action run -Target csharp"
+			],
+			"group": "build",
+			"isBackground": true,
+			"dependsOn": "Build C# Service",
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "Build and Run C# Service",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				".\\tools\\build-and-run.ps1 -Action run -Target csharp"
+			],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "First-Time Setup",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				".\\tools\\build-and-run.ps1 -Action setup"
+			],
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Clean All",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				".\\tools\\build-and-run.ps1 -Action clean"
+			],
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Full Build and Test",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				".\\tools\\build-and-run.ps1 -Action all -Target both"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$tsc",
+				"$msCompile"
+			]
 		}
 	]
 }

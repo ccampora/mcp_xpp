@@ -1,0 +1,75 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>D365MetadataService</AssemblyName>
+    <RootNamespace>D365MetadataService</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Copyright>Copyright © 2025</Copyright>
+    
+    <!-- Single-file publishing for production deployment -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="Serilog" Version="2.10.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="6.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference to Microsoft D365 Assemblies from VS Extension -->
+    <Reference Include="Microsoft.Dynamics.AX.Metadata">
+      <HintPath>{{VS_EXTENSION_PATH}}\\Microsoft.Dynamics.AX.Metadata.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Dynamics.AX.Metadata.Core">
+      <HintPath>{{VS_EXTENSION_PATH}}\\Microsoft.Dynamics.AX.Metadata.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Dynamics.AX.Metadata.Storage">
+      <HintPath>{{VS_EXTENSION_PATH}}\\Microsoft.Dynamics.AX.Metadata.Storage.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Dynamics.AX.Core">
+      <HintPath>{{VS_EXTENSION_PATH}}\\Microsoft.Dynamics.AX.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Dynamics.Framework.Tools.MetaModel.17.0">
+      <HintPath>{{VS_EXTENSION_PATH}}\\Microsoft.Dynamics.Framework.Tools.MetaModel.17.0.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Dynamics.Framework.Tools.MetaModel.Core.17.0">
+      <HintPath>{{VS_EXTENSION_PATH}}\\Microsoft.Dynamics.Framework.Tools.MetaModel.Core.17.0.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="app.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="logs\" />
+  </ItemGroup>
+
+  <Target Name="CreateLogsDirectory" BeforeTargets="Build">
+    <MakeDir Directories="$(OutputPath)logs" Condition="!Exists('$(OutputPath)logs')" />
+  </Target>
+
+</Project>
