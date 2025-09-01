@@ -530,6 +530,62 @@ Recognized file extensions:
 
 ### Running the Server
 
+**Enhanced Dual Transport Support**: The server now supports both STDIO (for local IDE integration) and HTTP (for external services like Copilot Studio) transports simultaneously.
+
+#### Transport Options
+
+**Option 1: STDIO Only (Default - Local IDE Integration)**
+```bash
+node build/index.js
+```
+*Perfect for VS Code MCP extension and local development*
+
+**Option 2: HTTP Only (External Services)**
+```bash
+node build/index.js --http-port 3001 --http-host 0.0.0.0 --no-stdio
+```
+*For external integrations like Copilot Studio via DevTunnel*
+
+**Option 3: Dual Transport (Recommended for Development)**
+```bash
+node build/index.js --http-port 3001 --http-host 0.0.0.0
+```
+*Enables both local IDE integration AND external service access*
+
+#### HTTP Transport Features
+
+When HTTP transport is enabled:
+- 🌐 **REST API**: Access tools via standard HTTP endpoints
+- 🔧 **DevTunnel Ready**: Easy external access setup
+- 📋 **Health Check**: `GET /health` for service monitoring
+- 🛠️ **Tools API**: `GET /mcp/tools` to list available tools
+- ⚡ **Tool Execution**: `POST /mcp/tools/{toolName}` for tool calls
+- 🔄 **JSON-RPC**: `POST /mcp/rpc` for full MCP compatibility
+
+#### DevTunnel Integration
+
+For external services like Copilot Studio:
+```powershell
+# Start server with HTTP transport
+node build/index.js --http-port 3001 --no-stdio
+
+# Create DevTunnel for external access
+devtunnel host -p 3001 --allow-anonymous
+```
+
+**HTTP Endpoint Examples:**
+- Health: `https://your-tunnel-url.use.devtunnels.ms/health`
+- Tools: `https://your-tunnel-url.use.devtunnels.ms/mcp/tools`
+- Execute: `POST https://your-tunnel-url.use.devtunnels.ms/mcp/tools/create_xpp_object`
+
+#### Transport Command Line Parameters
+
+| Parameter | Description | Default | Example |
+|-----------|-------------|---------|---------|
+| `--http-port` | HTTP transport port | disabled | `3001` |
+| `--http-host` | HTTP transport host | `0.0.0.0` | `localhost` |
+| `--no-stdio` | Disable STDIO transport | false | `--no-stdio` |
+
 **Automatic Configuration (Recommended)**
 Start the MCP server with automatic path detection via VS2022 extension:
 ```bash
@@ -567,7 +623,27 @@ node build/index.js --xpp-path "C:\path\to\PackagesLocalDirectory" --xpp-metadat
 
 ### VS Code Integration
 
-**Automatic Configuration (Recommended)**
+**Dual Transport Configuration (Recommended)**
+Configure in `.vscode/mcp.json` for both local and external access:
+```json
+{
+  "servers": {
+    "mcp-xpp-server": {
+      "command": "node",
+      "args": [
+        "./build/index.js",
+        "--http-port", "3001", 
+        "--http-host", "0.0.0.0"
+      ],
+      "cwd": "${workspaceFolder}",
+      "type": "stdio"
+    }
+  },
+  "inputs": []
+}
+```
+
+**STDIO Only Configuration (Legacy)**
 Configure in `.vscode/mcp.json` with automatic path detection:
 ```json
 {

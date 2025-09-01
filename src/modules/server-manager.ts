@@ -1,5 +1,4 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -10,15 +9,19 @@ import { z } from "zod";
 import { ToolDefinitions } from "./tool-definitions.js";
 import { ToolHandlers } from "./tool-handlers.js";
 import { DiskLogger } from "./logger.js";
+import { TransportManager, TransportConfig } from "./transport-manager.js";
 
 /**
  * Server manager for the MCP X++ Server
  */
 export class ServerManager {
   private server: Server;
+  private transportManager: TransportManager | null = null;
   private serverStartTime: Date | null = null;
+  private transportConfig: TransportConfig;
 
-  constructor() {
+  constructor(transportConfig: TransportConfig = { stdio: true }) {
+    this.transportConfig = transportConfig;
     this.server = new Server({
       name: "mcp-xpp-server",
       version: "1.0.0",
@@ -41,6 +44,7 @@ export class ServerManager {
    */
   async initialize(): Promise<void> {
     await this.setupRequestHandlers();
+    this.transportManager = new TransportManager(this.server, this.transportConfig);
   }
 
   /**
@@ -131,12 +135,31 @@ export class ServerManager {
    * Start the server
    */
   async start(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
+    if (!this.transportManager) {
+      throw new Error("Server not initialized. Call initialize() first.");
+    }
+
+    await this.transportManager.start();
     
     // Set server start time after successful connection
     this.serverStartTime = new Date();
     
-    await DiskLogger.logDebug("🚀 MCP X++ Server started and listening on stdio");
+    await DiskLogger.logDebug("🚀 MCP X++ Server started with configured transports");
+  }
+
+  /**
+   * Stop the server
+   */
+  async stop(): Promise<void> {
+    if (this.transportManager) {
+      await this.transportManager.stop();
+    }
+  }
+
+  /**
+   * Get transport status
+   */
+  getTransportStatus() {
+    return this.transportManager?.getStatus() || null;
   }
 }

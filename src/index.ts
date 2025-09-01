@@ -49,8 +49,56 @@ export function getServerStartTime(): Date | null {
 // SERVER STARTUP
 // =============================================================================
 
+/**
+ * Parse command line arguments for transport configuration
+ */
+function parseTransportConfig(): { stdio: boolean; http?: { enabled: boolean; port: number; host?: string } } {
+  const args = process.argv.slice(2);
+  let config: any = { stdio: true };
+
+  // Check for HTTP transport arguments
+  const httpPortIndex = args.findIndex(arg => arg === '--http-port');
+  const httpHostIndex = args.findIndex(arg => arg === '--http-host');
+  const stdioDisabledIndex = args.findIndex(arg => arg === '--no-stdio');
+
+  if (httpPortIndex !== -1 && httpPortIndex + 1 < args.length) {
+    const port = parseInt(args[httpPortIndex + 1], 10);
+    if (!isNaN(port) && port > 0 && port <= 65535) {
+      config.http = {
+        enabled: true,
+        port: port,
+        host: '0.0.0.0'
+      };
+
+      // Check for custom host
+      if (httpHostIndex !== -1 && httpHostIndex + 1 < args.length) {
+        config.http.host = args[httpHostIndex + 1];
+      }
+    }
+  }
+
+  // Check if STDIO should be disabled
+  if (stdioDisabledIndex !== -1) {
+    config.stdio = false;
+  }
+
+  return config;
+}
+
 async function runServer() {
   try {
+    // Parse transport configuration from command line arguments
+    const transportConfig = parseTransportConfig();
+    
+    console.error(`🚀 Starting MCP X++ Server...`);
+    console.error(`📡 Transport Configuration:`);
+    console.error(`   STDIO: ${transportConfig.stdio ? 'enabled' : 'disabled'}`);
+    if (transportConfig.http?.enabled) {
+      console.error(`   HTTP: enabled on ${transportConfig.http.host}:${transportConfig.http.port}`);
+    } else {
+      console.error(`   HTTP: disabled`);
+    }
+
     // Initialize configuration system
     await AppConfig.initialize();
     
@@ -89,9 +137,16 @@ async function runServer() {
     }
     
     // Initialize and start the server
-    serverManager = new ServerManager();
+    serverManager = new ServerManager(transportConfig);
     await serverManager.initialize();
     await serverManager.start();
+    
+    // Log transport status
+    const status = serverManager.getTransportStatus();
+    console.error(`✅ MCP X++ Server running successfully`);
+    if (status) {
+      console.error(`   Transport Status: STDIO=${status.stdio}, HTTP=${status.http}${status.httpPort ? ` (port ${status.httpPort})` : ''}`);
+    }
     
   } catch (error) {
     await DiskLogger.logError(error, "startup");
