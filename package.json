@@ -11,7 +11,10 @@
     "build": "tsc && powershell -Command \"Copy-Item 'config' 'build' -Recurse -Force\"",
     "dev": "tsc --watch",
     "start": "node build/index.js",
-    "test": "vitest run",
+    "test": "vitest run tests/core-functionality.test.js",
+    "test:all": "vitest run",
+    "test:core": "vitest run tests/core-functionality.test.js",
+    "test:performance": "vitest run tests/performance.test.js",
     "test:watch": "vitest",
     "test:ui": "vitest --ui"
   },

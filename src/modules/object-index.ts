@@ -4,6 +4,7 @@ import { ObjectIndex } from "./types.js";
 import { AOTStructureManager } from "./aot-structure.js";
 import { isXppRelatedFile, getPackagePriority } from "./utils.js";
 import { MAX_FILE_SIZE } from "./config.js";
+import { AppConfig } from "./app-config.js";
 import { fileURLToPath } from "url";
 
 // AOT folder cache for fast lookups
@@ -14,15 +15,24 @@ const aotFoldersCache = new Map<string, string[]>();
  */
 export class ObjectIndexManager {
   private static index: Map<string, ObjectIndex> = new Map();
-  private static indexPath: string = "";
 
-  static setIndexPath(basePath: string): void {
+  /**
+   * Get the cache file path - automatically determined from MCP server location
+   */
+  private static getIndexPath(): string {
     // Get the MCP server directory (where this module is located)
     const currentModulePath = fileURLToPath(import.meta.url);
     const mcpServerDir = join(dirname(currentModulePath), '..', '..');
     const cacheDir = join(mcpServerDir, 'cache');
     
-    this.indexPath = join(cacheDir, 'mcp-index.json');
+    return join(cacheDir, 'mcp-index.json');
+  }
+
+  /**
+   * Get XPP codebase path from AppConfig
+   */
+  private static getXppPath(): string | null {
+    return AppConfig.getXppPath() || null;
   }
 
   /**
@@ -171,13 +181,14 @@ export class ObjectIndexManager {
 
   static async loadIndex(): Promise<void> {
     try {
-      if (await this.fileExists(this.indexPath)) {
-        const indexData = await fs.readFile(this.indexPath, 'utf-8');
+      const indexPath = this.getIndexPath();
+      if (await this.fileExists(indexPath)) {
+        const indexData = await fs.readFile(indexPath, 'utf-8');
         const parsedIndex = JSON.parse(indexData);
         this.index = new Map(Object.entries(parsedIndex.objects || {}));
-        console.log(`📂 Index loaded from: ${this.indexPath} (${this.index.size} objects)`);
+        console.log(`📂 Index loaded from: ${indexPath} (${this.index.size} objects)`);
       } else {
-        console.log(`📂 No existing index found at: ${this.indexPath}`);
+        console.log(`📂 No existing index found at: ${indexPath}`);
       }
     } catch (error) {
       console.error("Error loading index:", error);
@@ -187,8 +198,9 @@ export class ObjectIndexManager {
 
   static async saveIndex(): Promise<void> {
     try {
+      const indexPath = this.getIndexPath();
       // Ensure the cache directory exists
-      const cacheDir = dirname(this.indexPath);
+      const cacheDir = dirname(indexPath);
       await fs.mkdir(cacheDir, { recursive: true });
       
       const indexData = {
@@ -196,8 +208,8 @@ export class ObjectIndexManager {
         version: "1.0",
         objects: Object.fromEntries(this.index)
       };
-      await fs.writeFile(this.indexPath, JSON.stringify(indexData, null, 2));
-      console.log(`💾 Index saved to: ${this.indexPath}`);
+      await fs.writeFile(indexPath, JSON.stringify(indexData, null, 2));
+      console.log(`💾 Index saved to: ${indexPath}`);
     } catch (error) {
       console.error("Error saving index:", error);
     }
@@ -207,7 +219,7 @@ export class ObjectIndexManager {
    * Get the cache directory path
    */
   static getCacheDirectory(): string {
-    return dirname(this.indexPath);
+    return dirname(this.getIndexPath());
   }
 
   /**
@@ -259,32 +271,61 @@ export class ObjectIndexManager {
     }
   }
 
-  static async buildFullIndex(basePath: string, forceRebuild: boolean = false): Promise<void> {
+  static async buildFullIndex(forceRebuild: boolean = false): Promise<void> {
+    // Get XPP path from AppConfig
+    const basePath = this.getXppPath();
+    if (!basePath) {
+      throw new Error("XPP codebase path not configured in AppConfig");
+    }
+
     if (!forceRebuild && this.index.size > 0) return;
 
     console.log('🚀 Starting optimized full index build...');
     this.index.clear();
+    
+    // CRITICAL: Discover available object types from the filesystem first
+    console.log('🔍 Phase 0: Discovering available object types from filesystem...');
+    await AOTStructureManager.discoverAvailableObjectTypes(basePath);
+    const discoveredTypes = AOTStructureManager.getAllDiscoveredTypes();
+    console.log(`   Discovered ${discoveredTypes.size} object types from filesystem`);
 
     // Phase 1: Discover all AOT folders (much faster than full directory walk)
     console.log('📁 Phase 1: Discovering all AOT folders...');
     const aotFolders = await this.discoverAOTFolders(basePath);
     console.log(`   Found ${aotFolders.size} AOT folders across all packages`);
 
-    // Phase 2: Index only AOT folders (targeted approach)
+    // Phase 2: Index only AOT folders (targeted approach) - PARALLEL PROCESSING
     console.log('📦 Phase 2: Indexing objects in discovered AOT folders...');
     const results = { indexedCount: 0, skippedCount: 0 };
     
-    for (const aotFolderPath of aotFolders.keys()) {
-      const relativePath = relative(basePath, aotFolderPath);
-      console.log(`   📂 Processing: ${relativePath}`);
+    // Convert to array for batch processing
+    const aotFolderPaths = Array.from(aotFolders.keys());
+    const BATCH_SIZE = 50; // Process 10 folders concurrently
+    
+    for (let i = 0; i < aotFolderPaths.length; i += BATCH_SIZE) {
+      const batch = aotFolderPaths.slice(i, i + BATCH_SIZE);
       
-      // Determine object type from AOT folder name
-      const folderName = basename(aotFolderPath);
-      const objectType = this.getObjectTypeFromAOTFolder(folderName);
+      // Process batch in parallel
+      await Promise.all(batch.map(async (aotFolderPath) => {
+        const relativePath = relative(basePath, aotFolderPath);
+        //console.log(`   📂 Processing: ${relativePath}`);
+        
+        // Determine object type from AOT folder name
+        const folderName = basename(aotFolderPath);
+        const objectType = this.getObjectTypeFromAOTFolder(folderName);
+        
+        if (objectType !== 'UNKNOWN') {
+          const batchResults = { indexedCount: 0, skippedCount: 0 };
+          await this.indexAOTFolder(aotFolderPath, basePath, objectType, batchResults);
+          
+          // Safely accumulate results (atomic operations)
+          results.indexedCount += batchResults.indexedCount;
+          results.skippedCount += batchResults.skippedCount;
+        }
+      }));
       
-      if (objectType !== 'UNKNOWN') {
-        await this.indexAOTFolder(aotFolderPath, basePath, objectType, results);
-      }
+      // Progress report after each batch
+      console.log(`   ✅ Batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(aotFolderPaths.length/BATCH_SIZE)} complete - ${results.indexedCount} objects indexed so far`);
     }
 
     await this.saveIndex();
@@ -306,9 +347,19 @@ export class ObjectIndexManager {
     return 'UNKNOWN';
   }
 
-  static async buildIndexByType(basePath: string, objectType: string, forceRebuild: boolean = false): Promise<{ indexedCount: number, skippedCount: number }> {
+  static async buildIndexByType(objectType: string, forceRebuild: boolean = false): Promise<{ indexedCount: number, skippedCount: number }> {
+    // Get XPP path from AppConfig
+    const basePath = this.getXppPath();
+    if (!basePath) {
+      throw new Error("XPP codebase path not configured in AppConfig");
+    }
+
     // Validate object type against AOT structure
     await AOTStructureManager.loadStructure();
+    
+    // CRITICAL: Discover available object types from the filesystem first
+    await AOTStructureManager.discoverAvailableObjectTypes(basePath);
+    
     const availableTypes = AOTStructureManager.getAllObjectTypes();
     if (!availableTypes.includes(objectType.toUpperCase())) {
       throw new Error(`Invalid object type: ${objectType}. Available types are: ${availableTypes.join(', ')}. Use discover_object_types to see all available types.`);

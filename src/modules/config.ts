@@ -35,14 +35,3 @@ export const MAX_FILES_LIMIT = 500; // Increased limit
 export const CACHE_TTL = 30 * 60 * 1000; // 30 minutes cache TTL
 export const MAX_SEARCH_RESULTS = 100;
 export const MAX_WORKERS = 4;
-
-// Configuration for X++ codebase path
-export let xppCodebasePath: string = "";
-
-export function setXppCodebasePath(path: string): void {
-  xppCodebasePath = path;
-}
-
-export function getXppCodebasePath(): string {
-  return xppCodebasePath;
-}

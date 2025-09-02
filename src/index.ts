@@ -26,7 +26,6 @@ import { realpathSync } from "fs";
 
 // Import modules
 import { DiskLogger } from "./modules/logger.js";
-import { setXppCodebasePath, getXppCodebasePath } from "./modules/config.js";
 import { AppConfig } from "./modules/app-config.js";
 import { ObjectIndexManager } from "./modules/object-index.js";
 import { ServerManager } from "./modules/server-manager.js";
@@ -102,35 +101,30 @@ async function runServer() {
     // Initialize configuration system
     await AppConfig.initialize();
     
-    // Set XPP codebase path for backward compatibility with existing code
+    // Get paths from configuration
     const xppPath = AppConfig.getXppPath();
+    const metadataFolder = AppConfig.getXppMetadataFolder();
+    const vs2022ExtensionPath = AppConfig.getVS2022ExtensionPath();
+    
     if (xppPath) {
-      setXppCodebasePath(xppPath);
       console.error(`XPP codebase path configured: ${xppPath}`);
       
-      const metadataFolder = AppConfig.getXppMetadataFolder();
       if (metadataFolder) {
         console.error(`XPP metadata folder configured: ${metadataFolder}`);
       }
 
-      const vs2022ExtensionPath = AppConfig.getVS2022ExtensionPath();
       if (vs2022ExtensionPath) {
         console.error(`VS2022 extension path configured: ${vs2022ExtensionPath}`);
       }
     }
 
-    // Initialize ObjectIndexManager if path is available
-    if (getXppCodebasePath()) {
-      ObjectIndexManager.setIndexPath(getXppCodebasePath());
-    }
-
     await DiskLogger.logStartup();
     
-    // Load index if XPP path is set
-    if (getXppCodebasePath()) {
+    // Load object index if XPP path is available
+    if (xppPath) {
       try {
         await ObjectIndexManager.loadIndex();
-        await DiskLogger.logDebug(`Loaded object index for: ${getXppCodebasePath()}`);
+        await DiskLogger.logDebug(`Loaded object index for: ${xppPath}`);
       } catch (error) {
         await DiskLogger.logDebug(`Could not load existing index: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }

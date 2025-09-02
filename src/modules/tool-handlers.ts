@@ -2,7 +2,7 @@ import { z } from "zod";
 import { join } from "path";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { createLoggedResponse } from "./logger.js";
-import { getXppCodebasePath, setXppCodebasePath, XPP_EXTENSIONS } from "./config.js";
+import { XPP_EXTENSIONS } from "./config.js";
 import { AppConfig } from "./app-config.js";
 import { AOTStructureManager } from "./aot-structure.js";
 import { ObjectIndexManager } from "./object-index.js";
@@ -30,7 +30,8 @@ export class ToolHandlers {
     
     const params = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
@@ -99,11 +100,12 @@ export class ToolHandlers {
     });
     const { path, showHidden } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
-    const fullPath = path ? join(getXppCodebasePath(), path) : getXppCodebasePath();
+    const fullPath = path ? join(xppPath, path) : xppPath;
     const entries = await getDirectoryListing(fullPath, showHidden);
     
     let content = `Directory: ${path || "/"}\n`;
@@ -124,11 +126,12 @@ export class ToolHandlers {
     });
     const { path } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
-    const fullPath = join(getXppCodebasePath(), path);
+    const fullPath = join(xppPath, path);
     const content = await safeReadFile(fullPath);
     
     return await createLoggedResponse(content, requestId, "read_file");
@@ -142,11 +145,12 @@ export class ToolHandlers {
     });
     const { searchTerm, path, extensions } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
-    const searchPath = path ? join(getXppCodebasePath(), path) : getXppCodebasePath();
+    const searchPath = path ? join(xppPath, path) : xppPath;
     const results = await searchInFiles(searchTerm, searchPath, extensions.length > 0 ? extensions : XPP_EXTENSIONS);
     
     let content = `Search results for "${searchTerm}":\n`;
@@ -167,7 +171,8 @@ export class ToolHandlers {
     });
     const { objectName, objectType } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
@@ -197,7 +202,8 @@ export class ToolHandlers {
     });
     const { className } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
@@ -208,7 +214,7 @@ export class ToolHandlers {
       throw new Error(`Class "${className}" not found in the codebase.`);
     }
     
-    const classPath = join(getXppCodebasePath(), classObjects[0].path);
+    const classPath = join(xppPath, classObjects[0].path);
     const classInfo = await parseXppClass(classPath);
     
     if (classInfo.error) {
@@ -258,7 +264,8 @@ export class ToolHandlers {
     });
     const { tableName } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
@@ -269,7 +276,7 @@ export class ToolHandlers {
       throw new Error(`Table "${tableName}" not found in the codebase.`);
     }
     
-    const tablePath = join(getXppCodebasePath(), tableObjects[0].path);
+    const tablePath = join(xppPath, tableObjects[0].path);
     const tableInfo = await parseXppTable(tablePath);
     
     if (tableInfo.error) {
@@ -326,19 +333,20 @@ export class ToolHandlers {
     });
     const { objectType, forceRebuild } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
     let content = "";
     
     if (objectType) {
-      const results = await ObjectIndexManager.buildIndexByType(getXppCodebasePath(), objectType, forceRebuild);
+      const results = await ObjectIndexManager.buildIndexByType(objectType, forceRebuild);
       content = `Index build complete for ${objectType}:\n`;
       content += `- Indexed: ${results.indexedCount} objects\n`;
       content += `- Skipped: ${results.skippedCount} objects\n`;
     } else {
-      await ObjectIndexManager.buildFullIndex(getXppCodebasePath(), forceRebuild);
+      await ObjectIndexManager.buildFullIndex(forceRebuild);
       const stats = ObjectIndexManager.getStats();
       content = `Full index build complete:\n`;
       content += `- Total objects: ${stats.totalObjects}\n\n`;
@@ -353,13 +361,14 @@ export class ToolHandlers {
 
   static async listObjectsByType(args: any, requestId: string): Promise<any> {
     const schema = z.object({
-      objectType: z.string(),
+      objectType: z.string().optional().default("CLASSES"), // Default to CLASSES if not specified
       sortBy: z.enum(["name", "package", "size"]).optional().default("name"),
-      limit: z.number().optional(),
+      limit: z.number().optional().default(50), // Default limit if not specified
     });
     const { objectType, sortBy, limit } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
@@ -393,7 +402,8 @@ export class ToolHandlers {
     });
     const { searchTerm, searchPath, extensions, maxResults } = schema.parse(args);
     
-    if (!getXppCodebasePath()) {
+    const xppPath = AppConfig.getXppPath();
+    if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
@@ -431,28 +441,49 @@ export class ToolHandlers {
       // Try to get additional information from VS2022 service if available
       let vs2022ServiceInfo = null;
       try {
-        const { D365ServiceClient } = await import('./d365-service-client.js');
-        const client = new D365ServiceClient();
-        await client.connect();
+        // Wrap the entire D365 service interaction in a more robust error handler
+        const servicePromise = (async () => {
+          const { D365ServiceClient } = await import('./d365-service-client.js');
+          const client = new D365ServiceClient();
+          
+          // Set up error handler for the client to prevent unhandled errors
+          client.on('error', (error) => {
+            console.warn('D365 Service Client error (handled):', error.message);
+          });
+          
+          await client.connect();
+          
+          // Get service health and models from VS2022 service
+          const [healthStatus, serviceModels] = await Promise.all([
+            client.healthCheck().catch(() => ({ status: 'unavailable' })),
+            client.getModels().catch(() => null)
+          ]);
+          
+          const result = {
+            status: healthStatus.status || 'connected',
+            modelsCount: serviceModels?.length || 0,
+            serviceModels: serviceModels || [],
+            lastUpdated: new Date().toISOString()
+          };
+          
+          await client.disconnect();
+          return result;
+        })();
         
-        // Get service health and models from VS2022 service
-        const [healthStatus, serviceModels] = await Promise.all([
-          client.healthCheck().catch(() => ({ status: 'unavailable' })),
-          client.getModels().catch(() => null)
-        ]);
+        // Add a timeout to prevent hanging
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Service connection timeout')), 5000);
+        });
         
-        vs2022ServiceInfo = {
-          status: healthStatus.status || 'connected',
-          modelsCount: serviceModels?.length || 0,
-          serviceModels: serviceModels || [],
-          lastUpdated: new Date().toISOString()
-        };
+        vs2022ServiceInfo = await Promise.race([servicePromise, timeoutPromise]);
         
-        await client.disconnect();
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Service connection failed';
+        console.warn('D365 Service unavailable:', errorMessage);
+        
         vs2022ServiceInfo = {
           status: 'unavailable',
-          error: error instanceof Error ? error.message : 'Service connection failed',
+          error: errorMessage,
           lastUpdated: new Date().toISOString()
         };
       }
@@ -471,7 +502,7 @@ export class ToolHandlers {
           customModels: groupedModels.custom.length,
           standardModels: groupedModels.standard.length,
           indexedObjects: config.indexStats.totalObjects,
-          serverStatus: vs2022ServiceInfo?.status || 'unknown'
+          serverStatus: (vs2022ServiceInfo as any)?.status || 'unknown'
         }
       };
       
