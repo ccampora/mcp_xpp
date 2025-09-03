@@ -57,7 +57,7 @@ config/
 │   └── ... (553 object types)
 ├── d365-model-config.json
 ├── strategy-config.json
-└── aot-structure.json
+└── d365-aot-structure.json
 ```
 
 ## X++ File Types

@@ -312,7 +312,7 @@ The MCP X++ Server provides 12 comprehensive tools for D365 F&O codebase analysi
 - `find_xpp_object`: Find and analyze X++ objects by name with optional type filtering (CLASSES, TABLES, FORMS, etc.)
 - `get_class_methods`: Get detailed method signatures and information for specific X++ classes
 - `get_table_structure`: Get detailed table structure including fields, indexes, and relations
-- `discover_object_types_json`: Return the raw JSON structure from aot-structure.json file
+- `discover_object_types_json`: Return the raw JSON structure from d365-aot-structure.json file
 
 ### Index Management & Search
 - `build_object_index`: Build or update the object index for faster searches with optional type-specific or force rebuild options
@@ -717,7 +717,7 @@ To use this server with Claude Desktop, Visual Studio, or other MCP clients:
 ### Configuration System
 
 **JSON Configuration Files:**
-- `config/aot-structure.json` - AOT object type definitions and structure
+- `config/d365-aot-structure.json` - AOT object type definitions and structure
 - `config/d365-model-config.json` - D365 model templates and metadata
 - `config/d365-object-templates.json` - Object creation templates
 
