@@ -143,7 +143,7 @@ namespace D365MetadataService.Services
 
         private NamedPipeServerStream CreatePipeServerInstance()
         {
-            // Create pipe with security settings
+            // Create pipe with security settings for proper access control
             var pipeSecurity = new PipeSecurity();
             var identity = new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null);
             var accessRule = new PipeAccessRule(identity, PipeAccessRights.ReadWrite, AccessControlType.Allow);
@@ -152,13 +152,12 @@ namespace D365MetadataService.Services
             return new NamedPipeServerStream(
                 _pipeName,
                 PipeDirection.InOut,
-                NamedPipeServerStream.MaxAllowedServerInstances,
+                _config.MaxConnections,
                 PipeTransmissionMode.Message,
                 PipeOptions.Asynchronous | PipeOptions.WriteThrough,
                 4096, // inBufferSize
                 4096, // outBufferSize
-                pipeSecurity
-            );
+                pipeSecurity);
         }
 
         private void CleanupCompletedHandlers()
