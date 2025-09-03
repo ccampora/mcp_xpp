@@ -229,7 +229,7 @@ export class AOTStructureCacheManager {
       const categorizedTypes: Record<string, any> = {};
       let categorizedCount = 0;
       
-      reflectionData.discoveredTypes.forEach((type: any) => {
+      reflectionData.types.forEach((type: any) => {
         const categoryInfo = this.categorizeType(type.Name);
         
         if (!categorizedTypes[categoryInfo.category]) {
