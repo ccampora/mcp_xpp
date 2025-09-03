@@ -3,8 +3,11 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using D365MetadataService.Models;
 using D365MetadataService.Services;
+using D365MetadataService.Handlers;
 using Serilog;
 
 namespace D365MetadataService
@@ -29,13 +32,14 @@ namespace D365MetadataService
                 var config = LoadConfiguration();
                 _logger.Information("Configuration loaded successfully");
 
-                // Initialize D365 Object Factory (simplified version for testing)
-                var objectFactory = new D365ObjectFactory(config.D365Config, _logger);
-                _logger.Information("D365 Object Factory initialized");
+                // Set up dependency injection
+                var services = new ServiceCollection();
+                ConfigureServices(services, config);
+                var serviceProvider = services.BuildServiceProvider();
 
-                // Initialize Named Pipe Server
-                _namedPipeServer = new NamedPipeServer(config, objectFactory, _logger);
-                _logger.Information("Using Named Pipes transport");
+                // Get the Named Pipe Server from DI container
+                _namedPipeServer = serviceProvider.GetRequiredService<NamedPipeServer>();
+                _logger.Information("Using Named Pipes transport with Handler pattern");
 
                 // Handle graceful shutdown
                 Console.CancelKeyPress += OnCancelKeyPress;
@@ -68,6 +72,40 @@ namespace D365MetadataService
                 _logger?.Information("=== D365 Metadata Service Shutdown Complete ===");
                 Log.CloseAndFlush();
             }
+        }
+
+        private static void ConfigureServices(IServiceCollection services, ServiceConfiguration config)
+        {
+            // Register configuration
+            services.AddSingleton(config);
+            services.AddSingleton(_logger);
+
+            // Register D365 Object Factory
+            services.AddSingleton<D365ObjectFactory>(sp =>
+                new D365ObjectFactory(config.D365Config, sp.GetRequiredService<ILogger>()));
+
+            // Register all request handlers
+            services.AddSingleton<IRequestHandler, CreateObjectHandler>();
+            services.AddSingleton<IRequestHandler, HealthCheckHandler>();
+            services.AddSingleton<IRequestHandler, PingHandler>();
+            services.AddSingleton<IRequestHandler, ParameterSchemasHandler>();
+            services.AddSingleton<IRequestHandler, ValidationHandler>();
+            services.AddSingleton<IRequestHandler, AssociateHandler>();
+            services.AddSingleton<IRequestHandler, ModelsHandler>();
+            services.AddSingleton<IRequestHandler, AOTStructureHandler>();
+            services.AddSingleton<IRequestHandler, SetupInfoHandler>();
+            services.AddSingleton<IRequestHandler, ShutdownHandler>(sp =>
+                new ShutdownHandler(sp.GetRequiredService<ILogger>(), () => Environment.Exit(0)));
+
+            // Register handler factory
+            services.AddSingleton<RequestHandlerFactory>();
+
+            // Register Named Pipe Server
+            services.AddSingleton<NamedPipeServer>(sp =>
+                new NamedPipeServer(
+                    sp.GetRequiredService<RequestHandlerFactory>(),
+                    sp.GetRequiredService<ILogger>(),
+                    config.MaxConnections));
         }
 
         private static void InitializeLogging()
