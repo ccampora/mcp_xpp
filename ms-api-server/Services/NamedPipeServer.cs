@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
-using System.Reflection;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -26,6 +24,7 @@ namespace D365MetadataService.Services
         private readonly D365ObjectFactory _objectFactory;
         private readonly ILogger _logger;
         private readonly string _pipeName;
+        private readonly int _maxConnections; // Store once during initialization
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly List<Task> _activePipeHandlers;
         private bool _isRunning;
@@ -36,6 +35,7 @@ namespace D365MetadataService.Services
             _objectFactory = objectFactory ?? throw new ArgumentNullException(nameof(objectFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _pipeName = "mcp-xpp-d365-service";
+            _maxConnections = _config.MaxConnections; // Initialize once
             _cancellationTokenSource = new CancellationTokenSource();
             _activePipeHandlers = new List<Task>();
         }
@@ -55,12 +55,12 @@ namespace D365MetadataService.Services
                 _logger.Information("D365 Metadata Service starting on Named Pipe: {PipeName}", _pipeName);
                 _logger.Information("Service Configuration: {@Config}", new { 
                     PipeName = _pipeName,
-                    MaxConnections = _config.MaxConnections, 
+                    MaxConnections = _maxConnections, 
                     _config.D365Config.DefaultModel,
                     AssemblyPath = Path.GetFileName(_config.D365Config.MetadataAssemblyPath) 
                 });
 
-                // Start accepting connections
+                // Start accepting connections using the Microsoft pattern (multiple pipe instances)
                 _ = AcceptConnectionsAsync(_cancellationTokenSource.Token);
 
                 _logger.Information("Named Pipe Server is ready to accept connections");
@@ -78,7 +78,7 @@ namespace D365MetadataService.Services
             if (!_isRunning)
                 return;
 
-            _logger.Information("Stopping Named Pipe Server...");
+            _logger.Information("Stopping Named Pipe Server - signaling {ThreadCount} server threads to stop...", _activePipeHandlers.Count);
 
             _isRunning = false;
             _cancellationTokenSource?.Cancel();
@@ -87,6 +87,7 @@ namespace D365MetadataService.Services
             try
             {
                 await Task.WhenAll(_activePipeHandlers.ToArray());
+                _logger.Information("All {ThreadCount} server threads have stopped gracefully", _activePipeHandlers.Count);
             }
             catch (Exception ex)
             {
@@ -100,77 +101,80 @@ namespace D365MetadataService.Services
 
         private async Task AcceptConnectionsAsync(CancellationToken cancellationToken)
         {
-            while (!cancellationToken.IsCancellationRequested && _isRunning)
+            try
             {
-                try
+                _logger.Information("Starting connection acceptance - creating {MaxConnections} persistent server threads", _maxConnections);
+
+                // Create the fixed number of persistent server threads (Microsoft pattern)
+                for (int i = 0; i < _maxConnections; i++)
                 {
-                    // Check connection limit
-                    if (_activePipeHandlers.Count >= _config.MaxConnections)
+                    var serverTask = Task.Run(async () =>
                     {
-                        _logger.Warning("Maximum connections ({MaxConnections}) reached. Waiting for available slot...", _config.MaxConnections);
-                        await Task.Delay(100, cancellationToken);
-                        continue;
-                    }
+                        var threadId = $"Thread-{i}";
+                        _logger.Debug("Starting persistent server thread: {ThreadId}", threadId);
 
-                    // Create new pipe instance
-                    NamedPipeServerStream pipeServer;
-                    try
-                    {
-                        pipeServer = CreatePipeServerInstance();
-                    }
-                    catch (UnauthorizedAccessException)
-                    {
-                        _logger.Warning("Cannot create more pipe instances, likely at system limit. Current active connections: {ActiveCount}. Waiting...", _activePipeHandlers.Count);
-                        await Task.Delay(1000, cancellationToken);
-                        continue;
-                    }
-                    
-                    // Wait for client connection
-                    await pipeServer.WaitForConnectionAsync(cancellationToken);
+                        // Each thread continuously accepts connections until cancellation
+                        while (!cancellationToken.IsCancellationRequested)
+                        {
+                            try
+                            {
+                                // Each connection gets its own pipe instance
+                                using var pipeServer = CreatePipeServerInstance();
+                                var connectionId = Guid.NewGuid().ToString();
+                                
+                                _logger.Debug("Server thread {ThreadId} waiting for connection: {ConnectionId}", threadId, connectionId);
+                                await pipeServer.WaitForConnectionAsync(cancellationToken);
+                                _logger.Debug("Client connected to {ThreadId}: {ConnectionId}", threadId, connectionId);
 
-                    var connectionId = Guid.NewGuid().ToString();
-                    _logger.Debug("New client connection established: {ConnectionId}", connectionId);
+                                // Handle the client with this dedicated pipe instance
+                                await HandleClientAsync(pipeServer, connectionId, cancellationToken);
+                                _logger.Debug("Client {ConnectionId} handling completed on {ThreadId}", connectionId, threadId);
+                                
+                                // After handling this client, loop back to accept another connection
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                // Expected during shutdown - break out of the loop
+                                _logger.Debug("Server thread {ThreadId} cancelled", threadId);
+                                break;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "Error in server thread {ThreadId}, will retry", threadId);
+                                // Don't break - continue accepting new connections
+                                await Task.Delay(1000, cancellationToken); // Brief delay before retry
+                            }
+                        }
 
-                    // Handle client in background
-                    var handlerTask = HandleClientAsync(pipeServer, connectionId, cancellationToken);
-                    _activePipeHandlers.Add(handlerTask);
+                        _logger.Debug("Server thread {ThreadId} exiting", threadId);
+                    }, cancellationToken);
 
-                    // Clean up completed handlers
-                    CleanupCompletedHandlers();
+                    _activePipeHandlers.Add(serverTask);
                 }
-                catch (OperationCanceledException)
-                {
-                    // Expected during shutdown
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    if (!cancellationToken.IsCancellationRequested)
-                    {
-                        _logger.Error(ex, "Error accepting client connections");
-                        await Task.Delay(1000, cancellationToken); // Brief delay before retrying
-                    }
-                }
+
+                _logger.Information("Created {ThreadCount} persistent server threads, continuously accepting connections", _maxConnections);
+
+                // Wait for all server threads to complete (only happens during shutdown)
+                await Task.WhenAll(_activePipeHandlers.ToArray());
+                
+                _logger.Information("All server threads completed - server shutdown");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Fatal error in connection acceptance");
             }
         }
 
         private NamedPipeServerStream CreatePipeServerInstance()
         {
-            // Create pipe with security settings for proper access control
-            var pipeSecurity = new PipeSecurity();
-            var identity = new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null);
-            var accessRule = new PipeAccessRule(identity, PipeAccessRights.ReadWrite, AccessControlType.Allow);
-            pipeSecurity.SetAccessRule(accessRule);
-
+            _logger.Debug("Creating Named Pipe Server instance");
             return new NamedPipeServerStream(
                 _pipeName,
                 PipeDirection.InOut,
-                _config.MaxConnections,
+                _maxConnections, // Use configured max connections to prevent UnauthorizedAccessException
                 PipeTransmissionMode.Message,
-                PipeOptions.Asynchronous | PipeOptions.WriteThrough,
-                4096, // inBufferSize
-                4096, // outBufferSize
-                pipeSecurity);
+                PipeOptions.Asynchronous
+            );
         }
 
         private void CleanupCompletedHandlers()
@@ -186,42 +190,25 @@ namespace D365MetadataService.Services
 
         private async Task HandleClientAsync(NamedPipeServerStream pipeServer, string connectionId, CancellationToken cancellationToken)
         {
-            // Create timeout for the entire client session
-            using var sessionTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_config.SessionTimeoutSeconds));
-            using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, sessionTimeoutCts.Token);
-            
-            var sessionStartTime = DateTime.UtcNow;
-            var lastActivityTime = DateTime.UtcNow;
-            
             try
             {
-                _logger.Information("Client connected: {ConnectionId}, Session timeout: {SessionTimeout}s", 
-                    connectionId, _config.SessionTimeoutSeconds);
+                _logger.Debug("Handling client connection: {ConnectionId}", connectionId);
 
                 var buffer = new byte[4096];
                 var messageBuilder = new StringBuilder();
 
-                while (!combinedCts.Token.IsCancellationRequested && pipeServer.IsConnected)
+                while (!cancellationToken.IsCancellationRequested && pipeServer.IsConnected)
                 {
-                    CancellationTokenSource readTimeoutCts = null;
                     try
                     {
-                        // Create timeout for individual read operations
-                        readTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_config.ReadTimeoutSeconds));
-                        using var readCts = CancellationTokenSource.CreateLinkedTokenSource(combinedCts.Token, readTimeoutCts.Token);
-                        
-                        var bytesRead = await pipeServer.ReadAsync(buffer, 0, buffer.Length, readCts.Token);
+                        var bytesRead = await pipeServer.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
                         
                         if (bytesRead == 0)
                         {
                             // Client disconnected
-                            _logger.Information("Client disconnected gracefully: {ConnectionId}, Session duration: {Duration}ms", 
-                                connectionId, (DateTime.UtcNow - sessionStartTime).TotalMilliseconds);
+                            _logger.Debug("Client disconnected: {ConnectionId}", connectionId);
                             break;
                         }
-
-                        // Update activity timestamp
-                        lastActivityTime = DateTime.UtcNow;
 
                         var data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                         messageBuilder.Append(data);
@@ -230,75 +217,24 @@ namespace D365MetadataService.Services
                         string completeMessage;
                         while ((completeMessage = ExtractCompleteMessage(messageBuilder)) != null)
                         {
-                            await ProcessMessageAsync(completeMessage, pipeServer, connectionId);
+                            await ProcessMessageAsync(pipeServer, completeMessage, connectionId);
                         }
                     }
-                    catch (OperationCanceledException) when (readTimeoutCts?.Token.IsCancellationRequested == true)
-                    {
-                        // Read operation timed out
-                        _logger.Warning("Read timeout for client {ConnectionId} ({ReadTimeout}s), closing connection", 
-                            connectionId, _config.ReadTimeoutSeconds);
-                        break;
-                    }
-                    catch (OperationCanceledException) when (sessionTimeoutCts.Token.IsCancellationRequested)
-                    {
-                        // Session timed out
-                        _logger.Warning("Session timeout for client {ConnectionId} ({SessionTimeout}s), closing connection. Last activity: {LastActivity}s ago", 
-                            connectionId, _config.SessionTimeoutSeconds, (DateTime.UtcNow - lastActivityTime).TotalSeconds);
-                        break;
-                    }
-                    catch (IOException ex) when (ex.Message.Contains("pipe has been ended") || ex.Message.Contains("pipe is being closed"))
+                    catch (IOException ex) when (ex.Message.Contains("pipe has been ended"))
                     {
                         // Client disconnected gracefully
-                        _logger.Information("Client disconnected gracefully: {ConnectionId}, Session duration: {Duration}ms", 
-                            connectionId, (DateTime.UtcNow - sessionStartTime).TotalMilliseconds);
+                        _logger.Debug("Client disconnected gracefully: {ConnectionId}", connectionId);
                         break;
-                    }
-                    catch (Exception ex)
-                    {
-                        // Unexpected error during read/write operation
-                        _logger.Warning(ex, "Unexpected error in client communication loop: {ConnectionId}", connectionId);
-                        break;
-                    }
-                    finally
-                    {
-                        // Clean up the read timeout cancellation token source
-                        readTimeoutCts?.Dispose();
                     }
                 }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
                 // Expected during shutdown
-                _logger.Information("Client connection {ConnectionId} cancelled due to service shutdown", connectionId);
-            }
-            catch (OperationCanceledException) when (sessionTimeoutCts.Token.IsCancellationRequested)
-            {
-                // Session timeout at the outer level
-                _logger.Warning("Client session {ConnectionId} timed out after {SessionTimeout}s, forcing disconnect", 
-                    connectionId, _config.SessionTimeoutSeconds);
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error handling client connection: {ConnectionId}", connectionId);
-            }
-            finally
-            {
-                // Cleanup
-                try
-                {
-                    if (pipeServer.IsConnected)
-                    {
-                        pipeServer.Disconnect();
-                    }
-                    pipeServer.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning(ex, "Error disposing pipe server for connection: {ConnectionId}", connectionId);
-                }
-                
-                _logger.Debug("Client connection closed: {ConnectionId}", connectionId);
             }
         }
 
@@ -317,14 +253,11 @@ namespace D365MetadataService.Services
             return null; // No complete message yet
         }
 
-        private async Task ProcessMessageAsync(string message, NamedPipeServerStream pipeServer, string connectionId)
+        private async Task ProcessMessageAsync(NamedPipeServerStream pipeServer, string message, string connectionId)
         {
             var startTime = DateTime.UtcNow;
             ServiceResponse response;
             string requestId = null;
-
-            // Add timeout for individual request processing
-            using var requestTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_config.RequestTimeoutSeconds));
 
             try
             {
@@ -338,23 +271,7 @@ namespace D365MetadataService.Services
                 else
                 {
                     requestId = request.Id; // Capture the request ID
-                    
-                    // Handle request with timeout
-                    var requestTask = HandleRequestAsync(request);
-                    var timeoutTask = Task.Delay(Timeout.Infinite, requestTimeoutCts.Token);
-                    
-                    var completedTask = await Task.WhenAny(requestTask, timeoutTask);
-                    
-                    if (completedTask == timeoutTask)
-                    {
-                        _logger.Warning("Request processing timeout ({RequestTimeout}s) for {ConnectionId}, Request: {RequestId}", 
-                            _config.RequestTimeoutSeconds, connectionId, requestId);
-                        response = ServiceResponse.CreateError($"Request processing timeout after {_config.RequestTimeoutSeconds} seconds");
-                    }
-                    else
-                    {
-                        response = await requestTask;
-                    }
+                    response = await HandleRequestAsync(request);
                 }
             }
             catch (JsonException ex)
@@ -374,7 +291,7 @@ namespace D365MetadataService.Services
             // Add performance timing
             response.ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
 
-            await SendResponseAsync(response, pipeServer, connectionId);
+            await SendResponseAsync(pipeServer, response, connectionId);
         }
 
         private async Task<ServiceResponse> HandleRequestAsync(ServiceRequest request)
@@ -410,10 +327,7 @@ namespace D365MetadataService.Services
                         return HandleSetupInfoAsync(request);
                     
                     case "aotstructure":
-                        return HandleAOTStructureAsync(request);
-                    
-                    case "aotmetadata":
-                        return HandleAOTMetadataAsync(request);
+                        return await HandleAOTStructureAsync(request);
                     
                     default:
                         return ServiceResponse.CreateError($"Unknown action: {request.Action}");
@@ -525,6 +439,77 @@ namespace D365MetadataService.Services
             }
         }
 
+        private async Task<ServiceResponse> HandleAOTStructureAsync(ServiceRequest request)
+        {
+            _logger.Information("Handling AOT Structure request: {@Request}", new { request.Action, request.Id });
+
+            try
+            {
+                // Load the D365 Metadata assembly
+                string assemblyPath = null;
+                if (!string.IsNullOrEmpty(_config.D365Config.MetadataAssemblyPath))
+                {
+                    assemblyPath = _config.D365Config.MetadataAssemblyPath;
+                }
+                else
+                {
+                    // Try to find it in VS2022 extension directory
+                    var extensionPath = GetVS2022ExtensionPath();
+                    if (extensionPath != null)
+                    {
+                        assemblyPath = Path.Combine(extensionPath, "Microsoft.Dynamics.AX.Metadata.dll");
+                    }
+                }
+
+                if (string.IsNullOrEmpty(assemblyPath) || !File.Exists(assemblyPath))
+                {
+                    return ServiceResponse.CreateError("Microsoft.Dynamics.AX.Metadata.dll not found");
+                }
+
+                // Load assembly and get types using reflection
+                var result = await Task.Run(() =>
+                {
+                    var assembly = System.Reflection.Assembly.LoadFrom(assemblyPath);
+                    var types = assembly.GetTypes()
+                        .Where(t => t.IsPublic && t.IsClass && !t.IsAbstract && t.Name.StartsWith("Ax"))
+                        .Select(t => new
+                        {
+                            Name = t.Name,
+                            FullName = t.FullName,
+                            Namespace = t.Namespace,
+                            BaseType = t.BaseType?.Name,
+                            Properties = t.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                                .Select(p => new
+                                {
+                                    Name = p.Name,
+                                    Type = p.PropertyType.Name,
+                                    CanRead = p.CanRead,
+                                    CanWrite = p.CanWrite
+                                }).ToArray()
+                        })
+                        .OrderBy(t => t.Name)
+                        .ToList();
+
+                    _logger.Information("Found {TypeCount} types from metadata assembly", types.Count);
+
+                    return new
+                    {
+                        totalTypes = types.Count,
+                        assemblyPath = assemblyPath,
+                        types = types,
+                        generatedAt = DateTime.UtcNow
+                    };
+                });
+
+                return ServiceResponse.CreateSuccess(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to process AOT structure request");
+                return ServiceResponse.CreateError($"AOT structure operation failed: {ex.Message}");
+            }
+        }
+
         private ServiceResponse HandleSetupInfoAsync(ServiceRequest request)
         {
             try
@@ -542,7 +527,7 @@ namespace D365MetadataService.Services
                     {
                         Transport = "NamedPipes",
                         PipeName = _pipeName,
-                        MaxConnections = _config.MaxConnections,
+                        MaxConnections = _maxConnections,
                         ServerVersion = "1.0.0"
                     },
                     Timestamp = DateTime.UtcNow
@@ -604,7 +589,7 @@ namespace D365MetadataService.Services
                 Status = "Healthy",
                 Timestamp = DateTime.UtcNow,
                 ActiveConnections = _activePipeHandlers.Count,
-                MaxConnections = _config.MaxConnections,
+                MaxConnections = _maxConnections,
                 ServiceInfo = new Dictionary<string, object>
                 {
                     ["Transport"] = "NamedPipes",
@@ -619,511 +604,20 @@ namespace D365MetadataService.Services
             return Task.FromResult(ServiceResponse.CreateSuccess(healthResult));
         }
 
-        private ServiceResponse HandleAOTStructureAsync(ServiceRequest request)
+        private async Task SendResponseAsync(NamedPipeServerStream pipeServer, ServiceResponse response, string connectionId)
         {
-            try
-            {
-                _logger.Information("Pure reflection-based AOT discovery - NO HARDCODED CATEGORIES");
-
-                var assemblyPath = _config.D365Config.MetadataAssemblyPath;
-                if (string.IsNullOrEmpty(assemblyPath) || !File.Exists(assemblyPath))
-                {
-                    return ServiceResponse.CreateError("Microsoft.Dynamics.AX.Metadata assembly path not configured or file not found");
-                }
-
-                var assembly = System.Reflection.Assembly.LoadFrom(assemblyPath);
-                var axTypes = assembly.GetTypes()
-                    .Where(t => t.Name.StartsWith("Ax") && 
-                               t.IsClass && 
-                               !t.IsAbstract && 
-                               t.IsPublic)
-                    .OrderBy(t => t.Name)
-                    .ToList();
-
-                _logger.Information("Discovered {TypeCount} Ax types from assembly reflection", axTypes.Count);
-
-                // Pure reflection discovery - NO categorization in service
-                var discoveredTypes = axTypes.Select(type => new
-                {
-                    Name = type.Name,
-                    FullName = type.FullName,
-                    BaseType = type.BaseType?.Name ?? "Object",
-                    Namespace = type.Namespace,
-                    IsAbstract = type.IsAbstract,
-                    IsSealed = type.IsSealed,
-                    IsGeneric = type.IsGenericType,
-                    Assembly = type.Assembly.GetName().Name,
-                    Description = ExtractTypeDescription(type),
-                    Attributes = ExtractTypeAttributes(type),
-                    Properties = GetTypeProperties(type),
-                    Methods = GetTypeMethods(type)
-                }).ToList();
-
-                var result = new
-                {
-                    discoveredAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                    assemblyPath = assemblyPath,
-                    totalTypes = axTypes.Count,
-                    discoveredTypes = discoveredTypes,
-                    message = "Pure reflection discovery - categorization handled by MCP server using configuration"
-                };
-
-                _logger.Information("Pure AOT reflection complete: {TotalTypes} types discovered", result.totalTypes);
-
-                return ServiceResponse.CreateSuccess(result);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to perform AOT reflection discovery");
-                return ServiceResponse.CreateError($"AOT discovery failed: {ex.Message}");
-            }
-        }
-
-        private string ExtractTypeDescription(Type type)
-        {
-            // Try to get description from various sources
-            
-            // 1. Check for Display/Description attributes
-            var displayAttr = type.GetCustomAttribute<System.ComponentModel.DisplayNameAttribute>();
-            if (displayAttr != null)
-                return displayAttr.DisplayName;
-
-            var descAttr = type.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>();
-            if (descAttr != null)
-                return descAttr.Description;
-
-            // 2. Generate description based on name patterns
-            return GenerateDescriptionFromName(type.Name);
-        }
-
-        private string GenerateDescriptionFromName(string typeName)
-        {
-            // Generate intelligent descriptions based on type name patterns
-            var patterns = new Dictionary<string, string>
-            {
-                { "AxClass", "Class definition for business logic" },
-                { "AxEnum", "Enumeration with predefined values" },
-                { "AxTable", "Database table for data storage" },
-                { "AxView", "Database view for data querying" },
-                { "AxForm", "User interface form" },
-                { "AxReport", "Report definition" },
-                { "AxQuery", "Data query definition" },
-                { "AxDataEntity", "Data entity for integration" },
-                { "AxMenu", "Navigation menu structure" },
-                { "AxSecurity", "Security configuration" },
-                { "AxWorkflow", "Workflow process definition" },
-                { "AxAggregate", "Aggregate data structure" },
-                { "AxEdt", "Extended data type definition" },
-                { "AxConfig", "Configuration setting" },
-                { "AxService", "Web service definition" },
-                { "AxResource", "Resource file" },
-                { "AxLabel", "Label file for localization" }
-            };
-
-            foreach (var pattern in patterns)
-            {
-                if (typeName.StartsWith(pattern.Key, StringComparison.OrdinalIgnoreCase))
-                {
-                    return pattern.Value;
-                }
-            }
-
-            // Check for common suffixes/patterns
-            return null; // Unknown description
-        }
-
-        private Dictionary<string, object> ExtractTypeAttributes(Type type)
-        {
-            var attributes = new Dictionary<string, object>();
-            
-            try
-            {
-                foreach (var attr in type.GetCustomAttributes())
-                {
-                    var attrName = attr.GetType().Name.Replace("Attribute", "");
-                    attributes[attrName] = attr.ToString();
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to extract attributes for type {TypeName}", type.Name);
-            }
-
-            return attributes;
-        }
-
-        private List<object> GetTypeProperties(Type type)
-        {
-            var properties = new List<object>();
-            
-            try
-            {
-                foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-                {
-                    if (prop.CanRead && prop.GetIndexParameters().Length == 0)
-                    {
-                        properties.Add(new
-                        {
-                            Name = prop.Name,
-                            Type = prop.PropertyType.Name,
-                            CanWrite = prop.CanWrite,
-                            IsStatic = prop.GetGetMethod()?.IsStatic ?? false
-                        });
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to extract properties for type {TypeName}", type.Name);
-            }
-
-            return properties.Take(10).ToList(); // Limit to first 10 properties
-        }
-
-        private List<object> GetTypeMethods(Type type)
-        {
-            var methods = new List<object>();
-            
-            try
-            {
-                foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-                {
-                    if (!method.IsSpecialName)
-                    {
-                        methods.Add(new
-                        {
-                            Name = method.Name,
-                            ReturnType = method.ReturnType.Name,
-                            Parameters = method.GetParameters().Select(p => new
-                            {
-                                Name = p.Name,
-                                Type = p.ParameterType.Name
-                            }).ToList()
-                        });
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to extract methods for type {TypeName}", type.Name);
-            }
-
-            return methods.Take(5).ToList(); // Limit to first 5 methods
-        }
-
-        private ServiceResponse HandleAOTMetadataAsync(ServiceRequest request)
-        {
-            try
-            {
-                _logger.Information("Discovering AOT metadata via pure reflection - NO HARDCODING");
-
-                var assemblyPath = _config.D365Config.MetadataAssemblyPath;
-                if (string.IsNullOrEmpty(assemblyPath) || !File.Exists(assemblyPath))
-                {
-                    return ServiceResponse.CreateError("Microsoft.Dynamics.AX.Metadata assembly path not configured or file not found");
-                }
-
-                var assembly = System.Reflection.Assembly.LoadFrom(assemblyPath);
-                var axTypes = assembly.GetTypes()
-                    .Where(t => t.Name.StartsWith("Ax") && 
-                               t.IsClass && 
-                               !t.IsAbstract && 
-                               t.IsPublic)
-                    .OrderBy(t => t.Name)
-                    .ToList();
-
-                _logger.Information("Analyzing {TypeCount} Ax types for metadata discovery", axTypes.Count);
-
-                // Discover metadata via pure reflection analysis
-                var typeMetadata = axTypes.Select(type => new
-                {
-                    Name = type.Name,
-                    FullName = type.FullName,
-                    BaseType = type.BaseType?.Name ?? "Object",
-                    Namespace = type.Namespace,
-                    Assembly = type.Assembly.GetName().Name,
-                    
-                    // Discover creation capabilities via reflection
-                    CreationMetadata = AnalyzeCreationCapabilities(type),
-                    
-                    // Discover file system patterns via naming analysis
-                    FileSystemMetadata = AnalyzeFileSystemPatterns(type),
-                    
-                    // Discover relationships via type hierarchy analysis
-                    RelationshipMetadata = AnalyzeTypeRelationships(type),
-                    
-                    // Extract all attributes for further analysis
-                    Attributes = ExtractTypeAttributes(type),
-                    
-                    // Analyze constructors and factory methods
-                    ConstructorInfo = AnalyzeConstructors(type)
-                }).ToList();
-
-                var result = new
-                {
-                    discoveredAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                    assemblyPath = assemblyPath,
-                    totalTypes = axTypes.Count,
-                    typeMetadata = typeMetadata,
-                    message = "Pure reflection metadata discovery - no hardcoded patterns"
-                };
-
-                _logger.Information("AOT metadata discovery complete: {TotalTypes} types analyzed", result.totalTypes);
-
-                return ServiceResponse.CreateSuccess(result);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to perform AOT metadata discovery");
-                return ServiceResponse.CreateError($"AOT metadata discovery failed: {ex.Message}");
-            }
-        }
-
-        private object AnalyzeCreationCapabilities(Type type)
-        {
-            // Analyze if the type can be created via reflection
-            try
-            {
-                var constructors = type.GetConstructors();
-                var hasDefaultConstructor = constructors.Any(c => c.GetParameters().Length == 0);
-                var hasPublicConstructors = constructors.Any(c => c.IsPublic);
-                
-                // Look for factory methods
-                var factoryMethods = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .Where(m => m.ReturnType == type && 
-                               (m.Name.StartsWith("Create") || m.Name.StartsWith("New") || m.Name.StartsWith("Build")))
-                    .Select(m => new { Name = m.Name, ParameterCount = m.GetParameters().Length })
-                    .ToList();
-
-                return new
-                {
-                    HasDefaultConstructor = hasDefaultConstructor,
-                    HasPublicConstructors = hasPublicConstructors,
-                    ConstructorCount = constructors.Length,
-                    FactoryMethods = factoryMethods,
-                    IsInstantiable = !type.IsAbstract && hasPublicConstructors
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to analyze creation capabilities for {TypeName}", type.Name);
-                return new { Error = ex.Message };
-            }
-        }
-
-        private object AnalyzeFileSystemPatterns(Type type)
-        {
-            // Discover file system patterns via naming analysis
-            try
-            {
-                var typeName = type.Name;
-                
-                // Infer folder pattern from type name (remove common prefixes/suffixes)
-                string folderPattern = typeName;
-                if (folderPattern.StartsWith("Ax"))
-                    folderPattern = folderPattern.Substring(2);
-                
-                // Infer file extensions based on type characteristics
-                var inferredExtensions = new List<string>();
-                
-                // Check if it's likely a code type (.xpp) or metadata type (.xml)
-                var hasCodeProperties = type.GetProperties()
-                    .Any(p => p.Name.Contains("Source") || p.Name.Contains("Code") || p.Name.Contains("Method"));
-                
-                if (hasCodeProperties)
-                    inferredExtensions.Add(".xpp");
-                
-                inferredExtensions.Add(".xml"); // Most D365 objects have XML metadata
-
-                return new
-                {
-                    InferredFolderPattern = folderPattern,
-                    InferredExtensions = inferredExtensions,
-                    TypeNameLength = typeName.Length,
-                    HasPrefix = typeName.StartsWith("Ax"),
-                    NamePatternAnalysis = AnalyzeNamePattern(typeName)
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to analyze file system patterns for {TypeName}", type.Name);
-                return new { Error = ex.Message };
-            }
-        }
-
-        private object AnalyzeTypeRelationships(Type type)
-        {
-            // Analyze type relationships and hierarchy
-            try
-            {
-                var baseTypes = new List<string>();
-                var currentType = type.BaseType;
-                while (currentType != null && currentType != typeof(object))
-                {
-                    baseTypes.Add(currentType.Name);
-                    currentType = currentType.BaseType;
-                }
-
-                var interfaces = type.GetInterfaces()
-                    .Select(i => i.Name)
-                    .ToList();
-
-                var derivedTypesInAssembly = type.Assembly.GetTypes()
-                    .Where(t => t.BaseType == type)
-                    .Select(t => t.Name)
-                    .ToList();
-
-                return new
-                {
-                    BaseTypeChain = baseTypes,
-                    Interfaces = interfaces,
-                    DerivedTypes = derivedTypesInAssembly,
-                    IsLeafType = derivedTypesInAssembly.Count == 0,
-                    InheritanceDepth = baseTypes.Count
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to analyze relationships for {TypeName}", type.Name);
-                return new { Error = ex.Message };
-            }
-        }
-
-        private object AnalyzeConstructors(Type type)
-        {
-            try
-            {
-                var constructors = type.GetConstructors()
-                    .Select(c => new
-                    {
-                        IsPublic = c.IsPublic,
-                        ParameterCount = c.GetParameters().Length,
-                        Parameters = c.GetParameters().Select(p => new
-                        {
-                            Name = p.Name,
-                            Type = p.ParameterType.Name,
-                            HasDefaultValue = p.HasDefaultValue
-                        }).ToList()
-                    }).ToList();
-
-                return new
-                {
-                    Constructors = constructors,
-                    HasParameterlessConstructor = constructors.Any(c => c.ParameterCount == 0),
-                    PublicConstructorCount = constructors.Count(c => c.IsPublic)
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to analyze constructors for {TypeName}", type.Name);
-                return new { Error = ex.Message };
-            }
-        }
-
-        private object AnalyzeNamePattern(string typeName)
-        {
-            // Analyze type name patterns without hardcoding specific patterns
-            var analysis = new
-            {
-                StartsWithAx = typeName.StartsWith("Ax"),
-                Length = typeName.Length,
-                HasNumbers = typeName.Any(char.IsDigit),
-                HasUnderscore = typeName.Contains('_'),
-                CamelCaseWords = SplitCamelCase(typeName).ToList(),
-                CommonSuffixes = DetectCommonSuffixes(typeName),
-                PossibleAcronyms = DetectPossibleAcronyms(typeName)
-            };
-
-            return analysis;
-        }
-
-        private IEnumerable<string> SplitCamelCase(string input)
-        {
-            var words = new List<string>();
-            var currentWord = new StringBuilder();
-
-            for (int i = 0; i < input.Length; i++)
-            {
-                char c = input[i];
-                
-                if (char.IsUpper(c) && currentWord.Length > 0)
-                {
-                    words.Add(currentWord.ToString());
-                    currentWord.Clear();
-                }
-                
-                currentWord.Append(c);
-            }
-
-            if (currentWord.Length > 0)
-            {
-                words.Add(currentWord.ToString());
-            }
-
-            return words;
-        }
-
-        private List<string> DetectCommonSuffixes(string typeName)
-        {
-            var commonSuffixes = new[] { "Extension", "Base", "View", "Entity", "Reference", "Collection", "Manager", "Service", "Provider", "Factory", "Handler" };
-            return commonSuffixes.Where(suffix => typeName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-
-        private List<string> DetectPossibleAcronyms(string typeName)
-        {
-            // Detect sequences of uppercase letters as possible acronyms
-            var acronyms = new List<string>();
-            var current = new StringBuilder();
-            
-            foreach (char c in typeName)
-            {
-                if (char.IsUpper(c))
-                {
-                    current.Append(c);
-                }
-                else
-                {
-                    if (current.Length > 1) // More than one uppercase letter
-                    {
-                        acronyms.Add(current.ToString());
-                    }
-                    current.Clear();
-                }
-            }
-            
-            if (current.Length > 1)
-            {
-                acronyms.Add(current.ToString());
-            }
-            
-            return acronyms;
-        }
-
-        private async Task SendResponseAsync(ServiceResponse response, NamedPipeServerStream pipeServer, string connectionId)
-        {
-            // Add timeout for response sending
-            using var responseTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_config.ResponseTimeoutSeconds));
-            
             try
             {
                 var json = JsonConvert.SerializeObject(response, Formatting.None);
                 var data = Encoding.UTF8.GetBytes(json + "\n"); // Add newline delimiter
 
-                await pipeServer.WriteAsync(data, 0, data.Length, responseTimeoutCts.Token);
-                await pipeServer.FlushAsync(responseTimeoutCts.Token);
+                await pipeServer.WriteAsync(data, 0, data.Length);
 
                 _logger.Debug("Response sent to client {ConnectionId}: {ResponseSize} bytes", connectionId, data.Length);
-            }
-            catch (OperationCanceledException) when (responseTimeoutCts.Token.IsCancellationRequested)
-            {
-                _logger.Warning("Response send timeout ({ResponseTimeout}s) for client {ConnectionId}", 
-                    _config.ResponseTimeoutSeconds, connectionId);
-                throw new TimeoutException($"Failed to send response to client {connectionId} within {_config.ResponseTimeoutSeconds} seconds");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to send response to client {ConnectionId}", connectionId);
-                throw;
             }
         }
     }
