@@ -63,6 +63,13 @@ namespace D365MetadataService.Models
     {
         public string PipeName { get; set; } = "mcp-xpp-d365-service";
         public int MaxConnections { get; set; } = 50;
+        
+        // Timeout configurations (in seconds)
+        public int SessionTimeoutSeconds { get; set; } = 300;  // 5 minutes
+        public int ReadTimeoutSeconds { get; set; } = 30;      // 30 seconds
+        public int RequestTimeoutSeconds { get; set; } = 120;  // 2 minutes
+        public int ResponseTimeoutSeconds { get; set; } = 30;  // 30 seconds
+        
         public D365Configuration D365Config { get; set; } = new D365Configuration();
     }
 
