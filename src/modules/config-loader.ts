@@ -8,7 +8,7 @@ const __dirname = dirname(__filename);
 
 // Configuration file paths - centralized constants
 export const CONFIG_PATHS = {
-  AOT_STRUCTURE: join(__dirname, '..', 'config', 'aot-structure.json'),
+  AOT_STRUCTURE: join(__dirname, '..', 'config', 'd365-aot-structure.json'),
   D365_MODEL_CONFIG: join(__dirname, '..', 'config', 'd365-model-config.json'),
   D365_OBJECT_TEMPLATES: join(__dirname, '..', 'config', 'd365-object-templates.json')
 } as const;

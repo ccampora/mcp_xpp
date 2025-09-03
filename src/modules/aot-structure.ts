@@ -111,8 +111,13 @@ export class AOTStructureManager {
                 discoveredTypes.add(value.objectType);
                 this.discoveredObjectTypes.set(value.objectType, {
                   displayName: key,
+                  typeName: value.objectType,
+                  category: 'Unknown', // Default category for legacy structure
                   folderPatterns: value.folderPatterns,
-                  fileExtensions: value.fileExtensions || ['.xml']
+                  fileExtensions: value.fileExtensions || ['.xml'],
+                  description: value.description || `${key} object type`,
+                  apiSupported: value.apiSupported || false,
+                  apiClass: value.apiClass
                 });
               }
               break;

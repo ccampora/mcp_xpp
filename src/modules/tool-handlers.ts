@@ -35,7 +35,7 @@ export class ToolHandlers {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
     
-    console.log(`🏗️ Creating ${params.objectType} '${params.objectName}' using direct VS2022 service integration...`);
+    console.log(`Creating ${params.objectType} '${params.objectName}' using direct VS2022 service integration...`);
     
     let content: string;
     const startTime = Date.now();
@@ -75,8 +75,8 @@ export class ToolHandlers {
       }
       
       const executionTime = Date.now() - startTime;
-      content += `\n\n📊 Performance: ${executionTime}ms using direct VS2022 service integration\n`;
-      content += `🎯 Direct Microsoft API: Zero configuration overhead\n`;
+      content += `\n\nPerformance: ${executionTime}ms using direct VS2022 service integration\n`;
+      content += `Direct Microsoft API: Zero configuration overhead\n`;
       
       return await createLoggedResponse(content, requestId, "create_xpp_object");
       
@@ -84,10 +84,10 @@ export class ToolHandlers {
       const executionTime = Date.now() - startTime;
       const errorMsg = error instanceof Error ? error.message : String(error);
       
-      content = `❌ Failed to create ${params.objectType} '${params.objectName}'\n\n`;
+      content = `Failed to create ${params.objectType} '${params.objectName}'\n\n`;
       content += `Error: ${errorMsg}\n\n`;
-      content += `� Execution time: ${executionTime}ms\n`;
-      content += `🔧 Ensure VS2022 service is running and object type is supported\n`;
+      content += `Execution time: ${executionTime}ms\n`;
+      content += `Ensure VS2022 service is running and object type is supported\n`;
       
       return await createLoggedResponse(content, requestId, "create_xpp_object");
     }
@@ -112,7 +112,7 @@ export class ToolHandlers {
     content += `Total items: ${entries.length}\n\n`;
     
     for (const entry of entries) {
-      const icon = entry.type === 'directory' ? '📁' : '📄';
+      const icon = entry.type === 'directory' ? '[DIR]' : '[FILE]';
       const size = entry.type === 'file' ? ` (${entry.size} bytes)` : '';
       content += `${icon} ${entry.name}${size}\n`;
     }
@@ -183,11 +183,11 @@ export class ToolHandlers {
     content += `:\n\n`;
     
     if (results.length === 0) {
-      content += "❌ No objects found. The object does not exist in the codebase.\n";
+      content += "No objects found. The object does not exist in the codebase.\n";
     } else {
-      content += `✅ Found ${results.length} object(s):\n\n`;
+      content += `Found ${results.length} object(s):\n\n`;
       for (const result of results) {
-        content += `📦 ${result.name}\n`;
+        content += `${result.name}\n`;
         content += `   Type: ${result.type}\n`;
         content += `   Path: ${result.path}\n\n`;
       }
@@ -419,11 +419,11 @@ export class ToolHandlers {
     
     for (const result of results) {
       if (result.type === 'object') {
-        content += `🎯 OBJECT: ${result.name} (${result.objectType})\n`;
+        content += `OBJECT: ${result.name} (${result.objectType})\n`;
         content += `   Package: ${result.package}\n`;
         content += `   Path: ${result.path}\n\n`;
       } else {
-        content += `📄 FILE: ${result.path}\n`;
+        content += `FILE: ${result.path}\n`;
         content += `   Line ${result.line}: ${result.content}\n\n`;
       }
     }

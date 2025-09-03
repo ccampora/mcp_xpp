@@ -45,7 +45,7 @@ export class ObjectCreators {
       await client.disconnect();
       
       if (result.Success) {
-        return `✅ Model '${modelName}' created successfully`;
+        return `Model '${modelName}' created successfully`;
       } else {
         throw new Error(result.Message || 'Model creation failed');
       }
@@ -72,13 +72,13 @@ export class ObjectCreators {
       await client.disconnect();
       
       if (result.Success) {
-        return `✅ Class '${className}' created successfully`;
+        return `Class '${className}' created successfully`;
       } else {
-        return `❌ Class creation for ${className} failed: ${result.Message || 'Unknown error'}`;
+        return `ERROR: Class creation for ${className} failed: ${result.Message || 'Unknown error'}`;
       }
     } catch (error) {
       await DiskLogger.logError(error, 'Class creation failed');
-      return `❌ Class creation for ${className} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      return `ERROR: Class creation for ${className} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
 
@@ -99,13 +99,13 @@ export class ObjectCreators {
       await client.disconnect();
       
       if (result.Success) {
-        return `✅ Table '${tableName}' created successfully`;
+        return `Table '${tableName}' created successfully`;
       } else {
-        return `❌ Table creation for ${tableName} failed: ${result.Message || 'Unknown error'}`;
+        return `ERROR: Table creation for ${tableName} failed: ${result.Message || 'Unknown error'}`;
       }
     } catch (error) {
       await DiskLogger.logError(error, 'Table creation failed');
-      return `❌ Table creation for ${tableName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      return `ERROR: Table creation for ${tableName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
 
@@ -126,13 +126,13 @@ export class ObjectCreators {
       await client.disconnect();
       
       if (result.Success) {
-        return `✅ Enum '${enumName}' created successfully`;
+        return `Enum '${enumName}' created successfully`;
       } else {
-        return `❌ Enum creation for ${enumName} failed: ${result.Message || 'Unknown error'}`;
+        return `ERROR: Enum creation for ${enumName} failed: ${result.Message || 'Unknown error'}`;
       }
     } catch (error) {
       await DiskLogger.logError(error, 'Enum creation failed');
-      return `❌ Enum creation for ${enumName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      return `ERROR: Enum creation for ${enumName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
 }

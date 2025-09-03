@@ -62,7 +62,7 @@ export class TransportManager {
     try {
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
-      await DiskLogger.logDebug("🚀 MCP X++ Server started with STDIO transport");
+      await DiskLogger.logDebug("MCP X++ Server started with STDIO transport");
     } catch (error) {
       await DiskLogger.logError(error, "STDIO transport startup");
       throw new Error(`Failed to start STDIO transport: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -102,7 +102,7 @@ export class TransportManager {
         DiskLogger.logDebug(`🌐 MCP X++ Server HTTP transport listening on ${host}:${port}`);
       });
 
-      await DiskLogger.logDebug(`🚀 MCP X++ Server started with HTTP transport on ${host}:${port}`);
+      await DiskLogger.logDebug(`MCP X++ Server started with HTTP transport on ${host}:${port}`);
     } catch (error) {
       await DiskLogger.logError(error, "HTTP transport startup");
       throw new Error(`Failed to start HTTP transport: ${error instanceof Error ? error.message : 'Unknown error'}`);

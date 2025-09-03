@@ -163,7 +163,7 @@ export class ToolDefinitions {
         },
         {
           name: "discover_object_types_json",
-          description: "Return the raw JSON structure from aot-structure.json file",
+          description: "Return the raw JSON structure from d365-aot-structure.json file",
           inputSchema: {
             type: "object",
             properties: {},

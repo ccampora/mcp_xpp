@@ -3,6 +3,11 @@ export interface AOTNodeConfig {
   folderPatterns?: string[];
   fileExtensions?: string[];
   objectType?: string;
+  creatable?: boolean;
+  icon?: string;
+  description?: string;
+  apiSupported?: boolean;
+  apiClass?: string;
   children?: { [key: string]: AOTNodeConfig };
 }
 
@@ -21,8 +26,14 @@ export interface AOTStructure {
 
 export interface DiscoveredTypeInfo {
   displayName: string;
+  typeName: string;
+  category: string;
+  description?: string;
   folderPatterns: string[];
   fileExtensions: string[];
+  namespace?: string;
+  apiSupported?: boolean;
+  apiClass?: string;
 }
 
 // Object index structure

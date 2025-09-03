@@ -86,7 +86,7 @@ export class DiskLogger {
     const logLine = `[${entry.timestamp}] ERROR ${context ? 'CONTEXT:' + context : ''} SIZE:${entry.size}b\n${JSON.stringify(error, null, 2)}\n${'='.repeat(80)}`;
     
     await this.appendToFile(LOG_FILE_DEBUG, logLine);
-    await this.logDebug(`❌ ERROR: ${context || 'Unknown'} (${entry.size} bytes)`);
+    await this.logDebug(`ERROR: ${context || 'Unknown'} (${entry.size} bytes)`);
   }
 
   static async logDebug(message: string): Promise<void> {
@@ -119,8 +119,8 @@ ${'='.repeat(100)}
       console.error('Failed to initialize log files:', error);
     }
     
-    console.error('🚀 MCP X++ Server logging initialized');
-    console.error(`📝 Logs writing to: ${LOG_DIR}`);
+    console.error('MCP X++ Server logging initialized');
+    console.error(`Logs writing to: ${LOG_DIR}`);
   }
 }
 

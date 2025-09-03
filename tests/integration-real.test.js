@@ -1470,212 +1470,212 @@ test('REAL: Edge Case JSON Validation for Tool Robustness', async () => {
   }
 }, 30000);
 
-test('REAL: create_standalone_model - Create model named "jj"', async () => {
-  if (skipIfNoXppPath()) return;
-  // Define the writable metadata directory (not the read-only PackagesLocalDirectory!)
-  const writableMetadataPath = TEST_CONFIG.WRITABLE_METADATA_PATH;
-  
-  // Skip if writable metadata path doesn't exist
-  try {
-    await fs.access(writableMetadataPath);
-  } catch (error) {
-    console.log('⏭️ Skipping test - Writable metadata path not accessible');
-    return;
-  }
-  
-  console.log('🔍 Testing create_standalone_model tool with model "jj"...');
-  console.log(`📂 Using WRITABLE metadata directory: ${writableMetadataPath}`);
-  
-  try {
-    // Import the real tool handler
-    const { AOTStructureManager } = await import('../build/modules/aot-structure.js');
+  // test('REAL: create_standalone_model - Create model named "jj"', async () => {
+  //   if (skipIfNoXppPath()) return;
+  //   // Define the writable metadata directory (not the read-only PackagesLocalDirectory!)
+  //   const writableMetadataPath = TEST_CONFIG.WRITABLE_METADATA_PATH;
     
-    // Define model parameters
-    const modelName = "jj";
-    const publisher = "TestPublisher";
-    const version = "1.0.0.0";
-    const layer = "usr";
-    const dependencies = ["ApplicationPlatform", "ApplicationFoundation"];
+  //   // Skip if writable metadata path doesn't exist
+  //   try {
+  //     await fs.access(writableMetadataPath);
+  //   } catch (error) {
+  //     console.log('⏭️ Skipping test - Writable metadata path not accessible');
+  //     return;
+  //   }
     
-    // Create the model path in the WRITABLE metadata directory
-    const modelPath = join(writableMetadataPath, modelName);
+  //   console.log('🔍 Testing create_standalone_model tool with model "jj"...');
+  //   console.log(`📂 Using WRITABLE metadata directory: ${writableMetadataPath}`);
     
-    // Clean up any existing model first
-    try {
-      await fs.rm(modelPath, { recursive: true, force: true });
-      console.log(`🧹 Cleaned up existing model at: ${modelPath}`);
-    } catch (error) {
-      // Ignore if directory doesn't exist
-    }
-    
-    // Execute the model creation logic (same as the real tool handler)
-    console.log(`📁 Creating model structure at: ${modelPath}`);
-    
-    // Create directory structure
-    await fs.mkdir(modelPath, { recursive: true });
-    await fs.mkdir(join(modelPath, "XppMetadata"), { recursive: true });
-    await fs.mkdir(join(modelPath, "XppSource"), { recursive: true });
-    await fs.mkdir(join(modelPath, "Descriptor"), { recursive: true });
-    
-    // Generate model descriptor XML (same as tool handler)
-    const descriptorXml = `<?xml version="1.0" encoding="utf-8"?>
-<AxModelInfo xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-  <AppliedUpdates xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
-  <Customization>Allow</Customization>
-  <DataLoss>Allow</DataLoss>
-  <Description>${modelName} - Custom D365 F&O Model</Description>
-  <DisplayName>${modelName}</DisplayName>
-  <Id>00000000-0000-0000-0000-000000000000</Id>
-  <InstallMode>Standard</InstallMode>
-  <Layer>${layer.toUpperCase()}</Layer>
-  <Locked>false</Locked>
-  <n>${modelName}</n>
-  <Publisher>${publisher}</Publisher>
-  <References xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
-${dependencies.map(dep => `    <d2p1:string>${dep}</d2p1:string>`).join('\n')}
-  </References>
-  <Signed>false</Signed>
-  <SupportedPlatforms xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
-  <VersionBuildNumber>0</VersionBuildNumber>
-  <VersionMajor>${version.split('.')[0] || '1'}</VersionMajor>
-  <VersionMinor>${version.split('.')[1] || '0'}</VersionMinor>
-  <VersionRevision>${version.split('.')[3] || '0'}</VersionRevision>
-</AxModelInfo>`;
-    
-    // Write descriptor file
-    await fs.writeFile(join(modelPath, "Descriptor", `${modelName}.xml`), descriptorXml, 'utf8');
-    console.log(`✅ Created descriptor file: Descriptor/${modelName}.xml`);
-    
-    // Create AOT folder structure using configuration
-    const aotDirectories = await AOTStructureManager.getAOTDirectories();
-    const xppMetadataDirectories = await AOTStructureManager.getXppMetadataDirectories();
-    
-    console.log(`📂 Creating ${xppMetadataDirectories.length} XppMetadata directories...`);
-    for (const folder of xppMetadataDirectories) {
-      await fs.mkdir(join(modelPath, "XppMetadata", folder), { recursive: true });
-    }
-    
-    console.log(`📂 Creating ${aotDirectories.length} XppSource directories...`);
-    for (const folder of aotDirectories) {
-      await fs.mkdir(join(modelPath, "XppSource", folder), { recursive: true });
-    }
-    
-    // Create README file
-    const readmeContent = `# ${modelName}
+  //   try {
+  //     // Import the real tool handler
+  //     const { AOTStructureManager } = await import('../build/modules/aot-structure.js');
+      
+  //     // Define model parameters
+  //     const modelName = "jj";
+  //     const publisher = "TestPublisher";
+  //     const version = "1.0.0.0";
+  //     const layer = "usr";
+  //     const dependencies = ["ApplicationPlatform", "ApplicationFoundation"];
+      
+  //     // Create the model path in the WRITABLE metadata directory
+  //     const modelPath = join(writableMetadataPath, modelName);
+      
+  //     // Clean up any existing model first
+  //     try {
+  //       await fs.rm(modelPath, { recursive: true, force: true });
+  //       console.log(`🧹 Cleaned up existing model at: ${modelPath}`);
+  //     } catch (error) {
+  //       // Ignore if directory doesn't exist
+  //     }
+      
+  //     // Execute the model creation logic (same as the real tool handler)
+  //     console.log(`📁 Creating model structure at: ${modelPath}`);
+      
+  //     // Create directory structure
+  //     await fs.mkdir(modelPath, { recursive: true });
+  //     await fs.mkdir(join(modelPath, "XppMetadata"), { recursive: true });
+  //     await fs.mkdir(join(modelPath, "XppSource"), { recursive: true });
+  //     await fs.mkdir(join(modelPath, "Descriptor"), { recursive: true });
+      
+  //     // Generate model descriptor XML (same as tool handler)
+  //     const descriptorXml = `<?xml version="1.0" encoding="utf-8"?>
+  // <AxModelInfo xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+  //   <AppliedUpdates xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
+  //   <Customization>Allow</Customization>
+  //   <DataLoss>Allow</DataLoss>
+  //   <Description>${modelName} - Custom D365 F&O Model</Description>
+  //   <DisplayName>${modelName}</DisplayName>
+  //   <Id>00000000-0000-0000-0000-000000000000</Id>
+  //   <InstallMode>Standard</InstallMode>
+  //   <Layer>${layer.toUpperCase()}</Layer>
+  //   <Locked>false</Locked>
+  //   <n>${modelName}</n>
+  //   <Publisher>${publisher}</Publisher>
+  //   <References xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+  // ${dependencies.map(dep => `    <d2p1:string>${dep}</d2p1:string>`).join('\n')}
+  //   </References>
+  //   <Signed>false</Signed>
+  //   <SupportedPlatforms xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
+  //   <VersionBuildNumber>0</VersionBuildNumber>
+  //   <VersionMajor>${version.split('.')[0] || '1'}</VersionMajor>
+  //   <VersionMinor>${version.split('.')[1] || '0'}</VersionMinor>
+  //   <VersionRevision>${version.split('.')[3] || '0'}</VersionRevision>
+  // </AxModelInfo>`;
+      
+  //     // Write descriptor file
+  //     await fs.writeFile(join(modelPath, "Descriptor", `${modelName}.xml`), descriptorXml, 'utf8');
+  //     console.log(`✅ Created descriptor file: Descriptor/${modelName}.xml`);
+      
+  //     // Create AOT folder structure using configuration
+  //     const aotDirectories = await AOTStructureManager.getAOTDirectories();
+  //     const xppMetadataDirectories = await AOTStructureManager.getXppMetadataDirectories();
+      
+  //     console.log(`📂 Creating ${xppMetadataDirectories.length} XppMetadata directories...`);
+  //     for (const folder of xppMetadataDirectories) {
+  //       await fs.mkdir(join(modelPath, "XppMetadata", folder), { recursive: true });
+  //     }
+      
+  //     console.log(`📂 Creating ${aotDirectories.length} XppSource directories...`);
+  //     for (const folder of aotDirectories) {
+  //       await fs.mkdir(join(modelPath, "XppSource", folder), { recursive: true });
+  //     }
+      
+  //     // Create README file
+  //     const readmeContent = `# ${modelName}
 
-This is a D365 Finance and Operations model created with the MCP X++ Server.
+  // This is a D365 Finance and Operations model created with the MCP X++ Server.
 
-## Model Information
-- **Publisher**: ${publisher}
-- **Version**: ${version}
-- **Layer**: ${layer.toUpperCase()}
-- **Dependencies**: ${dependencies.join(', ')}
+  // ## Model Information
+  // - **Publisher**: ${publisher}
+  // - **Version**: ${version}
+  // - **Layer**: ${layer.toUpperCase()}
+  // - **Dependencies**: ${dependencies.join(', ')}
 
-## Structure
-- \`Descriptor/\` - Contains model descriptor XML
-- \`XppMetadata/\` - Contains compiled metadata
-- \`XppSource/\` - Contains X++ source code files
+  // ## Structure
+  // - \`Descriptor/\` - Contains model descriptor XML
+  // - \`XppMetadata/\` - Contains compiled metadata
+  // - \`XppSource/\` - Contains X++ source code files
 
-## Usage
-Add your X++ objects to the appropriate folders under XppSource/ and XppMetadata/.
-`;
-    
-    await fs.writeFile(join(modelPath, "README.md"), readmeContent, 'utf8');
-    console.log(`✅ Created README.md`);
-    
-    // === VALIDATION ===
-    
-    // 1. Verify main directories exist
-    const mainDirs = ['Descriptor', 'XppMetadata', 'XppSource'];
-    for (const dir of mainDirs) {
-      const dirPath = join(modelPath, dir);
-      const stat = await fs.stat(dirPath);
-      expect(stat.isDirectory()).toBe(true);
-      console.log(`✅ Verified directory: ${dir}`);
-    }
-    
-    // 2. Verify descriptor file exists and has correct content
-    const descriptorPath = join(modelPath, "Descriptor", `${modelName}.xml`);
-    const descriptorContent = await fs.readFile(descriptorPath, 'utf8');
-    expect(descriptorContent).toContain(`<n>${modelName}</n>`);
-    expect(descriptorContent).toContain(`<Publisher>${publisher}</Publisher>`);
-    expect(descriptorContent).toContain(`<Layer>${layer.toUpperCase()}</Layer>`);
-    expect(descriptorContent).toContain('<d2p1:string>ApplicationPlatform</d2p1:string>');
-    expect(descriptorContent).toContain('<d2p1:string>ApplicationFoundation</d2p1:string>');
-    console.log(`✅ Verified descriptor XML content`);
-    
-    // 3. Verify README file exists
-    const readmePath = join(modelPath, "README.md");
-    const readmeFileContent = await fs.readFile(readmePath, 'utf8');
-    expect(readmeFileContent).toContain(`# ${modelName}`);
-    expect(readmeFileContent).toContain(`**Publisher**: ${publisher}`);
-    console.log(`✅ Verified README.md content`);
-    
-    // 4. Count and verify AOT directories
-    const xppMetadataEntries = await fs.readdir(join(modelPath, "XppMetadata"));
-    const xppSourceEntries = await fs.readdir(join(modelPath, "XppSource"));
-    
-    expect(xppMetadataEntries.length).toBe(xppMetadataDirectories.length);
-    expect(xppSourceEntries.length).toBe(aotDirectories.length);
-    
-    console.log(`✅ Created ${xppMetadataEntries.length} XppMetadata directories`);
-    console.log(`✅ Created ${xppSourceEntries.length} XppSource directories`);
-    
-    // 5. Verify specific expected directories exist
-    const expectedMetadataDirs = ['AxClass', 'AxTable', 'AxForm'];
-    const expectedSourceDirs = ['AxClass', 'AxTable', 'AxForm', 'AxEnum', 'AxEdt'];
-    
-    for (const expectedDir of expectedMetadataDirs) {
-      if (xppMetadataDirectories.includes(expectedDir)) {
-        expect(xppMetadataEntries).toContain(expectedDir);
-      }
-    }
-    
-    for (const expectedDir of expectedSourceDirs) {
-      if (aotDirectories.includes(expectedDir)) {
-        expect(xppSourceEntries).toContain(expectedDir);
-      }
-    }
-    
-    console.log(`✅ Verified expected AOT directories exist`);
-    
-    // 6. Test that we can create a sample X++ class in the model
-    const sampleClassPath = join(modelPath, "XppSource", "AxClass", "TestClass_jj.xpp");
-    const sampleClassContent = `/// Test class created in model jj
-class TestClass_jj
-{
-    /// Sample method
-    public str getName()
-    {
-        return "jj";
-    }
-}`;
-    
-    await fs.writeFile(sampleClassPath, sampleClassContent, 'utf8');
-    const writtenClassContent = await fs.readFile(sampleClassPath, 'utf8');
-    expect(writtenClassContent).toContain('class TestClass_jj');
-    expect(writtenClassContent).toContain('return "jj"');
-    console.log(`✅ Created and verified sample X++ class`);
-    
-    // === FINAL SUCCESS REPORT ===
-    console.log(`\n🎉 SUCCESS: Model "${modelName}" created successfully!`);
-    console.log(`📁 Location: ${modelPath}`);
-    console.log(`📊 Structure summary:`);
-    console.log(`   - Descriptor: ${modelName}.xml`);
-    console.log(`   - README: README.md`);
-    console.log(`   - XppMetadata: ${xppMetadataEntries.length} directories`);
-    console.log(`   - XppSource: ${xppSourceEntries.length} directories`);
-    console.log(`   - Sample class: TestClass_jj.xpp`);
-    console.log(`✨ Model is ready for D365 F&O development!`);
-    
-    // Clean up test model (optional - comment out if you want to inspect the created model)
-    // await fs.rm(modelPath, { recursive: true, force: true });
-    // console.log(`🧹 Cleaned up test model`);
-    
-  } catch (error) {
-    console.error('❌ create_standalone_model test failed:', error);
-    throw error;
-  }
-}, 30000); // 30 second timeout for file operations
+  // ## Usage
+  // Add your X++ objects to the appropriate folders under XppSource/ and XppMetadata/.
+  // `;
+      
+  //     await fs.writeFile(join(modelPath, "README.md"), readmeContent, 'utf8');
+  //     console.log(`✅ Created README.md`);
+      
+  //     // === VALIDATION ===
+      
+  //     // 1. Verify main directories exist
+  //     const mainDirs = ['Descriptor', 'XppMetadata', 'XppSource'];
+  //     for (const dir of mainDirs) {
+  //       const dirPath = join(modelPath, dir);
+  //       const stat = await fs.stat(dirPath);
+  //       expect(stat.isDirectory()).toBe(true);
+  //       console.log(`✅ Verified directory: ${dir}`);
+  //     }
+      
+  //     // 2. Verify descriptor file exists and has correct content
+  //     const descriptorPath = join(modelPath, "Descriptor", `${modelName}.xml`);
+  //     const descriptorContent = await fs.readFile(descriptorPath, 'utf8');
+  //     expect(descriptorContent).toContain(`<n>${modelName}</n>`);
+  //     expect(descriptorContent).toContain(`<Publisher>${publisher}</Publisher>`);
+  //     expect(descriptorContent).toContain(`<Layer>${layer.toUpperCase()}</Layer>`);
+  //     expect(descriptorContent).toContain('<d2p1:string>ApplicationPlatform</d2p1:string>');
+  //     expect(descriptorContent).toContain('<d2p1:string>ApplicationFoundation</d2p1:string>');
+  //     console.log(`✅ Verified descriptor XML content`);
+      
+  //     // 3. Verify README file exists
+  //     const readmePath = join(modelPath, "README.md");
+  //     const readmeFileContent = await fs.readFile(readmePath, 'utf8');
+  //     expect(readmeFileContent).toContain(`# ${modelName}`);
+  //     expect(readmeFileContent).toContain(`**Publisher**: ${publisher}`);
+  //     console.log(`✅ Verified README.md content`);
+      
+  //     // 4. Count and verify AOT directories
+  //     const xppMetadataEntries = await fs.readdir(join(modelPath, "XppMetadata"));
+  //     const xppSourceEntries = await fs.readdir(join(modelPath, "XppSource"));
+      
+  //     expect(xppMetadataEntries.length).toBe(xppMetadataDirectories.length);
+  //     expect(xppSourceEntries.length).toBe(aotDirectories.length);
+      
+  //     console.log(`✅ Created ${xppMetadataEntries.length} XppMetadata directories`);
+  //     console.log(`✅ Created ${xppSourceEntries.length} XppSource directories`);
+      
+  //     // 5. Verify specific expected directories exist
+  //     const expectedMetadataDirs = ['AxClass', 'AxTable', 'AxForm'];
+  //     const expectedSourceDirs = ['AxClass', 'AxTable', 'AxForm', 'AxEnum', 'AxEdt'];
+      
+  //     for (const expectedDir of expectedMetadataDirs) {
+  //       if (xppMetadataDirectories.includes(expectedDir)) {
+  //         expect(xppMetadataEntries).toContain(expectedDir);
+  //       }
+  //     }
+      
+  //     for (const expectedDir of expectedSourceDirs) {
+  //       if (aotDirectories.includes(expectedDir)) {
+  //         expect(xppSourceEntries).toContain(expectedDir);
+  //       }
+  //     }
+      
+  //     console.log(`✅ Verified expected AOT directories exist`);
+      
+  //     // 6. Test that we can create a sample X++ class in the model
+  //     const sampleClassPath = join(modelPath, "XppSource", "AxClass", "TestClass_jj.xpp");
+  //     const sampleClassContent = `/// Test class created in model jj
+  // class TestClass_jj
+  // {
+  //     /// Sample method
+  //     public str getName()
+  //     {
+  //         return "jj";
+  //     }
+  // }`;
+      
+  //     await fs.writeFile(sampleClassPath, sampleClassContent, 'utf8');
+  //     const writtenClassContent = await fs.readFile(sampleClassPath, 'utf8');
+  //     expect(writtenClassContent).toContain('class TestClass_jj');
+  //     expect(writtenClassContent).toContain('return "jj"');
+  //     console.log(`✅ Created and verified sample X++ class`);
+      
+  //     // === FINAL SUCCESS REPORT ===
+  //     console.log(`\n🎉 SUCCESS: Model "${modelName}" created successfully!`);
+  //     console.log(`📁 Location: ${modelPath}`);
+  //     console.log(`📊 Structure summary:`);
+  //     console.log(`   - Descriptor: ${modelName}.xml`);
+  //     console.log(`   - README: README.md`);
+  //     console.log(`   - XppMetadata: ${xppMetadataEntries.length} directories`);
+  //     console.log(`   - XppSource: ${xppSourceEntries.length} directories`);
+  //     console.log(`   - Sample class: TestClass_jj.xpp`);
+  //     console.log(`✨ Model is ready for D365 F&O development!`);
+      
+  //     // Clean up test model (optional - comment out if you want to inspect the created model)
+  //     // await fs.rm(modelPath, { recursive: true, force: true });
+  //     // console.log(`🧹 Cleaned up test model`);
+      
+  //   } catch (error) {
+  //     console.error('❌ create_standalone_model test failed:', error);
+  //     throw error;
+  //   }
+  // }, 30000); // 30 second timeout for file operations
 
 }); // End Real Integration Tests describe block

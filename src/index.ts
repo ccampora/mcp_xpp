@@ -3,7 +3,7 @@
 /**
  * MCP X++ Server - Template-First Architecture
  * 
- * 🏛️ FOUNDATIONAL DESIGN PRINCIPLE (August 29, 2025):
+ * FOUNDATIONAL DESIGN PRINCIPLE (August 29, 2025):
  * 
  * This server follows TEMPLATE-FIRST ARCHITECTURE:
  * - Objects are essentially STATIC throughout VS2022 extension lifecycle
@@ -89,7 +89,7 @@ async function runServer() {
     // Parse transport configuration from command line arguments
     const transportConfig = parseTransportConfig();
     
-    console.error(`🚀 Starting MCP X++ Server...`);
+    console.error(`Starting MCP X++ Server...`);
     console.error(`📡 Transport Configuration:`);
     console.error(`   STDIO: ${transportConfig.stdio ? 'enabled' : 'disabled'}`);
     if (transportConfig.http?.enabled) {
@@ -137,7 +137,7 @@ async function runServer() {
     
     // Log transport status
     const status = serverManager.getTransportStatus();
-    console.error(`✅ MCP X++ Server running successfully`);
+    console.error(`MCP X++ Server running successfully`);
     if (status) {
       console.error(`   Transport Status: STDIO=${status.stdio}, HTTP=${status.http}${status.httpPort ? ` (port ${status.httpPort})` : ''}`);
     }

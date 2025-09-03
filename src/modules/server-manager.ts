@@ -144,7 +144,7 @@ export class ServerManager {
     // Set server start time after successful connection
     this.serverStartTime = new Date();
     
-    await DiskLogger.logDebug("🚀 MCP X++ Server started with configured transports");
+    await DiskLogger.logDebug("MCP X++ Server started with configured transports");
   }
 
   /**

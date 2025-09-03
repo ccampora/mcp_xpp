@@ -138,7 +138,7 @@ class AppConfigManager {
     if (!this.config.xppPath || !this.config.xppMetadataFolder) {
       try {
         await DiskLogger.logDebug("Attempting to get setup configuration from VS2022 service...");
-        console.log("🔍 Attempting to get setup configuration from VS2022 service (30s timeout)...");
+        console.log("Attempting to get setup configuration from VS2022 service (30s timeout)...");
         
         const setupInfo = await this.getSetupFromVS2022Service(30000); // 30 second timeout
         if (setupInfo) {
@@ -148,12 +148,12 @@ class AppConfigManager {
           this.config.vs2022ExtensionPath = this.config.vs2022ExtensionPath || setupInfo.ExtensionPath;
           
           setupFromService = true;
-          console.log("✅ Setup configuration retrieved from VS2022 service");
+          console.log("Setup configuration retrieved from VS2022 service");
           await DiskLogger.logDebug(`Setup from VS2022 service: ${JSON.stringify(setupInfo, null, 2)}`);
         }
       } catch (error) {
         await DiskLogger.logDebug(`Failed to get setup from VS2022 service: ${error}`);
-        console.log("⚠️ Could not get setup from VS2022 service, falling back to manual configuration");
+        console.log("Could not get setup from VS2022 service, falling back to manual configuration");
       }
     }
 
@@ -184,7 +184,7 @@ class AppConfigManager {
         } catch (error) {
           const warningMsg = `VS2022 templates directory not found: ${templatesPath}`;
           await DiskLogger.logDebug(warningMsg);
-          console.warn(`⚠️ ${warningMsg}`);
+          console.warn(`WARNING: ${warningMsg}`);
         }
       } catch (error) {
         const errorMsg = `VS2022 extension path does not exist: ${this.config.vs2022ExtensionPath}`;
@@ -198,14 +198,14 @@ class AppConfigManager {
         if (autoDetectedPath) {
           this.config.vs2022ExtensionPath = autoDetectedPath;
           await DiskLogger.logDebug(`VS2022 extension path auto-detected: ${autoDetectedPath}`);
-          console.log(`✅ Auto-detected VS2022 extension path: ${autoDetectedPath}`);
+          console.log(`Auto-detected VS2022 extension path: ${autoDetectedPath}`);
         } else {
           await DiskLogger.logDebug("VS2022 extension path not provided and auto-detection failed");
-          console.log("ℹ️ VS2022 extension path not provided and could not be auto-detected");
+          console.log("VS2022 extension path not provided and could not be auto-detected");
         }
       } catch (error) {
         await DiskLogger.logDebug(`VS2022 auto-detection failed: ${error}`);
-        console.warn(`⚠️ VS2022 auto-detection failed: ${error}`);
+        console.warn(`VS2022 auto-detection failed: ${error}`);
       }
     }
 

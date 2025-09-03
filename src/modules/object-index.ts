@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import { join, relative, basename, extname, dirname } from "path";
 import { ObjectIndex } from "./types.js";
 import { AOTStructureManager } from "./aot-structure.js";
+import { AOTStructureCacheManager } from "./aot-structure-cache.js";
 import { isXppRelatedFile, getPackagePriority } from "./utils.js";
 import { MAX_FILE_SIZE } from "./config.js";
 import { AppConfig } from "./app-config.js";
@@ -129,7 +130,7 @@ export class ObjectIndexManager {
           const innerStats = await fs.stat(innerPackagePath);
           if (innerStats.isDirectory()) {
             // Found double-nested structure! Scan inner package for AOT folders
-            console.log(`📦 Found D365 package: ${packageName}/${packageName}`);
+            console.log(`Found D365 package: ${packageName}/${packageName}`);
             await this.scanDirectlyForAOTFolders(innerPackagePath, basePath, aotFolders, targetPatterns, packageName);
           } else {
             // Single-level package, scan normally but with less depth
@@ -142,7 +143,7 @@ export class ObjectIndexManager {
       }
     } catch (error) {
       // Skip directories we can't access
-      console.log(`⚠️ Could not access directory: ${relative(basePath, dirPath)}`);
+      console.log(`Could not access directory: ${relative(basePath, dirPath)}`);
     }
   }
 
@@ -169,13 +170,13 @@ export class ObjectIndexManager {
             const fullPath = join(packagePath, entry.name);
             const relativePath = relative(basePath, fullPath);
             aotFolders.set(fullPath, []);
-            console.log(`🎯 Found AOT folder: ${packageName} -> ${entry.name}`);
+            console.log(`Found AOT folder: ${packageName} -> ${entry.name}`);
           }
         }
       }
     } catch (error) {
       // Skip packages we can't access
-      console.log(`⚠️ Could not access package: ${packageName}`);
+      console.log(`Could not access package: ${packageName}`);
     }
   }
 
@@ -249,7 +250,7 @@ export class ObjectIndexManager {
             
             if (now - stats.mtime.getTime() > maxAgeMs) {
               await fs.unlink(filePath);
-              console.log(`🗑️ Cleaned up old cache file: ${entry.name}`);
+              console.log(`Cleaned up old cache file: ${entry.name}`);
               return entry.name;
             }
             return null;
@@ -264,7 +265,7 @@ export class ObjectIndexManager {
       const cleanedCount = results.filter(result => result !== null).length;
       
       if (cleanedCount > 0) {
-        console.log(`🗑️ Cache cleanup completed: ${cleanedCount} files removed`);
+        console.log(`Cache cleanup completed: ${cleanedCount} files removed`);
       }
     } catch (error) {
       console.error("Error cleaning up cache:", error);
@@ -272,30 +273,42 @@ export class ObjectIndexManager {
   }
 
   static async buildFullIndex(forceRebuild: boolean = false): Promise<void> {
-    // Get XPP path from AppConfig
+    // Always try to generate AOT structure cache first - it doesn't need XPP path
+    console.log('Phase 0.5: Generating AOT structure cache from VS2022 service...');
+    try {
+      const cacheManager = new AOTStructureCacheManager();
+      await cacheManager.generateAOTStructureCache();
+      console.log('   AOT structure cache updated successfully');
+    } catch (error) {
+      console.warn(`   AOT cache generation failed: ${(error as Error).message || error}`);
+      // Continue with index build even if cache generation fails
+    }
+
+    // Get XPP path from AppConfig for file indexing
     const basePath = this.getXppPath();
     if (!basePath) {
-      throw new Error("XPP codebase path not configured in AppConfig");
+      console.log('XPP codebase path not configured - only AOT cache was generated');
+      return;
     }
 
     if (!forceRebuild && this.index.size > 0) return;
 
-    console.log('🚀 Starting optimized full index build...');
+    console.log('Starting optimized full index build...');
     this.index.clear();
     
     // CRITICAL: Discover available object types from the filesystem first
-    console.log('🔍 Phase 0: Discovering available object types from filesystem...');
+    console.log('Phase 0: Discovering available object types from filesystem...');
     await AOTStructureManager.discoverAvailableObjectTypes(basePath);
     const discoveredTypes = AOTStructureManager.getAllDiscoveredTypes();
     console.log(`   Discovered ${discoveredTypes.size} object types from filesystem`);
 
     // Phase 1: Discover all AOT folders (much faster than full directory walk)
-    console.log('📁 Phase 1: Discovering all AOT folders...');
+    console.log('Phase 1: Discovering all AOT folders...');
     const aotFolders = await this.discoverAOTFolders(basePath);
     console.log(`   Found ${aotFolders.size} AOT folders across all packages`);
 
     // Phase 2: Index only AOT folders (targeted approach) - PARALLEL PROCESSING
-    console.log('📦 Phase 2: Indexing objects in discovered AOT folders...');
+    console.log('Phase 2: Indexing objects in discovered AOT folders...');
     const results = { indexedCount: 0, skippedCount: 0 };
     
     // Convert to array for batch processing
@@ -325,7 +338,7 @@ export class ObjectIndexManager {
       }));
       
       // Progress report after each batch
-      console.log(`   ✅ Batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(aotFolderPaths.length/BATCH_SIZE)} complete - ${results.indexedCount} objects indexed so far`);
+      console.log(`   Batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(aotFolderPaths.length/BATCH_SIZE)} complete - ${results.indexedCount} objects indexed so far`);
     }
 
     await this.saveIndex();
@@ -434,7 +447,7 @@ export class ObjectIndexManager {
       }
     } catch (error) {
       // Skip folders we can't access
-      console.log(`   ⚠️ Could not access folder: ${relative(basePath, aotFolderPath)}`);
+      console.log(`   Could not access folder: ${relative(basePath, aotFolderPath)}`);
     }
   }
 
