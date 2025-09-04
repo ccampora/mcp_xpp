@@ -22,18 +22,6 @@ export class ObjectIndexManager {
   private static index: Map<string, ObjectIndex> = new Map();
 
   /**
-   * Get the cache file path - automatically determined from MCP server location
-   */
-  private static getIndexPath(): string {
-    // Get the MCP server directory (where this module is located)
-    const currentModulePath = fileURLToPath(import.meta.url);
-    const mcpServerDir = join(dirname(currentModulePath), '..', '..');
-    const cacheDir = join(mcpServerDir, 'cache');
-    
-    return join(cacheDir, 'mcp-index.json');
-  }
-
-  /**
    * Get XPP codebase path from AppConfig
    */
   private static getXppPath(): string | null {
@@ -162,47 +150,13 @@ export class ObjectIndexManager {
     }
   }
 
-  static async loadIndex(): Promise<void> {
-    try {
-      const indexPath = this.getIndexPath();
-      if (await this.fileExists(indexPath)) {
-        const indexData = await fs.readFile(indexPath, 'utf-8');
-        const parsedIndex = JSON.parse(indexData);
-        this.index = new Map(Object.entries(parsedIndex.objects || {}));
-        console.log(`📂 Index loaded from: ${indexPath} (${this.index.size} objects)`);
-      } else {
-        console.log(`📂 No existing index found at: ${indexPath}`);
-      }
-    } catch (error) {
-      console.error("Error loading index:", error);
-      this.index.clear();
-    }
-  }
-
-  static async saveIndex(): Promise<void> {
-    try {
-      const indexPath = this.getIndexPath();
-      // Ensure the cache directory exists
-      const cacheDir = dirname(indexPath);
-      await fs.mkdir(cacheDir, { recursive: true });
-      
-      const indexData = {
-        lastUpdated: Date.now(),
-        version: "1.0",
-        objects: Object.fromEntries(this.index)
-      };
-      await fs.writeFile(indexPath, JSON.stringify(indexData, null, 2));
-      console.log(`💾 Index saved to: ${indexPath}`);
-    } catch (error) {
-      console.error("Error saving index:", error);
-    }
-  }
-
   /**
    * Get the cache directory path
    */
   static getCacheDirectory(): string {
-    return dirname(this.getIndexPath());
+    const currentModulePath = fileURLToPath(import.meta.url);
+    const mcpServerDir = join(dirname(currentModulePath), '..', '..');
+    return join(mcpServerDir, 'cache');
   }
 
   /**

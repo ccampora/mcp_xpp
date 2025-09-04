@@ -372,26 +372,50 @@ export class ToolHandlers {
     if (!xppPath) {
       throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
     }
+
+    let lookup: SQLiteObjectLookup | null = null;
     
-    const objects = ObjectIndexManager.listObjectsByType(objectType, sortBy, limit);
-    
-    // Get total count (before applying limit)
-    const totalCount = ObjectIndexManager.getObjectCountByType(objectType);
-    
-    const response = {
-      objectType,
-      totalCount,
-      objects: objects.map(obj => ({
-        name: obj.name,
-        package: obj.package,
-        path: obj.path,
-        size: obj.size
-      }))
-    };
-    
-    const content = JSON.stringify(response, null, 2);
-    
-    return await createLoggedResponse(content, requestId, "list_objects_by_type");
+    try {
+      lookup = new SQLiteObjectLookup();
+      const initialized = lookup.initialize();
+      if (!initialized) {
+        throw new Error("Failed to initialize SQLite lookup - database may not exist. Run build_object_index first.");
+      }
+      
+      // Find objects by type using SQLite
+      const allObjects = lookup.findObjectsByType(objectType);
+      
+      // Apply sorting
+      if (sortBy === "name") {
+        allObjects.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sortBy === "package") {
+        allObjects.sort((a, b) => a.package.localeCompare(b.package));
+      } else if (sortBy === "size") {
+        allObjects.sort((a, b) => (b.size || 0) - (a.size || 0));
+      }
+      
+      // Apply limit
+      const objects = allObjects.slice(0, limit);
+      
+      const response = {
+        objectType,
+        totalCount: allObjects.length,
+        objects: objects.map(obj => ({
+          name: obj.name,
+          package: obj.package,
+          path: obj.path,
+          size: obj.size || 0
+        }))
+      };
+      
+      const content = JSON.stringify(response, null, 2);
+      
+      return await createLoggedResponse(content, requestId, "list_objects_by_type");
+    } finally {
+      if (lookup) {
+        lookup.close();
+      }
+    }
   }
 
   static async smartSearch(args: any, requestId: string): Promise<any> {

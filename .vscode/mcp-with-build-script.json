@@ -1,0 +1,16 @@
+{
+	"servers": {
+		"mcp-xpp-server": {
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy", "RemoteSigned",
+				"-File", "./tools/build-and-run.ps1",
+				"-Action", "run",
+				"-Target", "both"
+			],
+			"cwd": "${workspaceFolder}",
+			"type": "stdio"
+		}
+	},
+	"inputs": []
+}

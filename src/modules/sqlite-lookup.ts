@@ -26,6 +26,17 @@ export interface LookupStats {
     types: number;
 }
 
+export interface AOTMetadata {
+    generatedAt: string;
+    totalTypes: number;
+    categorizedTypes: number;
+    uncategorizedTypes: number;
+    categorizationRate: string;
+    sourceAssembly: string;
+    generationTimeMs: number;
+    categories: Record<string, any>;
+}
+
 export class SQLiteObjectLookup {
     private db: Database.Database | null = null;
     private prepared: {
@@ -288,6 +299,83 @@ export class SQLiteObjectLookup {
             alternatives: matches.filter(m => m !== bestMatch),
             isAmbiguous: true
         };
+    }
+
+    /**
+     * Store AOT structure metadata in the database
+     */
+    public storeAOTMetadata(metadata: AOTMetadata): boolean {
+        if (!this.db) return false;
+        
+        try {
+            // Create metadata table if it doesn't exist
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS aot_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+                )
+            `);
+            
+            const insert = this.db.prepare(`
+                INSERT OR REPLACE INTO aot_metadata (key, value, updated_at)
+                VALUES (?, ?, strftime('%s', 'now'))
+            `);
+            
+            // Store metadata as JSON
+            insert.run('aot_structure', JSON.stringify(metadata));
+            
+            console.log('✅ AOT metadata stored in SQLite database');
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to store AOT metadata:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Retrieve AOT structure metadata from the database
+     */
+    public getAOTMetadata(): AOTMetadata | null {
+        if (!this.db) return null;
+        
+        try {
+            const select = this.db.prepare(`
+                SELECT value FROM aot_metadata WHERE key = ?
+            `);
+            
+            const row = select.get('aot_structure') as any;
+            if (!row) return null;
+            
+            return JSON.parse(row.value) as AOTMetadata;
+        } catch (error) {
+            console.error('❌ Failed to retrieve AOT metadata:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Check if AOT metadata exists and is recent
+     */
+    public isAOTMetadataStale(maxAgeHours: number = 24): boolean {
+        if (!this.db) return true;
+        
+        try {
+            const select = this.db.prepare(`
+                SELECT updated_at FROM aot_metadata WHERE key = ?
+            `);
+            
+            const row = select.get('aot_structure') as any;
+            if (!row) return true; // No metadata exists
+            
+            const now = Math.floor(Date.now() / 1000);
+            const maxAge = maxAgeHours * 60 * 60; // Convert hours to seconds
+            
+            return (now - row.updated_at) > maxAge;
+        } catch (error) {
+            console.error('❌ Failed to check AOT metadata staleness:', error);
+            return true; // Consider stale on error
+        }
     }
 
     /**

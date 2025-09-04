@@ -27,7 +27,6 @@ import { realpathSync } from "fs";
 // Import modules
 import { DiskLogger } from "./modules/logger.js";
 import { AppConfig } from "./modules/app-config.js";
-import { ObjectIndexManager } from "./modules/object-index.js";
 import { ServerManager } from "./modules/server-manager.js";
 
 // =============================================================================
@@ -120,14 +119,9 @@ async function runServer() {
 
     await DiskLogger.logStartup();
     
-    // Load object index if XPP path is available
+    // SQLite object index is initialized on-demand when tools are called
     if (xppPath) {
-      try {
-        await ObjectIndexManager.loadIndex();
-        await DiskLogger.logDebug(`Loaded object index for: ${xppPath}`);
-      } catch (error) {
-        await DiskLogger.logDebug(`Could not load existing index: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
+      await DiskLogger.logDebug(`Using SQLite object index for: ${xppPath}`);
     }
     
     // Initialize and start the server

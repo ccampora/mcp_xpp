@@ -1,8 +1,6 @@
-import { promises as fs } from "fs";
-import { join, dirname } from "path";
 import { D365ServiceClient } from "./d365-service-client.js";
 import { AppConfig } from "./app-config.js";
-import { fileURLToPath } from "url";
+import { SQLiteObjectLookup, AOTMetadata } from "./sqlite-lookup.js";
 
 /**
  * D365 metadata fields from reflection investigation
@@ -44,17 +42,6 @@ export class AOTStructureCacheManager {
       this.instance = new AOTStructureCacheManager();
     }
     return this.instance;
-  }
-
-  /**
-   * Get the AOT structure cache file path
-   */
-  private getCachePath(): string {
-    const currentModulePath = fileURLToPath(import.meta.url);
-    const mcpServerDir = join(dirname(currentModulePath), '..', '..');
-    const cacheDir = join(mcpServerDir, 'cache');
-    
-    return join(cacheDir, 'aot-structure-cache.json');
   }
 
   /**
@@ -215,12 +202,22 @@ export class AOTStructureCacheManager {
   /**
    * Generate categorized AOT structure cache
    * This is called as part of the index build process
+   * MIGRATED: Now saves to SQLite instead of JSON files
    */
   async generateAOTStructureCache(): Promise<void> {
     const startTime = Date.now();
     console.log('Generating AOT structure cache using Template-First architecture...');
 
+    let sqliteLookup: SQLiteObjectLookup | null = null;
+
     try {
+      // Initialize SQLite connection for storing metadata
+      sqliteLookup = new SQLiteObjectLookup();
+      const initialized = sqliteLookup.initialize();
+      if (!initialized) {
+        throw new Error('Failed to initialize SQLite database for AOT metadata storage');
+      }
+
       // Step 1: Get pure reflection data from VS2022 service  
       const reflectionData = await this.getReflectionDataFromService();
       
@@ -256,81 +253,118 @@ export class AOTStructureCacheManager {
       const categorizationRate = (categorizedCount / reflectionData.totalTypes * 100).toFixed(1);
       console.log(`Categorization complete: ${categorizedCount}/${reflectionData.totalTypes} types (${categorizationRate}%)`);
       
-      // Step 3: Generate complete structure
-      const completeStructure = {
-        metadata: {
-          generatedAt: new Date().toISOString(),
-          totalTypes: reflectionData.totalTypes,
-          categorizedTypes: categorizedCount,
-          uncategorizedTypes: reflectionData.totalTypes - categorizedCount,
-          categorizationRate: `${categorizationRate}%`,
-          sourceAssembly: reflectionData.assemblyPath,
-          generationTimeMs: Date.now() - startTime
-        },
-        categories: Object.entries(categorizedTypes)
-          .sort(([,a], [,b]) => (b as any).types.length - (a as any).types.length)
-          .reduce((acc, [key, value]) => {
-            acc[key] = value;
-            return acc;
-          }, {} as Record<string, any>)
+      // Step 3: Generate complete structure for SQLite storage
+      const sortedCategories = Object.entries(categorizedTypes)
+        .sort(([,a], [,b]) => (b as any).types.length - (a as any).types.length)
+        .reduce((acc, [key, value]) => {
+          acc[key] = value;
+          return acc;
+        }, {} as Record<string, any>);
+
+      const aotMetadata: AOTMetadata = {
+        generatedAt: new Date().toISOString(),
+        totalTypes: reflectionData.totalTypes,
+        categorizedTypes: categorizedCount,
+        uncategorizedTypes: reflectionData.totalTypes - categorizedCount,
+        categorizationRate: `${categorizationRate}%`,
+        sourceAssembly: reflectionData.assemblyPath,
+        generationTimeMs: Date.now() - startTime,
+        categories: sortedCategories
       };
       
-      // Step 4: Save cache
-      const cachePath = this.getCachePath();
-      await fs.mkdir(dirname(cachePath), { recursive: true });
-      await fs.writeFile(cachePath, JSON.stringify(completeStructure, null, 2));
+      // Step 4: Save to SQLite database instead of JSON file
+      const success = sqliteLookup.storeAOTMetadata(aotMetadata);
+      if (!success) {
+        throw new Error('Failed to store AOT metadata in SQLite database');
+      }
       
       // Cache in memory for quick access
-      AOTStructureCacheManager.cachedStructure = completeStructure;
+      AOTStructureCacheManager.cachedStructure = aotMetadata;
       
       const endTime = Date.now() - startTime;
       console.log(`AOT structure cache generated successfully in ${endTime}ms`);
-      console.log(`Cache saved to: ${cachePath}`);
-      console.log(`Categories: ${Object.keys(categorizedTypes).length}, Types: ${reflectionData.totalTypes}`);
+      console.log(`Metadata stored in SQLite database: cache/object-lookup.db`);
+      console.log(`Categories: ${Object.keys(sortedCategories).length}, Types: ${reflectionData.totalTypes}`);
       
     } catch (error) {
       console.error('Failed to generate AOT structure cache:', error);
       throw error;
+    } finally {
+      if (sqliteLookup) {
+        sqliteLookup.close();
+      }
     }
   }
 
   /**
-   * Load AOT structure cache from disk
+   * Load AOT structure cache from SQLite database
+   * MIGRATED: Now loads from SQLite instead of JSON files
    */
   async loadCache(): Promise<any> {
     if (AOTStructureCacheManager.cachedStructure) {
       return AOTStructureCacheManager.cachedStructure;
     }
 
+    let sqliteLookup: SQLiteObjectLookup | null = null;
+    
     try {
-      const cachePath = this.getCachePath();
-      const cacheContent = await fs.readFile(cachePath, 'utf8');
-      AOTStructureCacheManager.cachedStructure = JSON.parse(cacheContent);
-      return AOTStructureCacheManager.cachedStructure;
+      // Initialize SQLite connection
+      sqliteLookup = new SQLiteObjectLookup();
+      const initialized = sqliteLookup.initialize();
+      if (!initialized) {
+        return null; // No SQLite database found
+      }
+
+      // Try to load from SQLite
+      const aotMetadata = sqliteLookup.getAOTMetadata();
+      if (!aotMetadata) {
+        return null; // No AOT metadata found
+      }
+
+      // Cache in memory for quick access
+      AOTStructureCacheManager.cachedStructure = aotMetadata;
+      return aotMetadata;
+      
     } catch (error) {
       // Cache doesn't exist or is corrupted
       return null;
+    } finally {
+      if (sqliteLookup) {
+        sqliteLookup.close();
+      }
     }
   }
 
   /**
    * Check if cache needs refresh (called during index build)
+   * MIGRATED: Now checks SQLite instead of JSON files
    */
   async isCacheStale(): Promise<boolean> {
+    let sqliteLookup: SQLiteObjectLookup | null = null;
+    
     try {
-      const cache = await this.loadCache();
-      if (!cache || !cache.metadata.generatedAt) {
+      // Initialize SQLite connection
+      sqliteLookup = new SQLiteObjectLookup();
+      const initialized = sqliteLookup.initialize();
+      if (!initialized) {
+        return true; // No SQLite database, cache is stale
+      }
+
+      // Get AOT metadata from SQLite
+      const aotMetadata = sqliteLookup.getAOTMetadata();
+      if (!aotMetadata || !aotMetadata.generatedAt) {
         return true; // No cache or invalid cache
       }
 
-      // Check if cache is older than 24 hours
-      const cacheTime = new Date(cache.metadata.generatedAt).getTime();
-      const now = Date.now();
-      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-
-      return (now - cacheTime) > maxAge;
+      // Check if cache is older than 24 hours using SQLite helper
+      return sqliteLookup.isAOTMetadataStale(24); // 24 hours
+      
     } catch (error) {
       return true; // Error reading cache, consider stale
+    } finally {
+      if (sqliteLookup) {
+        sqliteLookup.close();
+      }
     }
   }
 
@@ -347,19 +381,21 @@ export class AOTStructureCacheManager {
 
   /**
    * Get category statistics from cache
+   * MIGRATED: Now works with SQLite-stored AOTMetadata structure
    */
   async getCategoryStats(): Promise<any> {
     const cache = await this.getCachedStructure();
     const stats: Record<string, number> = {};
     
+    // Handle the new AOTMetadata structure from SQLite
     Object.entries(cache.categories).forEach(([category, data]: [string, any]) => {
       stats[category] = data.types.length;
     });
 
     return {
       totalCategories: Object.keys(cache.categories).length,
-      totalTypes: cache.metadata.totalTypes,
-      categorizationRate: cache.metadata.categorizationRate,
+      totalTypes: cache.totalTypes, // Use totalTypes directly from AOTMetadata
+      categorizationRate: cache.categorizationRate, // Use categorizationRate directly from AOTMetadata
       categoryBreakdown: stats
     };
   }

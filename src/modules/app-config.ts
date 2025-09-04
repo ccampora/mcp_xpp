@@ -375,60 +375,72 @@ class AppConfigManager {
   }
 
   /**
-   * Read index statistics directly from the index file
+   * Read index statistics directly from the SQLite database
    */
   private async getIndexStatsFromFile(): Promise<{ totalObjects: number; objectTypes: Record<string, number> } | null> {
     try {
-      const indexPath = join(process.cwd(), 'cache', 'mcp-index.json');
-      const indexData = await fs.readFile(indexPath, 'utf-8');
-      const parsed = JSON.parse(indexData);
+      const { SQLiteObjectLookup } = await import('./sqlite-lookup.js');
+      const lookup = new SQLiteObjectLookup();
+      const initialized = lookup.initialize();
       
-      if (parsed.objects) {
-        const objects = Object.values(parsed.objects) as any[];
-        const totalObjects = objects.length;
-        const objectTypes: Record<string, number> = {};
-        
-        // Count objects by type
-        for (const obj of objects) {
-          if (obj.type) {
-            objectTypes[obj.type] = (objectTypes[obj.type] || 0) + 1;
-          }
-        }
-        
-        return { totalObjects, objectTypes };
+      if (!initialized) {
+        await DiskLogger.logDebug('SQLite database not available for stats');
+        return null;
       }
       
-      return null;
+      const stats = lookup.getStats();
+      if (!stats) {
+        lookup.close();
+        return null;
+      }
+      
+      // Get count by type - we need to query the database for this info
+      const objectTypes: Record<string, number> = {};
+      
+      // Common D365 object types to check
+      const commonTypes = ['CLASSES', 'TABLES', 'FORMS', 'REPORTS', 'ENUMS', 'VIEWS', 'EDTS'];
+      for (const type of commonTypes) {
+        const objects = lookup.findObjectsByType(type);
+        if (objects.length > 0) {
+          objectTypes[type] = objects.length;
+        }
+      }
+      
+      lookup.close();
+      
+      return { 
+        totalObjects: stats.totalObjects, 
+        objectTypes 
+      };
+      
     } catch (error) {
-      await DiskLogger.logDebug(`Could not read index stats from file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      await DiskLogger.logDebug(`Could not read index stats from SQLite: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return null;
     }
   }
 
   /**
-   * Get index metadata from the index file
+   * Get index metadata from the SQLite database
    */
   private async getIndexMetadata(): Promise<{ lastBuilt: string; indexSize: string; indexSizeInKB: number; indexPath: string }> {
     try {
-      const indexPath = join(process.cwd(), 'cache', 'mcp-index.json');
+      const dbPath = join(process.cwd(), 'cache', 'object-lookup.db');
       
       try {
-        const stats = await fs.stat(indexPath);
-        const indexData = await fs.readFile(indexPath, 'utf-8');
-        const parsed = JSON.parse(indexData);
+        const stats = await fs.stat(dbPath);
         
         return {
-          lastBuilt: parsed.lastUpdated ? new Date(parsed.lastUpdated).toISOString() : "Unknown",
+          lastBuilt: stats.mtime.toISOString(),
           indexSize: this.formatBytes(stats.size),
           indexSizeInKB: Math.round((stats.size / 1024) * 100) / 100, // Round to 2 decimal places
-          indexPath: indexPath
+          indexPath: dbPath
         };
       } catch {
         return {
           lastBuilt: "Never",
           indexSize: "0 KB",
           indexSizeInKB: 0,
-          indexPath: indexPath
+          indexPath: dbPath
         };
       }
     } catch (error) {
