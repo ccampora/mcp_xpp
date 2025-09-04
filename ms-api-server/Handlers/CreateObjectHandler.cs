@@ -7,7 +7,8 @@ using System.Threading.Tasks;
 namespace D365MetadataService.Handlers
 {
     /// <summary>
-    /// Handler for object creation requests
+    /// Handler for object creation requests using dynamic object factory
+    /// Supports all 575+ D365 object types dynamically
     /// </summary>
     public class CreateObjectHandler : BaseRequestHandler
     {
@@ -33,31 +34,13 @@ namespace D365MetadataService.Handlers
                 return ServiceResponse.CreateError("ObjectType is required for create operations");
             }
 
-            Logger.Information("Creating {ObjectType} object", request.ObjectType);
+            Logger.Information("Creating {ObjectType} object using dynamic factory", request.ObjectType);
 
-            ObjectCreationResult result;
-
-            switch (request.ObjectType.ToLower())
-            {
-                case "axclass":
-                    result = await _objectFactory.CreateAxClassAsync(request.Parameters ?? new System.Collections.Generic.Dictionary<string, object>());
-                    break;
-
-                case "axenum":
-                    result = await _objectFactory.CreateAxEnumAsync(request.Parameters ?? new System.Collections.Generic.Dictionary<string, object>());
-                    break;
-
-                case "axproject":
-                    result = await _objectFactory.CreateAxProjectAsync(request.Parameters ?? new System.Collections.Generic.Dictionary<string, object>());
-                    break;
-
-                case "vs2022project":
-                    result = await _objectFactory.CreateVS2022ProjectAsync(request.Parameters ?? new System.Collections.Generic.Dictionary<string, object>());
-                    break;
-
-                default:
-                    return ServiceResponse.CreateError($"Unsupported object type: {request.ObjectType}");
-            }
+            // Use the dynamic factory to create any object type
+            var result = await _objectFactory.CreateObjectDynamicallyAsync(
+                request.ObjectType, 
+                request.Parameters ?? new System.Collections.Generic.Dictionary<string, object>()
+            );
 
             return ServiceResponse.CreateSuccess(result);
         }

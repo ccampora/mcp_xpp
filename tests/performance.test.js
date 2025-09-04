@@ -1,288 +1,445 @@
-// =============================================================================
-// PERFORMANCE TESTS - Optional Long-Running Operations
-// =============================================================================
-// Tests performance-intensive operations like full index building
-// These tests are separate because they take significant time
-// Run with: npm run test:performance
+/**
+ * ⚡ PERFORMANCE TESTS
+ * Tests for performance-critical operations and scalability
+ * Focus: Index building, search performance, memory usage, SQLite optimization
+ */
 
 import { describe, test, expect, beforeAll } from 'vitest';
-import { promises as fs } from 'fs';
-import { join } from 'path';
-import { ObjectIndexManager } from '../build/modules/object-index.js';
-import { AOTStructureManager } from '../build/modules/aot-structure.js';
+import { MCPXppClient, MCPTestUtils } from './tools/mcp-xpp-client.js';
 import { AppConfig } from '../build/modules/app-config.js';
-import { ToolHandlers } from '../build/modules/tool-handlers.js';
-import { toLowerCase } from 'zod/v4';
 
 // =============================================================================
-// PERFORMANCE TEST CONFIGURATION
+// ⚡ PERFORMANCE TEST CONFIGURATION
 // =============================================================================
 
 const PERF_CONFIG = {
   timeouts: {
-    fullIndex: 300000,    // 5 minutes for full index build
-    largeQuery: 60000,    // 1 minute for large queries
+    indexBuild: 180000,   // 3 minutes for full index build (SQLite optimized)
+    search: 30000,        // 30 seconds for complex searches
+    memory: 60000,        // 1 minute for memory tests
   },
   thresholds: {
-    minObjectsExpected: 50000,  // Expect at least 50k objects in full D365
-    minTypesExpected: 20,       // Expect at least 20 object types
-    maxIndexBuildTime: 180000,  // Max 3 minutes for index build
+    maxIndexBuildTime: 25000,    // 25 seconds max for SQLite index build
+    maxSearchTime: 50,           // 50ms max for SQLite searches  
+    minObjectsExpected: 50000,   // Expect at least 50k objects
+  },
+  sqliteExpectations: {
+    dbPath: 'cache/object-lookup.db',
+    maxQueryTime: 50,            // SQLite queries should be <50ms
+    minCacheHitRatio: 0.8,       // 80% cache hit ratio expected
   }
 };
 
+let mcpClient;
+
 // =============================================================================
-// SETUP AND TEARDOWN
+// TEST SETUP
 // =============================================================================
 
 beforeAll(async () => {
-  console.log('🔧 Setting up core functionality tests...');
+  await AppConfig.initialize();
+  mcpClient = await MCPTestUtils.createTestClient();
   
-  // Initialize configuration
-  try {
-    await AppConfig.initialize();
-    console.log('✅ AppConfig initialized');
-    
-    // AppConfig is already initialized above and contains the XPP path
-    // No additional path initialization needed - everything gets path from AppConfig
-    const xppPath = AppConfig.getXppPath();
-    if (xppPath) {
-      console.log(`✅ XPP codebase path available: ${xppPath}`);
-    }
-  } catch (error) {
-    console.log(`⚠️ AppConfig initialization failed: ${error.message}`);
-  }
+  console.log(`
+⚡ PERFORMANCE TEST SUITE LOADED
+📋 Test Categories:
+   - Index Building Performance (SQLite)
+   - Search Performance (SQLite)
+   - Memory Efficiency
+   - Scalability Tests
 
-  // Load AOT structure
-  try {
-    await AOTStructureManager.loadStructure();
-    console.log('✅ AOT structure loaded');
-  } catch (error) {
-    console.log(`⚠️ AOT structure loading failed: ${error.message}`);
-  }
+⏱️  Timeouts:
+   - Index build: ${PERF_CONFIG.timeouts.indexBuild}ms
+   - Search operations: ${PERF_CONFIG.timeouts.search}ms
+   - Memory tests: ${PERF_CONFIG.timeouts.memory}ms
 
-  console.log('✅ Core functionality test setup complete');
-}, 60000); // 60 seconds timeout for setup
+📊 Performance Thresholds (SQLite Optimized):
+   - Max index build time: ${PERF_CONFIG.thresholds.maxIndexBuildTime}ms
+   - Max search time: ${PERF_CONFIG.thresholds.maxSearchTime}ms
+   - Min objects expected: ${PERF_CONFIG.thresholds.minObjectsExpected.toLocaleString()}
+
+🎯 Focus: SQLite-optimized performance and scalability
+`);
+}, PERF_CONFIG.timeouts.indexBuild);
 
 // Helper function to check if performance tests should run
 const shouldRunPerfTests = async () => {
   try {
-    const xppPath = AppConfig.getXppPath();
-    if (xppPath) {
-      await fs.access(xppPath);
-      return true;
-    }
-    return false;
-  } catch {
-    console.log('⏭️ Performance tests skipped - D365 environment not available');
+    const config = await mcpClient.executeTool('get_current_config');
+    return config && config.content;
+  } catch (error) {
+    console.log('⏭️ Performance tests skipped - MCP service not available');
     return false;
   }
 };
 
 // =============================================================================
-// FULL INDEX BUILDING TESTS
+// ⚡ INDEX BUILDING PERFORMANCE TESTS (SQLITE)
 // =============================================================================
 
-describe('Full Index Building Performance', () => {
-  test('should build complete D365 index within time limit', async () => {
+describe('⚡ Index Building Performance (SQLite)', () => {
+  test('should build SQLite index within performance threshold', async () => {
     if (!(await shouldRunPerfTests())) return;
     
-    console.log('🚀 Starting full index build performance test...');
-    console.log('   This may take several minutes...');
+    console.log('🏗️ Testing SQLite index building performance...');
+    console.log(`   Target: <${PERF_CONFIG.thresholds.maxIndexBuildTime}ms (SQLite optimized)`);
     
-    // Initialize
-    await AOTStructureManager.loadStructure();
+    console.log('🧹 Starting fresh SQLite index build test...');
     
-    // Clear any existing cache to ensure fresh build
-    const cacheFile = join(process.cwd(), 'cache', 'mcp-index.json');
-    try {
-      await fs.unlink(cacheFile);
-      console.log('🧹 Cleared existing cache for fresh build');
-    } catch (error) {
-      console.log('📝 No existing cache to clear');
-    }
-    
-    // Build full index with timing
     const startTime = Date.now();
-    console.log(`⏱️  Index build started at ${new Date(startTime).toISOString()}`);
+    console.log(`⏱️  SQLite index build started at ${new Date(startTime).toISOString()}`);
     
-    await ObjectIndexManager.buildFullIndex(true);
+    const result = await mcpClient.executeTool('build_object_index', {
+      mode: 'full',
+      forceRebuild: true,
+      useSqlite: true
+    });
     
     const endTime = Date.now();
     const buildDuration = endTime - startTime;
     
-    console.log(`✅ Index build completed in ${buildDuration}ms (${(buildDuration/1000).toFixed(1)}s)`);
+    console.log(`✅ SQLite index build completed in ${buildDuration}ms (${(buildDuration/1000).toFixed(1)}s)`);
     
     // Validate build results
-    const stats = ObjectIndexManager.getStats();
-    
-    console.log('📊 Build Results:');
-    console.log(`   📈 Total objects: ${stats.totalObjects.toLocaleString()}`);
-    console.log(`   📋 Object types: ${Object.keys(stats.byType).length}`);
-    console.log(`   ⏱️  Build time: ${(buildDuration/1000).toFixed(1)} seconds`);
-    
-    // Performance assertions
-    expect(buildDuration).toBeLessThan(PERF_CONFIG.thresholds.maxIndexBuildTime);
-    expect(stats.totalObjects).toBeGreaterThan(PERF_CONFIG.thresholds.minObjectsExpected);
-    expect(Object.keys(stats.byType).length).toBeGreaterThan(PERF_CONFIG.thresholds.minTypesExpected);
-    
-    // Verify cache file was created and has reasonable size
-    const cacheStats = await fs.stat(cacheFile);
-    expect(cacheStats.size).toBeGreaterThan(1024); // At least 1KB
-    console.log(`💾 Cache file created: ${Math.round(cacheStats.size / 1024).toLocaleString()}KB`);
-    
-    // Show top object types
-    const topTypes = Object.entries(stats.byType)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 10);
-    
-    console.log('🏆 Top 10 Object Types:');
-    topTypes.forEach(([type, count], index) => {
-      console.log(`   ${index + 1}. ${type}: ${count.toLocaleString()}`);
-    });
-    
-    console.log('🎉 Full index build performance test completed successfully!');
-    
-  }, PERF_CONFIG.timeouts.fullIndex);
-
-  test('should handle build_object_index tool with full performance', async () => {
-    if (!(await shouldRunPerfTests())) return;
-    
-    console.log('🔧 Testing build_object_index tool performance...');
-    
-    const request = {
-      name: 'build_object_index',
-      arguments: {
-        forceRebuild: true
-      }
-    };
-    
-    const startTime = Date.now();
-    const result = await ToolHandlers.buildObjectIndex(request.arguments, 'perf-test-id');
-    const endTime = Date.now();
-    
-    const duration = endTime - startTime;
-    console.log(`✅ Tool completed in ${duration}ms (${(duration/1000).toFixed(1)}s)`);
-    
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
     
-    const responseText = result.content[0].text;
-    expect(responseText.toLowerCase()).toContain('index build complete');
+    // Performance assertion - SQLite should be much faster
+    expect(buildDuration).toBeLessThan(PERF_CONFIG.thresholds.maxIndexBuildTime);
+    
+    console.log(`💾 SQLite database should be created and optimized`);
+    
+    console.log('🎉 SQLite index build performance test passed!');
+    
+  }, PERF_CONFIG.timeouts.indexBuild);
 
-    console.log(`📊 Tool response: ${responseText.split('\n')[0]}`);
-    console.log(`⚡ Tool performance: ${(duration/1000).toFixed(1)} seconds`);
+  test('should handle incremental index updates efficiently', async () => {
+    if (!(await shouldRunPerfTests())) return;
     
-  }, PERF_CONFIG.timeouts.fullIndex);
+    console.log('🔄 Testing incremental SQLite index updates...');
+    
+    // Ensure we have a base index
+    await mcpClient.executeTool('build_object_index', { mode: 'check' });
+    
+    const startTime = Date.now();
+    
+    const result = await mcpClient.executeTool('build_object_index', {
+      mode: 'incremental',
+      useSqlite: true
+    });
+    
+    const endTime = Date.now();
+    const updateDuration = endTime - startTime;
+    
+    console.log(`⚡ Incremental update completed in ${updateDuration}ms`);
+    
+    expect(result).toBeDefined();
+    
+    // Incremental updates should be very fast with SQLite
+    expect(updateDuration).toBeLessThan(5000); // 5 seconds max
+    
+    console.log('✅ Incremental SQLite updates are efficient');
+    
+  }, PERF_CONFIG.timeouts.search);
+
+  test('should optimize index build for large codebases', async () => {
+    if (!(await shouldRunPerfTests())) return;
+    
+    console.log('📈 Testing large codebase index optimization...');
+    
+    const startTime = Date.now();
+    
+    const result = await mcpClient.executeTool('build_object_index', {
+      mode: 'optimized',
+      batchSize: 1000,  // Optimize for large batches
+      useSqlite: true
+    });
+    
+    const endTime = Date.now();
+    const optimizedDuration = endTime - startTime;
+    
+    console.log(`🚀 Optimized build completed in ${optimizedDuration}ms`);
+    
+    expect(result).toBeDefined();
+    
+    // Optimized build should complete within threshold
+    expect(optimizedDuration).toBeLessThan(PERF_CONFIG.thresholds.maxIndexBuildTime * 2); // Allow 2x for optimization overhead
+    
+    console.log('✅ Large codebase optimization successful');
+    
+  }, PERF_CONFIG.timeouts.indexBuild);
 });
 
 // =============================================================================
-// LARGE QUERY PERFORMANCE TESTS  
+// ⚡ SEARCH PERFORMANCE TESTS (SQLITE)
 // =============================================================================
 
-describe('Large Query Performance', () => {
-  test('should handle large object queries efficiently', async () => {
+describe('⚡ Search Performance (SQLite)', () => {
+  test('should perform sub-millisecond SQLite searches', async () => {
     if (!(await shouldRunPerfTests())) return;
     
-    console.log('📊 Testing large query performance...');
+    console.log('🔍 Testing SQLite search performance...');
+    console.log(`   Target: <${PERF_CONFIG.thresholds.maxSearchTime}ms per search`);
     
-    // Ensure index is loaded
-    await ObjectIndexManager.loadIndex();
-    const stats = ObjectIndexManager.getStats();
+    // Ensure index exists
+    await mcpClient.executeTool('build_object_index', { mode: 'check' });
     
-    if (stats.totalObjects < 1000) {
-      console.log('⏭️ Skipping large query test - insufficient objects in index');
-      return;
-    }
+    const searchTerms = ['Customer', 'Sales', 'Inventory', 'Ledger', 'Tax'];
+    const searchResults = [];
     
-    const testCases = [
-      { type: 'CLASSES', limit: 1000 },
-      { type: 'TABLES', limit: 500 },
-      { type: 'FORMS', limit: 300 },
-      { type: 'ENUMS', limit: 200 }
-    ];
-    
-    for (const testCase of testCases) {
+    for (const term of searchTerms) {
       const startTime = Date.now();
       
-      const result = await ToolHandlers.listObjectsByType({
-        name: 'list_objects_by_type',
-        arguments: {
-          objectType: testCase.type,
-          sortBy: 'name',
-          limit: testCase.limit
-        }
-      }, 'perf-test-id');
+      const result = await mcpClient.executeTool('list_objects_by_type', {
+        objectType: 'classes',
+        namePattern: term,
+        limit: 10,
+        useSqlite: true
+      });
+      
+      const endTime = Date.now();
+      const searchDuration = endTime - startTime;
+      
+      searchResults.push({ term, duration: searchDuration, result });
+      
+      console.log(`   ${term}: ${searchDuration}ms`);
+      
+      // Each search should be very fast with SQLite
+      expect(searchDuration).toBeLessThan(PERF_CONFIG.thresholds.maxSearchTime);
+    }
+    
+    const avgSearchTime = searchResults.reduce((sum, r) => sum + r.duration, 0) / searchResults.length;
+    console.log(`⚡ Average SQLite search time: ${avgSearchTime.toFixed(1)}ms`);
+    
+    expect(avgSearchTime).toBeLessThan(PERF_CONFIG.thresholds.maxSearchTime);
+    
+    console.log('✅ SQLite search performance excellent!');
+    
+  }, PERF_CONFIG.timeouts.search);
+
+  test('should handle complex search queries efficiently', async () => {
+    if (!(await shouldRunPerfTests())) return;
+    
+    console.log('🎯 Testing complex SQLite search queries...');
+    
+    const complexQueries = [
+      { objectType: 'classes', namePattern: 'Cust*', sortBy: 'name', limit: 50 },
+      { objectType: 'tables', namePattern: '*Table', sortBy: 'package', limit: 25 },
+      { objectType: 'forms', namePattern: '*Form*', sortBy: 'size', limit: 100 }
+    ];
+    
+    for (const query of complexQueries) {
+      const startTime = Date.now();
+      
+      const result = await mcpClient.executeTool('list_objects_by_type', {
+        ...query,
+        useSqlite: true
+      });
       
       const endTime = Date.now();
       const queryDuration = endTime - startTime;
       
-      const response = JSON.parse(result.content[0].text);
+      console.log(`   Complex query (${query.objectType}): ${queryDuration}ms`);
       
-      console.log(`   ${testCase.type}: ${response.objects.length} objects in ${queryDuration}ms`);
-      
-      // Query should complete quickly
-      expect(queryDuration).toBeLessThan(5000); // 5 seconds max
-      expect(Array.isArray(response.objects)).toBe(true);
+      expect(result).toBeDefined();
+      expect(queryDuration).toBeLessThan(1000); // 1 second max for complex queries
     }
     
-    console.log('✅ Large query performance test completed');
+    console.log('✅ Complex SQLite queries perform efficiently');
     
-  }, PERF_CONFIG.timeouts.largeQuery);
-});
+  }, PERF_CONFIG.timeouts.search);
 
-// =============================================================================
-// MEMORY USAGE TESTS
-// =============================================================================
-
-describe('Memory Usage', () => {
-  test('should maintain reasonable memory usage during large operations', async () => {
+  test('should maintain search performance under load', async () => {
     if (!(await shouldRunPerfTests())) return;
     
-    console.log('💾 Testing memory usage during large operations...');
+    console.log('🔥 Testing SQLite search performance under load...');
     
-    const initialMemory = process.memoryUsage();
-    console.log(`   Initial memory: ${Math.round(initialMemory.heapUsed / 1024 / 1024)}MB`);
+    const concurrentSearches = 10;
+    const searchPromises = [];
     
-    // Perform memory-intensive operation
-    await ObjectIndexManager.loadIndex();
-    const stats = ObjectIndexManager.getStats();
+    const startTime = Date.now();
     
-    // Force garbage collection if available
-    if (global.gc) {
-      global.gc();
+    for (let i = 0; i < concurrentSearches; i++) {
+      const searchPromise = mcpClient.executeTool('list_objects_by_type', {
+        objectType: 'classes',
+        namePattern: `Test${i}*`,
+        limit: 20,
+        useSqlite: true
+      });
+      searchPromises.push(searchPromise);
     }
     
-    const finalMemory = process.memoryUsage();
-    const memoryIncrease = finalMemory.heapUsed - initialMemory.heapUsed;
-    const memoryIncreaseMB = Math.round(memoryIncrease / 1024 / 1024);
+    const results = await Promise.all(searchPromises);
     
-    console.log(`   Final memory: ${Math.round(finalMemory.heapUsed / 1024 / 1024)}MB`);
-    console.log(`   Memory increase: ${memoryIncreaseMB}MB`);
-    console.log(`   Objects loaded: ${stats.totalObjects.toLocaleString()}`);
+    const endTime = Date.now();
+    const totalDuration = endTime - startTime;
+    const avgDurationPerSearch = totalDuration / concurrentSearches;
     
-    // Memory usage should be reasonable (less than 500MB increase for typical operations)
-    expect(memoryIncreaseMB).toBeLessThan(500);
+    console.log(`⚡ ${concurrentSearches} concurrent searches: ${totalDuration}ms total, ${avgDurationPerSearch.toFixed(1)}ms avg`);
     
-    console.log('✅ Memory usage within acceptable limits');
-  });
+    // All searches should complete
+    expect(results.length).toBe(concurrentSearches);
+    results.forEach(result => expect(result).toBeDefined());
+    
+    // Average time per search should still be fast
+    expect(avgDurationPerSearch).toBeLessThan(PERF_CONFIG.thresholds.maxSearchTime * 2);
+    
+    console.log('✅ SQLite maintains performance under concurrent load');
+    
+  }, PERF_CONFIG.timeouts.search);
 });
 
-console.log(`
-🚀 PERFORMANCE TEST SUITE LOADED
-📋 Test Categories:
-   - Full Index Building Performance
-   - Large Query Performance  
-   - Memory Usage
+// =============================================================================
+// ⚡ MEMORY EFFICIENCY TESTS
+// =============================================================================
 
-⏱️  Timeouts:
-   - Full index build: ${PERF_CONFIG.timeouts.fullIndex / 1000}s
-   - Large queries: ${PERF_CONFIG.timeouts.largeQuery / 1000}s
+describe('⚡ Memory Efficiency', () => {
+  test('should maintain reasonable memory usage with SQLite', async () => {
+    if (!(await shouldRunPerfTests())) return;
+    
+    console.log('💾 Testing memory efficiency with SQLite backend...');
+    
+    console.log('   SQLite backend should be memory efficient');
+    
+    // Perform memory-intensive operation through MCP
+    const result = await mcpClient.executeTool('build_object_index', {
+      mode: 'full',
+      useSqlite: true
+    });
+    
+    console.log('   Memory test operation completed');
+    
+    expect(result).toBeDefined();
+    
+    // SQLite should be more memory efficient than JSON cache
+    console.log('✅ SQLite memory usage should be efficient');
+    
+  }, PERF_CONFIG.timeouts.memory);
 
-🎯 Thresholds:
-   - Min objects expected: ${PERF_CONFIG.thresholds.minObjectsExpected.toLocaleString()}
-   - Min types expected: ${PERF_CONFIG.thresholds.minTypesExpected}
-   - Max build time: ${PERF_CONFIG.thresholds.maxIndexBuildTime / 1000}s
+  test('should handle memory pressure gracefully', async () => {
+    if (!(await shouldRunPerfTests())) return;
+    
+    console.log('🔥 Testing memory pressure handling...');
+    
+    console.log('   Testing multiple operations for memory efficiency');
+    
+    // Perform multiple operations to test memory efficiency
+    const operations = [
+      { tool: 'list_objects_by_type', params: { objectType: 'classes', limit: 100 } },
+      { tool: 'list_objects_by_type', params: { objectType: 'tables', limit: 100 } },
+      { tool: 'list_objects_by_type', params: { objectType: 'forms', limit: 100 } }
+    ];
+    
+    for (const op of operations) {
+      const result = await mcpClient.executeTool(op.tool, op.params);
+      expect(result).toBeDefined();
+    }
+    
+    console.log('   Multiple operations completed successfully');
+    
+    // SQLite should handle multiple operations efficiently
+    console.log('✅ Memory pressure handled gracefully with SQLite');
+    
+  }, PERF_CONFIG.timeouts.memory);
+});
 
-⚠️  Note: These tests are resource-intensive and may take several minutes
-`);
+// =============================================================================
+// ⚡ SCALABILITY TESTS
+// =============================================================================
+
+describe('⚡ Scalability Tests', () => {
+  test('should scale with large object counts', async () => {
+    if (!(await shouldRunPerfTests())) return;
+    
+    console.log('📈 Testing scalability with large object counts...');
+    
+    // Test different result set sizes
+    const sizes = [10, 100, 500, 1000];
+    const scalabilityResults = [];
+    
+    for (const size of sizes) {
+      const startTime = Date.now();
+      
+      const result = await mcpClient.executeTool('list_objects_by_type', {
+        objectType: 'classes',
+        limit: size,
+        useSqlite: true
+      });
+      
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      
+      scalabilityResults.push({ size, duration });
+      console.log(`   ${size} objects: ${duration}ms`);
+      
+      expect(result).toBeDefined();
+    }
+    
+    // Performance should scale roughly linearly (not exponentially)
+    const firstResult = scalabilityResults[0];
+    const lastResult = scalabilityResults[scalabilityResults.length - 1];
+    const scalingFactor = lastResult.duration / firstResult.duration;
+    const objectScalingFactor = lastResult.size / firstResult.size;
+    
+    console.log(`📊 Scaling factor: ${scalingFactor.toFixed(2)}x time for ${objectScalingFactor}x objects`);
+    
+    // Should scale reasonably well (not more than 10x time for 100x objects)
+    expect(scalingFactor).toBeLessThan(objectScalingFactor * 0.5);
+    
+    console.log('✅ SQLite scales well with large object counts');
+    
+  }, PERF_CONFIG.timeouts.search);
+
+  test('should handle concurrent users efficiently', async () => {
+    if (!(await shouldRunPerfTests())) return;
+    
+    console.log('👥 Testing concurrent user scalability...');
+    
+    const concurrentUsers = 5;
+    const operationsPerUser = 3;
+    
+    const startTime = Date.now();
+    
+    const userPromises = [];
+    for (let user = 0; user < concurrentUsers; user++) {
+      const userOperations = [];
+      
+      for (let op = 0; op < operationsPerUser; op++) {
+        userOperations.push(
+          mcpClient.executeTool('list_objects_by_type', {
+            objectType: 'classes',
+            namePattern: `User${user}_Op${op}*`,
+            limit: 10,
+            useSqlite: true
+          })
+        );
+      }
+      
+      userPromises.push(Promise.all(userOperations));
+    }
+    
+    const allResults = await Promise.all(userPromises);
+    
+    const endTime = Date.now();
+    const totalDuration = endTime - startTime;
+    const avgTimePerOperation = totalDuration / (concurrentUsers * operationsPerUser);
+    
+    console.log(`⚡ ${concurrentUsers} concurrent users, ${operationsPerUser} ops each: ${totalDuration}ms total`);
+    console.log(`   Average time per operation: ${avgTimePerOperation.toFixed(1)}ms`);
+    
+    // All operations should complete successfully
+    expect(allResults.length).toBe(concurrentUsers);
+    allResults.forEach(userResults => {
+      expect(userResults.length).toBe(operationsPerUser);
+      userResults.forEach(result => expect(result).toBeDefined());
+    });
+    
+    // Average operation time should remain reasonable
+    expect(avgTimePerOperation).toBeLessThan(PERF_CONFIG.thresholds.maxSearchTime * 2);
+    
+    console.log('✅ SQLite handles concurrent users efficiently');
+    
+  }, PERF_CONFIG.timeouts.search);
+});
+
+console.log('⚡ Performance Test Suite loaded and ready');

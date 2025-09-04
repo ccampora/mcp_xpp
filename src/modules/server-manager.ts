@@ -107,6 +107,15 @@ export class ServerManager {
           case "get_current_config":
             return await ToolHandlers.getCurrentConfig(args, requestId);
           
+          case "find_object_location":
+            return await ToolHandlers.findObjectLocation(args, requestId);
+          
+          case "browse_package_objects":
+            return await ToolHandlers.browsePackageObjects(args, requestId);
+          
+          case "search_objects_pattern":
+            return await ToolHandlers.searchObjectsPattern(args, requestId);
+          
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,

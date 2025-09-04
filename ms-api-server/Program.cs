@@ -80,7 +80,7 @@ namespace D365MetadataService
             services.AddSingleton(config);
             services.AddSingleton(_logger);
 
-            // Register D365 Object Factory
+            // Register Dynamic D365 Object Factory (supports all 575+ object types)
             services.AddSingleton<D365ObjectFactory>(sp =>
                 new D365ObjectFactory(config.D365Config, sp.GetRequiredService<ILogger>()));
 

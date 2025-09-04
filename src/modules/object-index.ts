@@ -7,9 +7,13 @@ import { isXppRelatedFile, getPackagePriority } from "./utils.js";
 import { MAX_FILE_SIZE } from "./config.js";
 import { AppConfig } from "./app-config.js";
 import { fileURLToPath } from "url";
+import { readFileSync } from "fs";
 
 // AOT folder cache for fast lookups
 const aotFoldersCache = new Map<string, string[]>();
+
+// Cache for AOT patterns to avoid repeated file reads
+let aotPatternsCache: Map<string, string> | null = null;
 
 /**
  * Object Index Manager for fast lookups with AOT-optimized indexing
@@ -50,133 +54,111 @@ export class ObjectIndexManager {
 
     const aotFolders = new Map<string, string[]>();
     
-    // Get folder patterns from AOT structure
-    let targetPatterns: string[] = [];
-    await AOTStructureManager.loadStructure();
-    const structure = AOTStructureManager.getStructure();
+    // Use simple direct AOT folder patterns - much faster and more accurate
+    const targetPatterns: string[] = [];
     
-    if (objectType && structure) {
-      // Find patterns for specific object type
-      for (const [categoryName, categoryData] of Object.entries(structure.aotStructure)) {
-        if (categoryData.objectType === objectType) {
-          targetPatterns.push(...(categoryData.folderPatterns || []));
-        }
-        if (categoryData.children) {
-          for (const [childName, childData] of Object.entries(categoryData.children)) {
-            if (childData.objectType === objectType) {
-              targetPatterns.push(...(childData.folderPatterns || []));
-            }
-          }
-        }
-      }
-    } else if (structure) {
-      // Get all folder patterns from AOT structure
-      for (const [categoryName, categoryData] of Object.entries(structure.aotStructure)) {
-        if (categoryData.folderPatterns) {
-          targetPatterns.push(...categoryData.folderPatterns);
-        }
-        if (categoryData.children) {
-          for (const [childName, childData] of Object.entries(categoryData.children)) {
-            if (childData.folderPatterns) {
-              targetPatterns.push(...childData.folderPatterns);
-            }
-          }
-        }
-      }
+    if (objectType) {
+      // For specific object types, use targeted patterns
+      targetPatterns.push(`Ax${objectType}`);
+    } else {
+      // For full indexing, use simple Ax* pattern - let scanDirectlyForAOTFolders handle the filtering
+      targetPatterns.push('Ax');
     }
 
-    console.log(`Scanning for ${objectType || 'ALL'} AOT folders with patterns: ${targetPatterns.join(', ')}`);
+    // Removed for performance
     
-    // Use optimized scanning that leverages D365 F&O package structure
-    await this.scanForAOTFoldersOptimized(basePath, basePath, aotFolders, targetPatterns);
+    // Scan for AOT folders in D365 F&O package structure
+    await this.scanPackagesForAOTFolders(basePath, basePath, aotFolders, targetPatterns, objectType);
     
     // Cache the discovered folders
     aotFoldersCache.set(cacheKey, Array.from(aotFolders.keys()));
-    
+
     return aotFolders;
   }
 
   /**
-   * Optimized AOT folder discovery leveraging D365 F&O package structure
+   * Scan packages for AOT folders using D365 F&O package structure
    * PackageName/PackageName/AxClass, AxTable, etc.
    */
-  private static async scanForAOTFoldersOptimized(
-    dirPath: string, 
-    basePath: string, 
+  private static async scanPackagesForAOTFolders(
+    dirPath: string,
+    basePath: string,
     aotFolders: Map<string, string[]>,
-    targetPatterns: string[]
+    targetPatterns: string[],
+    objectType?: string
   ): Promise<void> {
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
       
-      // First pass: Look for potential package folders
-      const packageCandidates: string[] = [];
-      
+      // Look for potential package folders
       for (const entry of entries) {
         if (entry.isDirectory() && 
             !entry.name.startsWith('.') && 
             !entry.name.startsWith('Ax') &&
             !['node_modules', 'bin', 'obj', 'temp', '.git'].includes(entry.name.toLowerCase())) {
-          packageCandidates.push(entry.name);
-        }
-      }
-
-      // Second pass: For each package candidate, check for double-nested structure
-      for (const packageName of packageCandidates) {
-        const packagePath = join(dirPath, packageName);
-        const innerPackagePath = join(packagePath, packageName);
-        
-        try {
-          const innerStats = await fs.stat(innerPackagePath);
-          if (innerStats.isDirectory()) {
-            // Found double-nested structure! Scan inner package for AOT folders
-            console.log(`Found D365 package: ${packageName}/${packageName}`);
-            await this.scanDirectlyForAOTFolders(innerPackagePath, basePath, aotFolders, targetPatterns, packageName);
-          } else {
-            // Single-level package, scan normally but with less depth
-            await this.scanDirectlyForAOTFolders(packagePath, basePath, aotFolders, targetPatterns, packageName);
+          
+          const packageName = entry.name;
+          const packagePath = join(dirPath, packageName);
+          const innerPackagePath = join(packagePath, packageName);
+          
+          try {
+            const innerStats = await fs.stat(innerPackagePath);
+            if (innerStats.isDirectory()) {
+              // Found double-nested structure! Scan inner package for AOT folders
+              // // Removed for performance
+              await this.scanDirectlyForAOTFolders(innerPackagePath, basePath, aotFolders, targetPatterns, packageName, objectType);
+            } else {
+              // Single-level package, scan normally
+              await this.scanDirectlyForAOTFolders(packagePath, basePath, aotFolders, targetPatterns, packageName, objectType);
+            }
+          } catch (error) {
+            // Inner package doesn't exist, treat as single-level
+            await this.scanDirectlyForAOTFolders(packagePath, basePath, aotFolders, targetPatterns, packageName, objectType);
           }
-        } catch (error) {
-          // Inner package doesn't exist, treat as single-level
-          await this.scanDirectlyForAOTFolders(packagePath, basePath, aotFolders, targetPatterns, packageName);
         }
       }
     } catch (error) {
       // Skip directories we can't access
-      console.log(`Could not access directory: ${relative(basePath, dirPath)}`);
+      console.log(`⚠️ Could not access directory: ${relative(basePath, dirPath)}`);
     }
   }
 
   /**
    * Directly scan for AOT folders within a validated package structure
    * This is much faster as we know we're in the right location
+   * PERFORMANCE CRITICAL: Quick empty folder check using fast readdir
    */
   private static async scanDirectlyForAOTFolders(
     packagePath: string,
     basePath: string,
     aotFolders: Map<string, string[]>,
     targetPatterns: string[],
-    packageName: string
+    packageName: string,
+    objectType?: string
   ): Promise<void> {
     try {
       const entries = await fs.readdir(packagePath, { withFileTypes: true });
       
       for (const entry of entries) {
         if (entry.isDirectory() && entry.name.startsWith('Ax')) {
-          // Check if this AOT folder matches our target patterns
-          if (targetPatterns.some(pattern => 
-            entry.name === pattern || entry.name.startsWith(pattern)
-          )) {
-            const fullPath = join(packagePath, entry.name);
-            const relativePath = relative(basePath, fullPath);
-            aotFolders.set(fullPath, []);
-            console.log(`Found AOT folder: ${packageName} -> ${entry.name}`);
+          const fullPath = join(packagePath, entry.name);
+          
+          // PERFORMANCE: Quick check for .xml files only (no subdirectory scanning)
+          try {
+            const folderEntries = await fs.readdir(fullPath, { withFileTypes: true });
+            const hasXmlFiles = folderEntries.some(e => e.isFile() && e.name.endsWith('.xml'));
+            
+            if (hasXmlFiles) {
+              aotFolders.set(fullPath, []);
+            }
+          } catch (error) {
+            // Skip folders we can't access
           }
         }
       }
     } catch (error) {
       // Skip packages we can't access
-      console.log(`Could not access package: ${packageName}`);
+      console.log(`⚠️ Could not access package: ${packageName}`);
     }
   }
 
@@ -295,17 +277,11 @@ export class ObjectIndexManager {
 
     console.log('Starting optimized full index build...');
     this.index.clear();
-    
-    // CRITICAL: Discover available object types from the filesystem first
-    console.log('Phase 0: Discovering available object types from filesystem...');
-    await AOTStructureManager.discoverAvailableObjectTypes(basePath);
-    const discoveredTypes = AOTStructureManager.getAllDiscoveredTypes();
-    console.log(`   Discovered ${discoveredTypes.size} object types from filesystem`);
 
     // Phase 1: Discover all AOT folders (much faster than full directory walk)
     console.log('Phase 1: Discovering all AOT folders...');
-    const aotFolders = await this.discoverAOTFolders(basePath);
-    console.log(`   Found ${aotFolders.size} AOT folders across all packages`);
+    const aotFolders = await this.discoverAOTFolders(basePath); // No type filtering for speed
+    // Removed for performance
 
     // Phase 2: Index only AOT folders (targeted approach) - PARALLEL PROCESSING
     console.log('Phase 2: Indexing objects in discovered AOT folders...');
@@ -313,7 +289,7 @@ export class ObjectIndexManager {
     
     // Convert to array for batch processing
     const aotFolderPaths = Array.from(aotFolders.keys());
-    const BATCH_SIZE = 50; // Process 10 folders concurrently
+    const BATCH_SIZE = 50; // Smaller batches for better progress tracking
     
     for (let i = 0; i < aotFolderPaths.length; i += BATCH_SIZE) {
       const batch = aotFolderPaths.slice(i, i + BATCH_SIZE);
@@ -321,7 +297,7 @@ export class ObjectIndexManager {
       // Process batch in parallel
       await Promise.all(batch.map(async (aotFolderPath) => {
         const relativePath = relative(basePath, aotFolderPath);
-        //console.log(`   📂 Processing: ${relativePath}`);
+        //// Removed for performance
         
         // Determine object type from AOT folder name
         const folderName = basename(aotFolderPath);
@@ -341,23 +317,133 @@ export class ObjectIndexManager {
       console.log(`   Batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(aotFolderPaths.length/BATCH_SIZE)} complete - ${results.indexedCount} objects indexed so far`);
     }
 
-    await this.saveIndex();
+    // Removed saveIndex() call - using SQLite cache instead
     console.log(`[AVAILABLE] Optimized full index complete: ${results.indexedCount} objects indexed!`);
   }
 
   /**
    * Determine object type from AOT folder name using dynamic structure
    */
-  private static getObjectTypeFromAOTFolder(folderName: string): string {
-    const allTypes = AOTStructureManager.getAllDiscoveredTypes();
+  /**
+   * Get object type from a file path using cache-based pattern matching
+   */
+  private static getObjectTypeFromFilePath(filePath: string): string {
+    // Extract the AOT folder name from the file path
+    // File path format: .../PackageName/PackageName/AxClass/ClassName.xml
+    const pathParts = filePath.split(/[/\\]/);
     
-    for (const [objectType, typeInfo] of allTypes.entries()) {
-      if (typeInfo.folderPatterns.some((pattern: string) => folderName.startsWith(pattern))) {
-        return objectType;
+    // Find the AOT folder (should be after the second package name)
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      const part = pathParts[i];
+      // Look for AOT folder patterns (starting with Ax)
+      if (part.startsWith('Ax')) {
+        return this.getObjectTypeFromAOTFolder(part);
       }
     }
     
     return 'UNKNOWN';
+  }
+
+  private static getObjectTypeFromAOTFolder(folderName: string): string {
+    // Use the AOT structure cache which contains concrete patterns from VS2022 service
+    try {
+      // Load patterns once and cache them
+      if (!aotPatternsCache) {
+        aotPatternsCache = this.loadAOTStructureCachePatterns();
+      }
+      
+      let bestMatch = '';
+      let bestMatchLength = 0;
+      
+      // Find the most specific pattern match
+      for (const [typeName, pattern] of aotPatternsCache.entries()) {
+        // Convert regex pattern to simple string matching
+        // Patterns like "^AxClass" become "AxClass"
+        const cleanPattern = pattern.replace(/^\^/, '').replace(/\$.*$/, '');
+        
+        if (folderName.startsWith(cleanPattern)) {
+          // Prefer longer (more specific) matches
+          if (cleanPattern.length > bestMatchLength) {
+            bestMatch = typeName;
+            bestMatchLength = cleanPattern.length;
+          }
+        }
+      }
+      
+      return bestMatch || 'UNKNOWN';
+    } catch (error) {
+      console.warn(`Failed to load AOT cache patterns: ${(error as Error).message}`);
+      // Fallback to basic pattern matching for common types
+      const commonPatterns = new Map([
+        ['AxClass', 'AxClass'],
+        ['AxTable', 'AxTable'],
+        ['AxForm', 'AxForm'],
+        ['AxEnum', 'AxEnum'],
+        ['AxView', 'AxView'],
+        ['AxService', 'AxService']
+      ]);
+      
+      for (const [typeName, pattern] of commonPatterns.entries()) {
+        if (folderName.startsWith(pattern)) {
+          return typeName;
+        }
+      }
+    }
+    
+    return 'UNKNOWN';
+  }
+
+  /**
+   * Load patterns from optimized AOT pattern index (ultra-fast)
+   */
+  private static loadAOTStructureCachePatterns(): Map<string, string> {
+    const patterns = new Map<string, string>();
+    
+    try {
+      const currentModulePath = fileURLToPath(import.meta.url);
+      const mcpServerDir = join(dirname(currentModulePath), '..', '..');
+      
+      // Try to load the optimized pattern index first
+      const optimizedCachePath = join(mcpServerDir, 'cache', 'aot-pattern-index.json');
+      
+      if (readFileSync) {
+        try {
+          const indexContent = readFileSync(optimizedCachePath, 'utf8');
+          const indexData = JSON.parse(indexContent);
+          
+          // Use the pre-extracted patterns directly
+          Object.entries(indexData.patterns).forEach(([name, pattern]) => {
+            patterns.set(name, pattern as string);
+          });
+          
+          // Removed for performance
+          return patterns;
+        } catch (optimizedError) {
+          console.log('Optimized pattern index not found, falling back to full cache...');
+        }
+      }
+      
+      // Fallback to heavy cache if optimized index is not available
+      const heavyCachePath = join(mcpServerDir, 'cache', 'aot-structure-cache.json');
+      const cacheContent = readFileSync(heavyCachePath, 'utf8');
+      const cacheData = JSON.parse(cacheContent);
+      
+      // Extract patterns from all categories (slow method)
+      Object.values(cacheData.categories).forEach((category: any) => {
+        if (category.types && Array.isArray(category.types)) {
+          category.types.forEach((type: any) => {
+            if (type.Name && type.matchedPattern) {
+              patterns.set(type.Name, type.matchedPattern);
+            }
+          });
+        }
+      });
+      
+      console.log(`Loaded ${patterns.size} object type patterns from full cache (fallback)`);
+      return patterns;
+    } catch (error) {
+      throw new Error(`Failed to load AOT patterns: ${(error as Error).message}`);
+    }
   }
 
   static async buildIndexByType(objectType: string, forceRebuild: boolean = false): Promise<{ indexedCount: number, skippedCount: number }> {
@@ -413,11 +499,11 @@ export class ObjectIndexManager {
     // Phase 2: Index only within discovered AOT folders (targeted approach!)
     console.log(`Phase 2: Indexing objects in ${aotFolders.size} AOT folders...`);
     for (const aotFolderPath of aotFolders.keys()) {
-      console.log(`   Processing: ${relative(basePath, aotFolderPath)}`);
+      // Removed for performance
       await this.indexAOTFolder(aotFolderPath, basePath, normalizedType, results);
     }
 
-    await this.saveIndex();
+    // Removed saveIndex() call - using SQLite cache instead
     
     console.log(`AOT structure-based indexing complete: ${results.indexedCount} indexed, ${results.skippedCount} skipped`);
     return results;
@@ -453,18 +539,31 @@ export class ObjectIndexManager {
 
   private static async indexFileIfType(filePath: string, basePath: string, targetType: string, results: { indexedCount: number, skippedCount: number }): Promise<void> {
     try {
-      const stats = await fs.stat(filePath);
-      if (stats.size > MAX_FILE_SIZE) {
-        results.skippedCount++;
-        return;
-      }
-
+      // PERFORMANCE OPTIMIZATION: Skip fs.stat() call - we don't need file stats during indexing
+      // Just store minimal info needed for the index from the file path
+      const fileName = basename(filePath, extname(filePath));
       const relativePath = relative(basePath, filePath);
-      const objectInfo = this.extractObjectInfo(filePath, relativePath, stats.mtime.getTime(), stats.size);
+      const pathParts = relativePath.split(/[/\\]/);
+      const packageName = pathParts[0] || "Unknown";
       
-      if (objectInfo && objectInfo.type === targetType) {
-        const key = `${objectInfo.package}::${objectInfo.name}::${objectInfo.type}`;
-        this.index.set(key, objectInfo);
+      // Quick object type determination from folder name (much faster)
+      const folderName = pathParts.find(part => part.startsWith('Ax')) || 'Unknown';
+      const objectType = this.getObjectTypeFromAOTFolder(folderName);
+      
+      if (objectType === targetType) {
+        // Store minimal object info - file stats populated on-demand
+        const key = `${packageName}::${fileName}::${objectType}`;
+        this.index.set(key, {
+          name: fileName,
+          type: objectType,
+          path: relativePath,
+          package: packageName,
+          lastModified: 0, // Populated on-demand
+          size: 0,         // Populated on-demand
+          methods: [],     // Populated on-demand
+          fields: [],      // Populated on-demand
+          dependencies: [] // Populated on-demand
+        });
         results.indexedCount++;
       } else {
         results.skippedCount++;
@@ -480,8 +579,8 @@ export class ObjectIndexManager {
     
     let packageName = pathParts[0] || "Unknown";
     
-    // Use AOT structure to determine object type
-    const objectType = AOTStructureManager.getObjectTypeFromPath(filePath);
+    // Use our cache-based pattern matching to determine object type from file path
+    const objectType = this.getObjectTypeFromFilePath(filePath);
     
     if (objectType === "UNKNOWN") {
       // Skip files that don't match any AOT pattern

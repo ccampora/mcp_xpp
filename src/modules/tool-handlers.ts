@@ -10,6 +10,7 @@ import { EnhancedSearchManager } from "./search.js";
 import { parseXppClass, parseXppTable, findXppObject } from "./parsers.js";
 import { safeReadFile, getDirectoryListing, searchInFiles } from "./file-utils.js";
 import { ObjectCreators } from "./object-creators.js";
+import { SQLiteObjectLookup } from "./sqlite-lookup.js";
 
 /**
  * Tool handlers for all MCP tools
@@ -561,5 +562,274 @@ export class ToolHandlers {
         publishers: [...new Set(models.map(m => m.publisher).filter(Boolean))]
       }
     };
+  }
+
+  // =====================================================================
+  // SQLITE OBJECT LOOKUP TOOLS
+  // =====================================================================
+
+  static async findObjectLocation(args: any, requestId: string): Promise<any> {
+    const schema = z.object({
+      objectName: z.string(),
+      packageName: z.string().optional(),
+    });
+    const { objectName, packageName } = schema.parse(args);
+
+    let lookup: SQLiteObjectLookup | null = null;
+    
+    try {
+      lookup = new SQLiteObjectLookup();
+      
+      if (!lookup.initialize()) {
+        return await createLoggedResponse(
+          `SQLite object database not available. Run migration: node misc/migrate-to-sqlite.mjs`,
+          requestId,
+          "find_object_location"
+        );
+      }
+
+      const startTime = Date.now();
+      let results;
+      
+      if (packageName) {
+        const exactResult = lookup.findObjectExact(objectName, packageName);
+        results = exactResult ? [exactResult] : [];
+      } else {
+        results = lookup.findObject(objectName);
+      }
+      
+      const duration = Date.now() - startTime;
+      
+      let content = `🔍 Object Location Search: "${objectName}"`;
+      if (packageName) content += ` in package "${packageName}"`;
+      content += `\n⚡ Query time: ${duration}ms\n\n`;
+
+      if (results.length === 0) {
+        content += `❌ Object "${objectName}" not found in D365 codebase`;
+        if (packageName) content += ` within package "${packageName}"`;
+        content += `\n\n💡 Suggestions:\n`;
+        content += `   • Check object name spelling\n`;
+        content += `   • Try pattern search: search_objects_pattern("${objectName}*")\n`;
+        content += `   • Browse package: browse_package_objects("PackageName")\n`;
+      } else if (results.length === 1) {
+        const obj = results[0];
+        content += `✅ Found object:\n\n`;
+        content += `📦 Package/Model: ${obj.package}\n`;
+        content += `🏷️  Object Type: ${obj.type}\n`;
+        content += `📁 File Path: ${obj.path}\n`;
+        if (obj.size) content += `💾 File Size: ${(obj.size / 1024).toFixed(1)}KB\n`;
+        if (obj.lastModified) {
+          const date = new Date(obj.lastModified);
+          content += `📅 Last Modified: ${date.toLocaleDateString()}\n`;
+        }
+        content += `\n🎯 Analysis Ready:\n`;
+        content += `   Use "read_file" with path: ${obj.path}\n`;
+      } else {
+        content += `⚠️  Found ${results.length} objects with name "${objectName}":\n\n`;
+        results.forEach((obj, i) => {
+          content += `${i + 1}. ${obj.package}/${obj.type}\n`;
+          content += `   📁 ${obj.path}\n`;
+          if (obj.size) content += `   💾 ${(obj.size / 1024).toFixed(1)}KB\n`;
+          content += `\n`;
+        });
+        content += `💡 To resolve conflict, specify package:\n`;
+        content += `   find_object_location("${objectName}", "PackageName")\n`;
+      }
+
+      return await createLoggedResponse(content, requestId, "find_object_location");
+      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return await createLoggedResponse(
+        `Error in object lookup: ${errorMsg}`,
+        requestId,
+        "find_object_location"
+      );
+    } finally {
+      if (lookup) {
+        lookup.close();
+      }
+    }
+  }
+
+  static async browsePackageObjects(args: any, requestId: string): Promise<any> {
+    const schema = z.object({
+      packageName: z.string(),
+      objectType: z.string().optional(),
+      limit: z.number().optional().default(100),
+    });
+    const { packageName, objectType, limit } = schema.parse(args);
+
+    let lookup: SQLiteObjectLookup | null = null;
+    
+    try {
+      lookup = new SQLiteObjectLookup();
+      
+      if (!lookup.initialize()) {
+        return await createLoggedResponse(
+          `SQLite object database not available. Run migration: node misc/migrate-to-sqlite.mjs`,
+          requestId,
+          "browse_package_objects"
+        );
+      }
+
+      const startTime = Date.now();
+      let results;
+      
+      if (objectType) {
+        results = lookup.findObjectsByPackageAndType(packageName, objectType);
+      } else {
+        results = lookup.findObjectsByPackage(packageName);
+      }
+      
+      const limitedResults = results.slice(0, limit);
+      const duration = Date.now() - startTime;
+      
+      let content = `📦 Package Browser: "${packageName}"`;
+      if (objectType) content += ` (${objectType} objects only)`;
+      content += `\n⚡ Query time: ${duration}ms\n\n`;
+
+      if (results.length === 0) {
+        content += `❌ No objects found in package "${packageName}"`;
+        if (objectType) content += ` of type "${objectType}"`;
+        content += `\n\n💡 Suggestions:\n`;
+        content += `   • Check package name spelling\n`;
+        content += `   • Try pattern search: search_objects_pattern("*", "${packageName}")\n`;
+        content += `   • Browse without type filter\n`;
+      } else {
+        content += `✅ Found ${results.length} objects`;
+        if (limitedResults.length < results.length) {
+          content += ` (showing first ${limitedResults.length})`;
+        }
+        content += `\n\n`;
+
+        // Group by object type for better readability
+        const grouped: { [key: string]: typeof limitedResults } = {};
+        limitedResults.forEach(obj => {
+          if (!grouped[obj.type]) {
+            grouped[obj.type] = [];
+          }
+          grouped[obj.type].push(obj);
+        });
+
+        for (const [type, objects] of Object.entries(grouped)) {
+          content += `🏷️  ${type} (${objects.length}):\n`;
+          objects.forEach(obj => {
+            content += `   • ${obj.name}`;
+            if (obj.size) content += ` (${(obj.size / 1024).toFixed(1)}KB)`;
+            content += `\n`;
+          });
+          content += `\n`;
+        }
+
+        if (limitedResults.length < results.length) {
+          content += `... and ${results.length - limitedResults.length} more objects\n\n`;
+          content += `💡 Use higher limit to see more: browse_package_objects("${packageName}", "${objectType || ''}", ${results.length})\n`;
+        }
+      }
+
+      return await createLoggedResponse(content, requestId, "browse_package_objects");
+      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return await createLoggedResponse(
+        `Error browsing package: ${errorMsg}`,
+        requestId,
+        "browse_package_objects"
+      );
+    } finally {
+      if (lookup) {
+        lookup.close();
+      }
+    }
+  }
+
+  static async searchObjectsPattern(args: any, requestId: string): Promise<any> {
+    const schema = z.object({
+      pattern: z.string(),
+      objectType: z.string().optional(),
+      packageName: z.string().optional(),
+      limit: z.number().optional().default(50),
+    });
+    const { pattern, objectType, packageName, limit } = schema.parse(args);
+
+    let lookup: SQLiteObjectLookup | null = null;
+    
+    try {
+      lookup = new SQLiteObjectLookup();
+      
+      if (!lookup.initialize()) {
+        return await createLoggedResponse(
+          `SQLite object database not available. Run migration: node misc/migrate-to-sqlite.mjs`,
+          requestId,
+          "search_objects_pattern"
+        );
+      }
+
+      const startTime = Date.now();
+      let results = lookup.searchObjects(pattern);
+      
+      // Apply additional filters if specified
+      if (objectType) {
+        results = results.filter(obj => obj.type === objectType);
+      }
+      
+      if (packageName) {
+        results = results.filter(obj => obj.package === packageName);
+      }
+      
+      const limitedResults = results.slice(0, limit);
+      const duration = Date.now() - startTime;
+      
+      let content = `🔍 Pattern Search: "${pattern}"`;
+      if (objectType) content += ` (${objectType} only)`;
+      if (packageName) content += ` in ${packageName}`;
+      content += `\n⚡ Query time: ${duration}ms\n\n`;
+
+      if (results.length === 0) {
+        content += `❌ No objects found matching pattern "${pattern}"`;
+        if (objectType || packageName) {
+          content += ` with the specified filters`;
+        }
+        content += `\n\n💡 Pattern Examples:\n`;
+        content += `   • "Cust*" - objects starting with "Cust"\n`;
+        content += `   • "*Table" - objects ending with "Table"\n`;
+        content += `   • "*Invoice*" - objects containing "Invoice"\n`;
+        content += `   • "Sales?" - "Sales" + one character\n`;
+      } else {
+        content += `✅ Found ${results.length} matches`;
+        if (limitedResults.length < results.length) {
+          content += ` (showing first ${limitedResults.length})`;
+        }
+        content += `\n\n`;
+
+        limitedResults.forEach((obj, i) => {
+          content += `${i + 1}. ${obj.name}\n`;
+          content += `   📦 ${obj.package} → ${obj.type}\n`;
+          content += `   📁 ${obj.path}\n`;
+          if (obj.size) content += `   💾 ${(obj.size / 1024).toFixed(1)}KB\n`;
+          content += `\n`;
+        });
+
+        if (limitedResults.length < results.length) {
+          content += `... and ${results.length - limitedResults.length} more matches\n\n`;
+          content += `💡 Use higher limit to see more: search_objects_pattern("${pattern}", "${objectType || ''}", "${packageName || ''}", ${results.length})\n`;
+        }
+      }
+
+      return await createLoggedResponse(content, requestId, "search_objects_pattern");
+      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return await createLoggedResponse(
+        `Error in pattern search: ${errorMsg}`,
+        requestId,
+        "search_objects_pattern"
+      );
+    } finally {
+      if (lookup) {
+        lookup.close();
+      }
+    }
   }
 }

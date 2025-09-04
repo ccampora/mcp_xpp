@@ -11,11 +11,12 @@
     "build": "tsc && powershell -Command \"Copy-Item 'config' 'build' -Recurse -Force\"",
     "dev": "tsc --watch",
     "start": "node build/index.js",
-    "test": "vitest run tests/core-functionality.test.js",
+    "test": "vitest run",
     "test:all": "vitest run",
-    "test:core": "vitest run tests/core-functionality.test.js",
+    "test:mcp": "vitest run tests/mcp.test.js",
+    "test:d365": "vitest run tests/d365.test.js",
     "test:performance": "vitest run tests/performance.test.js",
-    "test:schema": "vitest run tests/tools/discover-object-types-json.test.js",
+    "test:integration": "vitest run tests/integration.test.js",
     "test:watch": "vitest",
     "test:ui": "vitest --ui"
   },
@@ -31,6 +32,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.15.1",
     "@types/handlebars": "^4.0.40",
+    "better-sqlite3": "^12.2.0",
     "cors": "^2.8.5",
     "express": "^4.21.1",
     "handlebars": "^4.7.8",
@@ -38,6 +40,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^20.0.0",

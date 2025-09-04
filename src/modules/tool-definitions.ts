@@ -247,6 +247,74 @@ export class ToolDefinitions {
             properties: {},
           },
         },
+        {
+          name: "find_object_location",
+          description: "Fast SQLite-based lookup to find D365 object location and model information. Returns both file path and package/model details for analysis workflows.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              objectName: {
+                type: "string",
+                description: "Name of the D365 object to locate (e.g., 'CustomerTable', 'VendInvoiceJour')",
+              },
+              packageName: {
+                type: "string",
+                description: "Optional package/model name to resolve conflicts when multiple objects have the same name",
+              },
+            },
+            required: ["objectName"],
+          },
+        },
+        {
+          name: "browse_package_objects",
+          description: "Browse all objects within a specific D365 package/model. Useful for exploring package contents and understanding dependencies.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              packageName: {
+                type: "string",
+                description: "Name of the D365 package/model to browse (e.g., 'ApplicationSuite', 'ApplicationFoundation')",
+              },
+              objectType: {
+                type: "string",
+                description: "Optional filter by object type (e.g., 'AxClass', 'AxTable', 'AxForm')",
+              },
+              limit: {
+                type: "number",
+                description: "Maximum number of objects to return",
+                default: 100,
+              },
+            },
+            required: ["packageName"],
+          },
+        },
+        {
+          name: "search_objects_pattern",
+          description: "Search D365 objects by name pattern using wildcards. Supports * (any characters) and ? (single character) patterns for flexible object discovery.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              pattern: {
+                type: "string",
+                description: "Search pattern with wildcards (e.g., 'Cust*', '*Table', '*Invoice*'). Use * for multiple characters and ? for single character.",
+              },
+              objectType: {
+                type: "string",
+                description: "Optional filter by object type (e.g., 'AxClass', 'AxTable')",
+              },
+              packageName: {
+                type: "string",
+                description: "Optional filter by package/model name",
+              },
+              limit: {
+                type: "number",
+                description: "Maximum number of results to return",
+                default: 50,
+              },
+            },
+            required: ["pattern"],
+          },
+        },
       ],
     };
   }
