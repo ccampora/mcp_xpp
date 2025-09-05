@@ -169,18 +169,16 @@ export class ToolHandlers {
     const schema = z.object({
       objectName: z.string(),
       objectType: z.string().optional(),
+      model: z.string().optional(),
     });
-    const { objectName, objectType } = schema.parse(args);
+    const { objectName, objectType, model } = schema.parse(args);
     
-    const xppPath = AppConfig.getXppPath();
-    if (!xppPath) {
-      throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
-    }
-    
-    const results = await findXppObject(objectName, objectType);
+    // No need to check XPP path - findXppObject uses SQLite first, filesystem fallback
+    const results = await findXppObject(objectName, objectType, model);
     
     let content = `Search results for X++ object "${objectName}"`;
     if (objectType) content += ` of type "${objectType}"`;
+    if (model) content += ` in model "${model}"`;
     content += `:\n\n`;
     
     if (results.length === 0) {
@@ -190,7 +188,9 @@ export class ToolHandlers {
       for (const result of results) {
         content += `${result.name}\n`;
         content += `   Type: ${result.type}\n`;
-        content += `   Path: ${result.path}\n\n`;
+        content += `   Path: ${result.path}\n`;
+        if (result.model) content += `   Model: ${result.model}\n`;
+        content += `\n`;
       }
     }
     
@@ -368,11 +368,7 @@ export class ToolHandlers {
     });
     const { objectType, sortBy, limit } = schema.parse(args);
     
-    const xppPath = AppConfig.getXppPath();
-    if (!xppPath) {
-      throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
-    }
-
+    // No need to check XPP path - this method uses SQLite directly
     let lookup: SQLiteObjectLookup | null = null;
     
     try {

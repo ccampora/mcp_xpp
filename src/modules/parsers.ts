@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import { basename, extname } from "path";
 import { xppObjectCache } from "./cache.js";
 import { AOTStructureManager } from "./aot-structure.js";
+import { SQLiteObjectLookup } from "./sqlite-lookup.js";
 
 /**
  * Determine X++ object type based on file path using dynamic structure
@@ -192,18 +193,66 @@ export async function parseXppTable(filepath: string): Promise<any> {
 }
 
 /**
- * Find X++ object by name across the codebase
+ * Find X++ object by name across the codebase using SQLite index
  */
-export async function findXppObject(objectName: string, objectType?: string): Promise<any[]> {
+export async function findXppObject(objectName: string, objectType?: string, model?: string): Promise<any[]> {
   const results: any[] = [];
   
-  async function searchInDirectory(dirPath: string) {
+  // Try SQLite lookup first (fastest method)
+  const lookup = new SQLiteObjectLookup();
+  if (lookup.initialize()) {
+    try {
+      let objects = lookup.findObject(objectName);
+      
+      // Apply filters
+      if (objectType) {
+        objects = objects.filter(obj => obj.type === objectType);
+      }
+      
+      if (model) {
+        objects = objects.filter(obj => obj.package?.toLowerCase() === model.toLowerCase());
+      }
+      
+      // Convert to our expected format
+      for (const obj of objects) {
+        results.push({
+          name: obj.name,
+          path: obj.path,
+          type: obj.type,
+          model: obj.package
+        });
+      }
+      
+      lookup.close();
+      
+      // If we found results in SQLite, return them
+      if (results.length > 0) {
+        return results;
+      }
+    } catch (error) {
+      console.error('SQLite lookup failed, falling back to filesystem search:', error);
+      lookup.close();
+    }
+  }
+  
+  // Fallback to filesystem search if SQLite lookup fails
+  console.log('Falling back to filesystem search...');
+  
+  async function searchInDirectory(dirPath: string, currentModel?: string) {
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
       
       for (const entry of entries) {
         if (entry.isDirectory()) {
-          await searchInDirectory(`${dirPath}/${entry.name}`);
+          // If we're at the top level, this might be a model/package directory
+          const potentialModel = currentModel || entry.name;
+          
+          // If model filter is specified, skip directories that don't match
+          if (model && potentialModel.toLowerCase() !== model.toLowerCase()) {
+            continue;
+          }
+          
+          await searchInDirectory(`${dirPath}/${entry.name}`, potentialModel);
         } else if (entry.isFile()) {
           const fileName = entry.name.toLowerCase();
           const targetName = objectName.toLowerCase();
@@ -213,10 +262,15 @@ export async function findXppObject(objectName: string, objectType?: string): Pr
             const detectedType = getXppObjectType(fullPath);
             
             if (!objectType || detectedType === objectType) {
+              // Extract model from path if available
+              const pathParts = fullPath.split(/[\/\\]/);
+              const extractedModel = currentModel || (pathParts.length > 1 ? pathParts[pathParts.length - 3] || pathParts[pathParts.length - 2] : 'Unknown');
+              
               results.push({
                 name: entry.name,
                 path: fullPath,
-                type: detectedType
+                type: detectedType,
+                model: extractedModel
               });
             }
           }

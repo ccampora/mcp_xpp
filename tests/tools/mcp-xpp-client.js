@@ -139,7 +139,10 @@ export class MCPXppClient extends EventEmitter {
       'discover_object_types_json': 'discoverObjectTypesJson',
       'browse_directory': 'browseDirectory',
       'read_file_content': 'readFileContent',
-      'search_files': 'searchFiles'
+      'search_files': 'searchFiles',
+      'find_xpp_object': 'findXppObject',
+      'search_objects_pattern': 'searchObjectsPattern',
+      'browse_package_objects': 'browsePackageObjects'
     };
 
     const methodName = methodMap[toolName];

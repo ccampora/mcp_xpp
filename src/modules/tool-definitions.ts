@@ -126,8 +126,11 @@ export class ToolDefinitions {
               },
               objectType: {
                 type: "string",
-                description: "Type of object to search for (CLASSES, TABLES, FORMS, etc.)",
-                enum: ["CLASSES", "TABLES", "FORMS", "REPORTS", "ENUMS", "EDTS", "VIEWS", "MAPS", "SERVICES", "WORKFLOWS", "QUERIES", "MENUS", "MENUITEM"],
+                description: "Optional filter by object type. Common values: AxTable, AxClass, AxForm, AxEnum, AxQuery, AxView, AxEdt, AxMenu, AxReport, AxWorkflow, AxService, AxMap, AxInterface, AxMacro, etc. Leave empty to search all types.",
+              },
+              model: {
+                type: "string",
+                description: "Optional filter by D365 model/package name (e.g., ApplicationSuite, CaseManagement, ApplicationPlatform). Leave empty to search all models.",
               },
             },
             required: ["objectName"],
