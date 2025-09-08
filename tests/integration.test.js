@@ -19,9 +19,9 @@ const INTEGRATION_CONFIG = {
     consistency: 30000,   // 30 seconds for consistency checks
   },
   workflows: {
-    objectDiscoveryToCreation: ['discover_object_types_json', 'list_objects_by_type', 'create_xpp_object'],
-    searchAndAnalyze: ['build_object_index', 'list_objects_by_type', 'get_current_config'],
-    fullDevelopmentCycle: ['get_current_config', 'discover_object_types_json', 'build_object_index', 'list_objects_by_type']
+    objectDiscoveryToCreation: ['search_objects_pattern', 'find_xpp_object', 'create_xpp_object'],
+    searchAndAnalyze: ['build_object_index', 'search_objects_pattern', 'get_current_config'],
+    fullDevelopmentCycle: ['get_current_config', 'search_objects_pattern', 'build_object_index', 'find_xpp_object']
   }
 };
 
@@ -84,12 +84,16 @@ describe('🔗 End-to-End Workflows', () => {
     workflowSteps.push('get_current_config');
     workflowData.config = configResult.content;
     
-    // Step 2: Discover object types
+    // Step 2: Discover object types using search pattern
     console.log('   Step 2: Discovering object types...');
-    const discoveryResult = await mcpClient.executeTool('discover_object_types_json');
+    const discoveryResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      format: 'json',
+      limit: 50
+    });
     expect(discoveryResult).toBeDefined();
     expect(discoveryResult.content).toBeDefined();
-    workflowSteps.push('discover_object_types_json');
+    workflowSteps.push('search_objects_pattern');
     workflowData.discovery = discoveryResult.content;
     
     // Step 3: Build object index with SQLite
@@ -104,13 +108,13 @@ describe('🔗 End-to-End Workflows', () => {
     
     // Step 4: Query objects using the index
     console.log('   Step 4: Querying objects from index...');
-    const queryResult = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
-      limit: 20,
-      useSqlite: true
+    const queryResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 20
     });
     expect(queryResult).toBeDefined();
-    workflowSteps.push('list_objects_by_type');
+    workflowSteps.push('search_objects_pattern');
     workflowData.query = queryResult.content;
     
     console.log(`✅ Workflow completed successfully: ${workflowSteps.join(' → ')}`);
@@ -140,22 +144,20 @@ describe('🔗 End-to-End Workflows', () => {
     
     // Task 2: Explore existing objects for reference
     console.log('   Task 2: Exploring existing objects...');
-    const exploreResult = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
-      namePattern: 'Customer*',
-      limit: 10,
-      useSqlite: true
+    const exploreResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: 'Customer*',
+      objectType: 'AxClass',
+      limit: 10
     });
     expect(exploreResult).toBeDefined();
     developerTasks.push('Object Exploration');
     
     // Task 3: Find similar patterns in codebase
     console.log('   Task 3: Finding similar patterns...');
-    const patternResult = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'tables',
-      namePattern: '*Customer*',
-      limit: 5,
-      useSqlite: true
+    const patternResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*Customer*',
+      objectType: 'AxTable',
+      limit: 5
     });
     expect(patternResult).toBeDefined();
     developerTasks.push('Pattern Analysis');
@@ -195,10 +197,10 @@ describe('🔗 End-to-End Workflows', () => {
     
     // CI Step 3: Sample data validation
     console.log('   CI Step 3: Sample data validation...');
-    const dataValidation = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
-      limit: 1,
-      useSqlite: true
+    const dataValidation = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 1
     });
     expect(dataValidation).toBeDefined();
     ciSteps.push('Data Validation');
@@ -228,10 +230,10 @@ describe('🔗 Cross-System Integration', () => {
     // Test that MCP client operations correctly use SQLite backend
     const startTime = Date.now();
     
-    const result = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
-      limit: 10,
-      useSqlite: true
+    const result = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 10
     });
     
     const endTime = Date.now();
@@ -288,10 +290,10 @@ describe('🔗 Cross-System Integration', () => {
     // Test object listing consistency
     const objectLists = [];
     for (let i = 0; i < 2; i++) {
-      const list = await mcpClient.executeTool('list_objects_by_type', {
-        objectType: 'classes',
-        limit: 5,
-        useSqlite: true
+      const list = await mcpClient.executeTool('search_objects_pattern', {
+        pattern: '*',
+        objectType: 'AxClass',
+        limit: 5
       });
       objectLists.push(list);
     }
@@ -347,15 +349,14 @@ describe('🔗 Data Consistency', () => {
     
     // Run same query multiple times
     const queryParams = {
-      objectType: 'classes',
-      limit: 10,
-      sortBy: 'name',
-      useSqlite: true
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 10
     };
     
     const results = [];
     for (let i = 0; i < 3; i++) {
-      const result = await mcpClient.executeTool('list_objects_by_type', queryParams);
+      const result = await mcpClient.executeTool('search_objects_pattern', queryParams);
       results.push(result);
     }
     
@@ -377,8 +378,8 @@ describe('🔗 Data Consistency', () => {
     // Run multiple operations concurrently
     const operations = [
       mcpClient.executeTool('get_current_config'),
-      mcpClient.executeTool('list_objects_by_type', { objectType: 'classes', limit: 5 }),
-      mcpClient.executeTool('list_objects_by_type', { objectType: 'tables', limit: 5 })
+      mcpClient.executeTool('search_objects_pattern', { pattern: '*', objectType: 'AxClass', limit: 5 }),
+      mcpClient.executeTool('search_objects_pattern', { pattern: '*', objectType: 'AxTable', limit: 5 })
     ];
     
     const results = await Promise.all(operations);
@@ -408,29 +409,26 @@ describe('🔗 Real-World Scenarios', () => {
     console.log('   Scenario: Finding customer-related objects...');
     
     // Step 1: Search for customer classes
-    const customerClasses = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
-      namePattern: '*Customer*',
-      limit: 10,
-      useSqlite: true
+    const customerClasses = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*Customer*',
+      objectType: 'AxClass',
+      limit: 10
     });
     expect(customerClasses).toBeDefined();
     
     // Step 2: Search for customer tables
-    const customerTables = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'tables',
-      namePattern: '*Customer*',
-      limit: 10,
-      useSqlite: true
+    const customerTables = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*Customer*',
+      objectType: 'AxTable',
+      limit: 10
     });
     expect(customerTables).toBeDefined();
     
     // Step 3: Search for customer forms
-    const customerForms = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'forms',
-      namePattern: '*Customer*',
-      limit: 5,
-      useSqlite: true
+    const customerForms = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*Customer*',
+      objectType: 'AxForm',
+      limit: 5
     });
     expect(customerForms).toBeDefined();
     
@@ -450,17 +448,26 @@ describe('🔗 Real-World Scenarios', () => {
     const systemConfig = await mcpClient.executeTool('get_current_config');
     expect(systemConfig).toBeDefined();
     
-    // Step 2: Discover all object types
-    const objectTypes = await mcpClient.executeTool('discover_object_types_json');
+    // Step 2: Search for standard object types
+    const objectTypes = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 10,
+      format: 'json'
+    });
     expect(objectTypes).toBeDefined();
     
     // Step 3: Sample objects from major categories
-    const majorCategories = ['classes', 'tables', 'forms'];
+    const majorCategories = [
+      { type: 'AxClass', pattern: '*' },
+      { type: 'AxTable', pattern: '*' },
+      { type: 'AxForm', pattern: '*' }
+    ];
     for (const category of majorCategories) {
-      const sample = await mcpClient.executeTool('list_objects_by_type', {
-        objectType: category,
-        limit: 5,
-        useSqlite: true
+      const sample = await mcpClient.executeTool('search_objects_pattern', {
+        pattern: category.pattern,
+        objectType: category.type,
+        limit: 5
       });
       expect(sample).toBeDefined();
     }
@@ -490,10 +497,10 @@ describe('🔗 Real-World Scenarios', () => {
     
     // Monitor search performance
     const searchStartTime = Date.now();
-    const searchResult = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
-      limit: 10,
-      useSqlite: true
+    const searchResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 10
     });
     const searchDuration = Date.now() - searchStartTime;
     performanceMetrics.push({ operation: 'search', duration: searchDuration });

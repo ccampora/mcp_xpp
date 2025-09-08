@@ -86,8 +86,9 @@ describe('🔌 Protocol Communication', () => {
     
     console.log('🔧 Testing parameterized tool execution...');
     
-    const result = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
+    const result = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: 'Cust*',
+      objectType: 'AxClass',
       limit: 10
     });
     
@@ -103,12 +104,12 @@ describe('🔌 Protocol Communication', () => {
     console.log('📡 Testing protocol consistency...');
     
     // Execute multiple tools to test protocol consistency
-    const tools = ['get_current_config', 'list_objects_by_type'];
+    const tools = ['get_current_config', 'search_objects_pattern'];
     const results = [];
     
     for (const tool of tools) {
       const result = await mcpClient.executeTool(tool, 
-        tool === 'list_objects_by_type' ? { objectType: 'classes', limit: 5 } : {}
+        tool === 'search_objects_pattern' ? { pattern: 'Cust*', limit: 5 } : {}
       );
       results.push(result);
     }
@@ -137,11 +138,11 @@ describe('🔌 Tool Discovery & Validation', () => {
     const configResult = await mcpClient.executeTool('get_current_config');
     expect(configResult).toBeDefined();
     
-    const listResult = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
+    const searchResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: 'Cust*',
       limit: 1
     });
-    expect(listResult).toBeDefined();
+    expect(searchResult).toBeDefined();
     
     console.log('✅ Core MCP tools are discoverable and functional');
   }, MCP_CONFIG.timeouts.medium);
@@ -152,15 +153,15 @@ describe('🔌 Tool Discovery & Validation', () => {
     console.log('📋 Testing tool parameter validation...');
     
     // Test with valid parameters
-    const validResult = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
+    const validResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: 'Cust*',
       limit: 5
     });
     expect(validResult).toBeDefined();
     
     // Test with minimal parameters
-    const minimalResult = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes'
+    const minimalResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*'
     });
     expect(minimalResult).toBeDefined();
     
@@ -208,9 +209,9 @@ describe('🔌 Error Handling', () => {
     
     console.log('⚠️ Testing malformed parameter handling...');
     
-    // Test with invalid object type
-    const result = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'invalid_type',
+    // Test with invalid pattern
+    const result = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '',  // Empty pattern should be handled gracefully
       limit: 5
     });
     
@@ -263,8 +264,9 @@ describe('🔌 JSON Response Format', () => {
     
     console.log('📊 Testing large JSON response handling...');
     
-    const result = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
+    const result = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      format: 'json',
       limit: 100
     });
     
@@ -286,7 +288,7 @@ describe('🔌 JSON Response Format', () => {
     
     const tools = [
       { name: 'get_current_config', params: {} },
-      { name: 'list_objects_by_type', params: { objectType: 'classes', limit: 5 } }
+      { name: 'search_objects_pattern', params: { pattern: 'Cust*', limit: 5 } }
     ];
     
     for (const tool of tools) {

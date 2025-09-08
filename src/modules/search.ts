@@ -6,10 +6,10 @@ import { getPackagePriority } from "./utils.js";
 import { XPP_EXTENSIONS, MAX_SEARCH_RESULTS, MAX_FILE_SIZE } from "./config.js";
 
 /**
- * Enhanced search manager with streaming and caching
+ * Search manager for X++ codebase content and object lookups
  */
-export class EnhancedSearchManager {
-  static async smartSearch(
+export class SearchManager {
+  static async search(
     searchTerm: string, 
     searchPath: string = "", 
     extensions: string[] = [],
@@ -33,8 +33,8 @@ export class EnhancedSearchManager {
         name: obj.name,
         objectType: obj.type,
         path: obj.path,
-        package: obj.package,
-        priority: getPackagePriority(obj.package)
+        package: obj.model,  // ObjectLocation uses 'model' instead of 'package'
+        priority: getPackagePriority(obj.model)  // ObjectLocation uses 'model' instead of 'package'
       });
     }
 

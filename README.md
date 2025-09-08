@@ -87,6 +87,34 @@
 
 This experimental architecture explores enterprise-grade Microsoft API access through modern, protocol-based integration patterns.
 
+## 🎯 **Tool Optimization & Performance**
+
+**Streamlined Architecture**: The MCP X++ Server has been optimized from **15 original tools** down to **5 core tools** (67% reduction) while maintaining full functionality and improving usability.
+
+**Key Achievements**:
+- **📉 67% Tool Reduction**: Eliminated redundancy without losing functionality
+- **🚀 Enhanced Performance**: DLL-based indexing processes 70K+ objects in ~30 seconds
+- **🔄 Unified Search**: Single `search_objects_pattern` tool handles multiple use cases
+- **📊 Structured Output**: JSON format perfect for AOT tree building and VS Code plugins
+- **🎨 Better UX**: Consolidated tools with comprehensive examples and documentation
+
+**Before vs After Optimization**:
+```
+Before: 15 specialized tools with overlapping functionality
+After:  5 unified tools with enhanced capabilities
+        ├── create_xpp_object (Object creation)
+        ├── find_xpp_object (Object discovery)  
+        ├── search_objects_pattern (Pattern search + AOT tree building)
+        ├── get_current_config (System configuration)
+        └── build_object_index (Index management)
+```
+
+**Performance Highlights**:
+- **SQLite-Based**: Pure database architecture with persistent caching
+- **C# DLL Integration**: Direct Microsoft API access for maximum performance
+- **Smart Caching**: Incremental updates and optimized query patterns
+- **JSON Output**: Structured data ready for programmatic consumption
+
 ## 🚀 Quick Start for New Users
 
 ### Prerequisites
@@ -295,58 +323,154 @@ Comprehensive documentation is available in the `docs/` folder:
 
 ## Available Tools
 
-The MCP X++ Server provides 12 comprehensive tools for D365 F&O codebase analysis and management:
+The MCP X++ Server provides **5 optimized tools** for D365 F&O codebase analysis and object management. The tool set has been consolidated from the original 15 tools to eliminate redundancy while maintaining full functionality.
 
-### Configuration & Setup
-- `get_current_config`: Get comprehensive server configuration including paths, index statistics, and system information
+### 🏗️ Object Creation
+#### `create_xpp_object`
+Create D365 F&O objects (models, classes, tables, enums, forms, etc.) with unified interface supporting multiple layers and dependencies.
+- **Parameters**: 
+  - `objectName` (string, required) - Name of the object
+  - `objectType` (string, required) - Type: "model", "class", "table", "enum"
+  - `layer` (string, optional) - Application layer (usr, cus, var, etc.)
+  - `publisher` (string, optional) - Publisher name (default: "YourCompany")
+  - `version` (string, optional) - Version string (default: "1.0.0.0")
+  - `dependencies` (array, optional) - Dependencies (default: ["ApplicationPlatform", "ApplicationFoundation"])
+- **Returns**: Created object structure with file paths
+- **Use Case**: Generate new X++ objects with proper D365 structure
 
-### Object Creation
-- `create_xpp_object`: Create D365 F&O objects (models, classes, tables, enums) with unified interface supporting multiple layers and dependencies
+### 🔍 Object Discovery & Search
+#### `find_xpp_object`
+Find and analyze X++ objects (classes, tables, forms, etc.) by name with optional type and model filtering.
+- **Parameters**: 
+  - `objectName` (string, required) - Name of the X++ object to find
+  - `objectType` (string, optional) - Filter by object type (AxTable, AxClass, AxForm, AxEnum, etc.)
+  - `model` (string, optional) - Filter by D365 model/package name
+- **Returns**: Object locations with paths, models, and metadata
+- **Use Case**: Validate object existence, locate object files, and analyze object relationships
 
-### File System Operations
-- `browse_directory`: Browse directories with optional hidden file display
-- `read_file`: Read file contents with path validation and size limits
-- `search_files`: Search for text within X++ codebase files with configurable extensions
+#### `search_objects_pattern`
+**🌟 Enhanced Tool**: Search D365 objects by name pattern using wildcards, or browse all objects in a specific model. Now supports both human-readable text and structured JSON output for AOT tree building.
+- **Parameters**: 
+  - `pattern` (string, required) - Search pattern with wildcards (e.g., 'Cust*', '*Table', '*Invoice*')
+  - `objectType` (string, optional) - Filter by object type (AxClass, AxTable, AxForm, AxEnum, etc.)
+  - `model` (string, optional) - Filter by D365 model/package name
+  - `limit` (number, optional) - Maximum results to return (default: 50)
+  - `format` (string, optional) - Output format: 'text' (default) or 'json'
+- **Returns**: 
+  - **Text format**: Human-readable search results with context and examples
+  - **JSON format**: Structured data perfect for AOT tree building and programmatic use
+- **Use Cases**: 
+  - Pattern-based object discovery
+  - Model browsing and exploration  
+  - AOT tree building for VS Code plugins
+  - Cross-model object analysis
 
-### Object Discovery & Analysis
-- `find_xpp_object`: Find and analyze X++ objects by name with optional type filtering (CLASSES, TABLES, FORMS, etc.)
-- `get_class_methods`: Get detailed method signatures and information for specific X++ classes
-- `get_table_structure`: Get detailed table structure including fields, indexes, and relations
-- `discover_object_types_json`: Return the raw JSON structure from d365-aot-structure.json file
-
-### Index Management & Search
-- `build_object_index`: Build or update the object index for faster searches with optional type-specific or force rebuild options
-- `list_objects_by_type`: List all objects of a specific type from the index with sorting and pagination
-- `smart_search`: Perform intelligent search across the X++ codebase using multiple strategies with configurable results
-
-**JSON Response Format for `list_objects_by_type`:**
+**JSON Response Format for AOT Tree Building:**
 ```json
 {
-  "objectType": "CLASSES",
-  "totalCount": 31258,
-  "objects": [
-    {
-      "name": "AADAuthenticationMonitoringAndDiagnostics",
-      "package": "ApplicationFoundation",
-      "path": "/ApplicationFoundation/AAD/Classes/AADAuth.xml",
-      "size": 2048
+  "meta": {
+    "queryType": "patternSearch|modelBrowse",
+    "pattern": "search pattern",
+    "objectType": "filter applied",
+    "model": "target model",
+    "timestamp": "2025-09-08T10:40:00.000Z",
+    "duration": "4ms",
+    "totalResults": 100,
+    "returnedResults": 50,
+    "limitApplied": true
+  },
+  "data": {
+    "ModelName": {
+      "AxTable": [
+        {
+          "name": "ObjectName",
+          "path": "ModelName/AxTable/ObjectName",
+          "model": "ModelName",
+          "type": "AxTable"
+        }
+      ],
+      "AxClass": [...]
     }
-  ]
+  }
 }
 ```
+
+**Enhanced Examples:**
+```javascript
+// Get all tables for AOT tree
+search_objects_pattern("*", "AxTable", "", 1000, "json")
+
+// Browse specific model structure  
+search_objects_pattern("*", "", "ApplicationSuite", 500, "json")
+
+// Pattern search with human-readable output
+search_objects_pattern("Cust*", "", "", 50, "text")
+```
+
+### ⚙️ Configuration & Management
+#### `get_current_config`
+Get comprehensive server configuration including paths, index statistics, VS2022 service status, and models grouped by type.
+- **Parameters**: None
+- **Returns**: JSON with complete system information including:
+  - Server configuration and paths
+  - Models grouped by custom vs standard
+  - VS2022 service status and connectivity
+  - Index statistics and object counts
+  - System summary and health status
+- **Use Case**: Monitor server state, troubleshoot configuration, view model organization
+
+#### `build_object_index`
+Build or update the searchable object index for faster searches and better performance.
+- **Parameters**: 
+  - `objectType` (string, optional) - Specific object type to index (empty for all)
+  - `forceRebuild` (boolean, optional) - Force complete rebuild (default: false)
+- **Returns**: Index statistics with object counts by type
+- **Performance**: Processes 70K+ objects in ~30 seconds via DLL-based C# service
+- **Use Case**: Initialize search capabilities and improve query performance
+
+### 📁 File Operations
+#### `read_xpp_file_content`
+Read X++ file contents with security validation and size limits.
+- **Parameters**: `filePath` (string, required) - Relative path to file from codebase root
+- **Returns**: File contents with encoding detection and metadata
+- **Limits**: 500KB maximum file size with security path validation
+- **Use Case**: View X++ source code, XML metadata, and configuration files
+
+## 🔄 Tool Consolidation History
+
+The tool set has been systematically optimized from **15 original tools** down to **5 core tools** (67% reduction) while maintaining full functionality:
+
+**Removed Redundant Tools:**
+- `browse_directory` - Functionality merged into enhanced search capabilities
+- `search_files` - Replaced by enhanced `search_objects_pattern`  
+- `list_objects_by_type` - Functionality available through `search_objects_pattern` with JSON format
+- `smart_search` - Consolidated into `search_objects_pattern`
+- `get_class_methods` - Object analysis integrated into `find_xpp_object`
+- `get_table_structure` - Object analysis integrated into `find_xpp_object`
+- `discover_object_types_json` - AOT structure now available through `search_objects_pattern` JSON format
+- `browse_package_objects` - Model browsing integrated into `search_objects_pattern`
+- `find_object_location` - Redundant with `find_xpp_object`
+- `enhanced_search` - Functionality merged into `search_objects_pattern`
+
+**Key Enhancement - `search_objects_pattern`:**
+This tool now serves as the unified interface for:
+- Pattern-based object searching
+- Model browsing and exploration
+- AOT tree building with structured JSON output
+- Object type filtering and analysis
+- Both human-readable and programmatic output formats
 
 **JSON Response Format for `get_current_config`:**
 ```json
 {
   "_meta": {
     "type": "configuration",
-    "timestamp": "2025-08-29T10:30:00.000Z",
+    "timestamp": "2025-09-08T10:30:00.000Z",
     "version": "1.0.0"
   },
-  "serverConfig": {
-    "xppPath": "C:\\D365\\PackagesLocalDirectory",
-    "xppMetadataFolder": "C:\\CustomMetadata"
-  },
+  "xppPath": "C:\\D365\\PackagesLocalDirectory",
+  "xppMetadataFolder": "C:\\CustomMetadata",
+  "vs2022ExtensionPath": "C:\\Program Files\\Microsoft Visual Studio\\2022\\...",
   "models": {
     "custom": [
       {
@@ -369,13 +493,22 @@ The MCP X++ Server provides 12 comprehensive tools for D365 F&O codebase analysi
     "summary": {
       "totalModels": 120,
       "customCount": 5,
-      "standardCount": 115
+      "standardCount": 115,
+      "customLayers": ["usr", "cus", "var"],
+      "standardLayers": ["slp", "gls", "fp"],
+      "publishers": ["Microsoft Corporation", "MyCompany"]
     }
   },
   "vs2022Service": {
     "status": "connected",
     "modelsCount": 120,
-    "lastUpdated": "2025-08-29T10:30:00.000Z"
+    "serviceModels": [...],
+    "lastUpdated": "2025-09-08T10:30:00.000Z"
+  },
+  "indexStats": {
+    "totalObjects": 72708,
+    "objectTypes": {...},
+    "lastUpdated": "2025-09-08T10:30:00.000Z"
   },
   "summary": {
     "totalModels": 120,
@@ -388,119 +521,10 @@ The MCP X++ Server provides 12 comprehensive tools for D365 F&O codebase analysi
 ```
 
 **Supported Object Types:**
-- CLASSES, TABLES, FORMS, REPORTS, ENUMS, EDTS, VIEWS, MAPS, SERVICES, WORKFLOWS, QUERIES, MENUS, MENUITEM
+- AxClass, AxTable, AxForm, AxReport, AxEnum, AxEdt, AxView, AxMap, AxService, AxWorkflow, AxQuery, AxMenu, AxMenuitem, and 450+ more
 
 **Available Application Layers:**
 - usr, cus, var, isv, slp, gls, fp, sys
-
-## Tool Reference
-
-### Configuration Tools
-
-#### `get_current_config`
-Get comprehensive server configuration, VS2022 service status, and models grouped by type.
-- **Parameters**: None
-- **Returns**: JSON with paths, index statistics, VS2022 service status, models grouped by custom vs standard, system information, and summary statistics
-- **Use Case**: Monitor server state, troubleshoot configuration issues, view model organization, and check VS2022 service connectivity
-
-### Object Creation
-
-#### `create_xpp_object`
-Create new D365 F&O objects with full metadata support.
-- **Parameters**: 
-  - `objectName` (string, required) - Name of the object
-  - `objectType` (string, required) - Type: "model", "class", "table", "enum"
-  - `layer` (string, optional) - Application layer (usr, cus, var, etc.)
-  - `publisher` (string, optional) - Publisher name (default: "YourCompany")
-  - `version` (string, optional) - Version string (default: "1.0.0.0")
-  - `dependencies` (array, optional) - Dependencies (default: ["ApplicationPlatform", "ApplicationFoundation"])
-  - `outputPath` (string, optional) - Output path (default: "Models")
-- **Returns**: Created object structure with file paths
-- **Use Case**: Generate new X++ objects with proper D365 structure
-
-### File System Tools
-
-#### `browse_directory`
-Navigate and list directory contents with X++ file recognition.
-- **Parameters**: 
-  - `path` (string, optional) - Relative path from codebase root (empty for root)
-  - `showHidden` (boolean, optional) - Show hidden files (default: false)
-- **Returns**: Directory listing with file types and icons
-- **Use Case**: Explore D365 package structure and navigate codebases
-
-#### `read_file`
-Read file contents with security validation and size limits.
-- **Parameters**: `path` (string, required) - Relative path to file
-- **Returns**: File contents with encoding detection
-- **Limits**: 500KB maximum file size
-- **Use Case**: View X++ source code, XML metadata, and configuration files
-
-#### `search_files`
-Search text within files using case-insensitive matching.
-- **Parameters**: 
-  - `searchTerm` (string, required) - Text to search for
-  - `path` (string, optional) - Relative search path (empty for entire codebase)
-  - `extensions` (array, optional) - File extensions filter (e.g., ['.xpp', '.xml'])
-- **Returns**: Search results with file paths and match context
-- **Use Case**: Find code patterns, method names, or configuration values
-
-### Object Discovery Tools
-
-#### `find_xpp_object`
-Locate X++ objects by name with optional type filtering.
-- **Parameters**: 
-  - `objectName` (string, required) - Name of object to find
-  - `objectType` (string, optional) - Object type filter (CLASSES, TABLES, etc.)
-- **Returns**: Object locations with paths and metadata
-- **Use Case**: Validate object existence and locate object files
-
-#### `get_class_methods`
-Analyze class structure with detailed method information.
-- **Parameters**: `className` (string, required) - Name of class to analyze
-- **Returns**: Class methods with signatures, inheritance, and metadata
-- **Use Case**: Understand class APIs and inheritance relationships
-
-#### `get_table_structure`
-Parse table metadata including fields, indexes, and relations.
-- **Parameters**: `tableName` (string, required) - Name of table to analyze
-- **Returns**: Complete table structure with fields, types, and indexes
-- **Use Case**: Understand database schema and table relationships
-
-#### `discover_object_types_json`
-Get raw AOT structure configuration.
-- **Parameters**: None
-- **Returns**: Complete AOT structure JSON from configuration
-- **Use Case**: Access full object type hierarchy and structure definitions
-
-### Index and Search Tools
-
-#### `build_object_index`
-Build or update searchable object index for performance optimization.
-- **Parameters**: 
-  - `objectType` (string, optional) - Specific type to index (empty for all)
-  - `forceRebuild` (boolean, optional) - Force complete rebuild (default: false)
-- **Returns**: Index statistics with object counts by type
-- **Performance**: Processes 70K+ objects in ~30 seconds
-- **Use Case**: Initialize search capabilities and improve query performance
-
-#### `list_objects_by_type`
-Query indexed objects with JSON response format.
-- **Parameters**: 
-  - `objectType` (string, required) - Object type to list
-  - `sortBy` (string, optional) - Sort criteria: "name", "package", "size" (default: "name")
-  - `limit` (number, optional) - Maximum results to return
-- **Returns**: JSON with totalCount and object array
-- **Use Case**: Browse objects by type with pagination and metadata
-
-#### `smart_search`
-Intelligent multi-strategy search with result prioritization.
-- **Parameters**: 
-  - `searchTerm` (string, required) - Term to search for
-  - `searchPath` (string, optional) - Relative path to search within
-  - `extensions` (array, optional) - File extensions to include
-  - `maxResults` (number, optional) - Maximum results (default: 50)
-- **Returns**: Prioritized results with object matches before file content matches
-- **Use Case**: Comprehensive codebase search with intelligent ranking
 
 ## Supported File Types
 

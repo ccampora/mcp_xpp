@@ -60,61 +60,6 @@ export class ToolDefinitions {
           },
         },
         {
-          name: "browse_directory",
-          description: "Browse a directory in the X++ codebase and list its contents",
-          inputSchema: {
-            type: "object",
-            properties: {
-              path: {
-                type: "string",
-                description: "Relative path from X++ codebase root (leave empty for root)",
-              },
-              showHidden: {
-                type: "boolean",
-                description: "Whether to show hidden files and directories",
-                default: false,
-              },
-            },
-          },
-        },
-        {
-          name: "read_file",
-          description: "Read the contents of a file in the X++ codebase",
-          inputSchema: {
-            type: "object",
-            properties: {
-              path: {
-                type: "string",
-                description: "Relative path to the file from X++ codebase root",
-              },
-            },
-            required: ["path"],
-          },
-        },
-        {
-          name: "search_files",
-          description: "Search for text within X++ codebase files",
-          inputSchema: {
-            type: "object",
-            properties: {
-              searchTerm: {
-                type: "string",
-                description: "Text to search for (case insensitive)",
-              },
-              path: {
-                type: "string",
-                description: "Relative path to search within (leave empty to search entire codebase)",
-              },
-              extensions: {
-                type: "array",
-                items: { type: "string" },
-                description: "File extensions to include in search (e.g., ['.xpp', '.xml'])",
-              },
-            },
-            required: ["searchTerm"],
-          },
-        },
-        {
           name: "find_xpp_object",
           description: "Find and analyze X++ objects (classes, tables, forms, etc.) by name. Can also be used to validate if an object exists in the codebase.",
           inputSchema: {
@@ -137,42 +82,6 @@ export class ToolDefinitions {
           },
         },
         {
-          name: "get_class_methods",
-          description: "Get detailed method signatures and information for a specific X++ class",
-          inputSchema: {
-            type: "object",
-            properties: {
-              className: {
-                type: "string",
-                description: "Name of the X++ class to analyze",
-              },
-            },
-            required: ["className"],
-          },
-        },
-        {
-          name: "get_table_structure",
-          description: "Get detailed table structure including fields, indexes, and relations",
-          inputSchema: {
-            type: "object",
-            properties: {
-              tableName: {
-                type: "string",
-                description: "Name of the X++ table to analyze",
-              },
-            },
-            required: ["tableName"],
-          },
-        },
-        {
-          name: "discover_object_types_json",
-          description: "Return the raw JSON structure from d365-aot-structure.json file",
-          inputSchema: {
-            type: "object",
-            properties: {},
-          },
-        },
-        {
           name: "build_object_index",
           description: "Build or update the object index for faster searches",
           inputSchema: {
@@ -191,58 +100,6 @@ export class ToolDefinitions {
           },
         },
         {
-          name: "list_objects_by_type",
-          description: "List all objects of a specific type from the index",
-          inputSchema: {
-            type: "object",
-            properties: {
-              objectType: {
-                type: "string",
-                description: "Type of objects to list",
-              },
-              sortBy: {
-                type: "string",
-                description: "Sort criteria",
-                enum: ["name", "package", "size"],
-                default: "name",
-              },
-              limit: {
-                type: "number",
-                description: "Maximum number of objects to return",
-              },
-            },
-            required: ["objectType"],
-          },
-        },
-        {
-          name: "smart_search",
-          description: "Perform an intelligent search across the X++ codebase using multiple strategies",
-          inputSchema: {
-            type: "object",
-            properties: {
-              searchTerm: {
-                type: "string",
-                description: "Term to search for",
-              },
-              searchPath: {
-                type: "string",
-                description: "Relative path to search within (optional)",
-              },
-              extensions: {
-                type: "array",
-                items: { type: "string" },
-                description: "File extensions to include (optional)",
-              },
-              maxResults: {
-                type: "number",
-                description: "Maximum number of results",
-                default: 50,
-              },
-            },
-            required: ["searchTerm"],
-          },
-        },
-        {
           name: "get_current_config",
           description: "Get comprehensive server configuration including paths, index statistics, VS2022 service status, and models grouped by custom vs standard",
           inputSchema: {
@@ -251,71 +108,72 @@ export class ToolDefinitions {
           },
         },
         {
-          name: "find_object_location",
-          description: "Fast SQLite-based lookup to find D365 object location and model information. Returns both file path and package/model details for analysis workflows.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              objectName: {
-                type: "string",
-                description: "Name of the D365 object to locate (e.g., 'CustomerTable', 'VendInvoiceJour')",
-              },
-              packageName: {
-                type: "string",
-                description: "Optional package/model name to resolve conflicts when multiple objects have the same name",
-              },
-            },
-            required: ["objectName"],
-          },
-        },
-        {
-          name: "browse_package_objects",
-          description: "Browse all objects within a specific D365 package/model. Useful for exploring package contents and understanding dependencies.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              packageName: {
-                type: "string",
-                description: "Name of the D365 package/model to browse (e.g., 'ApplicationSuite', 'ApplicationFoundation')",
-              },
-              objectType: {
-                type: "string",
-                description: "Optional filter by object type (e.g., 'AxClass', 'AxTable', 'AxForm')",
-              },
-              limit: {
-                type: "number",
-                description: "Maximum number of objects to return",
-                default: 100,
-              },
-            },
-            required: ["packageName"],
-          },
-        },
-        {
           name: "search_objects_pattern",
-          description: "Search D365 objects by name pattern using wildcards. Supports * (any characters) and ? (single character) patterns for flexible object discovery.",
+          description: "Search D365 objects by name pattern using wildcards, or browse all objects in a specific model. Supports * (any characters) and ? (single character) patterns for flexible object discovery. Can also be used to browse entire models by using '*' as pattern with a model filter. Supports both human-readable text and structured JSON output for AOT tree building.",
           inputSchema: {
             type: "object",
             properties: {
               pattern: {
                 type: "string",
-                description: "Search pattern with wildcards (e.g., 'Cust*', '*Table', '*Invoice*'). Use * for multiple characters and ? for single character.",
+                description: "Search pattern with wildcards (e.g., 'Cust*', '*Table', '*Invoice*', '?'). Use '*' to return all objects (useful when browsing a specific model). Use ? for single character matching.",
               },
               objectType: {
                 type: "string",
-                description: "Optional filter by object type (e.g., 'AxClass', 'AxTable')",
+                description: "Optional filter by object type (e.g., 'AxClass', 'AxTable', 'AxForm', 'AxEnum'). Leave empty to search all object types.",
               },
-              packageName: {
+              model: {
                 type: "string",
-                description: "Optional filter by package/model name",
+                description: "Optional filter by D365 model/package name (e.g., 'ApplicationSuite', 'ApplicationFoundation', 'CaseManagement'). Leave empty to search all models. Use with pattern '*' to browse all objects in a specific model.",
               },
               limit: {
                 type: "number",
-                description: "Maximum number of results to return",
+                description: "Maximum number of results to return. Default is 50. Use higher values (e.g., 500) when browsing entire models.",
                 default: 50,
+              },
+              format: {
+                type: "string",
+                enum: ["text", "json"],
+                description: "Output format: 'text' for human-readable results (default), 'json' for structured data suitable for AOT tree building and programmatic use.",
+                default: "text",
               },
             },
             required: ["pattern"],
+            examples: [
+              {
+                pattern: "Cust*",
+                description: "Find all objects starting with 'Cust'"
+              },
+              {
+                pattern: "*Table",
+                objectType: "AxTable", 
+                description: "Find all tables ending with 'Table'"
+              },
+              {
+                pattern: "*",
+                model: "ApplicationSuite",
+                limit: 200,
+                description: "Browse all objects in ApplicationSuite model (first 200)"
+              },
+              {
+                pattern: "*",
+                model: "CaseManagement",
+                objectType: "AxClass",
+                description: "Browse all classes in CaseManagement model"
+              },
+              {
+                pattern: "*",
+                objectType: "AxTable",
+                format: "json",
+                limit: 1000,
+                description: "Get all tables in structured JSON format for AOT tree building"
+              },
+              {
+                pattern: "*",
+                model: "ApplicationSuite",
+                format: "json",
+                description: "Get all objects in ApplicationSuite as structured JSON grouped by model and type"
+              }
+            ]
           },
         },
       ],

@@ -204,38 +204,17 @@ export class TransportManager {
         case "create_xpp_object":
           return await ToolHandlers.createXppObject(args, requestId);
         
-        case "browse_directory":
-          return await ToolHandlers.browseDirectory(args, requestId);
-        
-        case "read_file":
-          return await ToolHandlers.readFile(args, requestId);
-        
-        case "search_files":
-          return await ToolHandlers.searchFiles(args, requestId);
-        
         case "find_xpp_object":
           return await ToolHandlers.findXppObject(args, requestId);
-        
-        case "get_class_methods":
-          return await ToolHandlers.getClassMethods(args, requestId);
-        
-        case "get_table_structure":
-          return await ToolHandlers.getTableStructure(args, requestId);
-        
-        case "discover_object_types_json":
-          return await ToolHandlers.discoverObjectTypesJson(args, requestId);
         
         case "build_object_index":
           return await ToolHandlers.buildObjectIndex(args, requestId);
         
-        case "list_objects_by_type":
-          return await ToolHandlers.listObjectsByType(args, requestId);
-        
-        case "smart_search":
-          return await ToolHandlers.smartSearch(args, requestId);
-        
         case "get_current_config":
           return await ToolHandlers.getCurrentConfig(args, requestId);
+        
+        case "search_objects_pattern":
+          return await ToolHandlers.searchObjectsPattern(args, requestId);
         
         default:
           throw new McpError(

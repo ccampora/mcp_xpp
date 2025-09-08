@@ -190,11 +190,10 @@ describe('⚡ Search Performance (SQLite)', () => {
     for (const term of searchTerms) {
       const startTime = Date.now();
       
-      const result = await mcpClient.executeTool('list_objects_by_type', {
-        objectType: 'classes',
-        namePattern: term,
-        limit: 10,
-        useSqlite: true
+      const result = await mcpClient.executeTool('search_objects_pattern', {
+        pattern: `${term}*`,
+        objectType: 'AxClass',
+        limit: 10
       });
       
       const endTime = Date.now();
@@ -231,9 +230,11 @@ describe('⚡ Search Performance (SQLite)', () => {
     for (const query of complexQueries) {
       const startTime = Date.now();
       
-      const result = await mcpClient.executeTool('list_objects_by_type', {
-        ...query,
-        useSqlite: true
+      const result = await mcpClient.executeTool('search_objects_pattern', {
+        pattern: '*',
+        objectType: query.objectType === 'classes' ? 'AxClass' : 
+                   query.objectType === 'tables' ? 'AxTable' : 'AxForm',
+        limit: query.limit || 100
       });
       
       const endTime = Date.now();
@@ -260,11 +261,10 @@ describe('⚡ Search Performance (SQLite)', () => {
     const startTime = Date.now();
     
     for (let i = 0; i < concurrentSearches; i++) {
-      const searchPromise = mcpClient.executeTool('list_objects_by_type', {
-        objectType: 'classes',
-        namePattern: `Test${i}*`,
-        limit: 20,
-        useSqlite: true
+      const searchPromise = mcpClient.executeTool('search_objects_pattern', {
+        pattern: `Test${i}*`,
+        objectType: 'AxClass',
+        limit: 20
       });
       searchPromises.push(searchPromise);
     }
@@ -325,9 +325,9 @@ describe('⚡ Memory Efficiency', () => {
     
     // Perform multiple operations to test memory efficiency
     const operations = [
-      { tool: 'list_objects_by_type', params: { objectType: 'classes', limit: 100 } },
-      { tool: 'list_objects_by_type', params: { objectType: 'tables', limit: 100 } },
-      { tool: 'list_objects_by_type', params: { objectType: 'forms', limit: 100 } }
+      { tool: 'search_objects_pattern', params: { pattern: '*', objectType: 'AxClass', limit: 100 } },
+      { tool: 'search_objects_pattern', params: { pattern: '*', objectType: 'AxTable', limit: 100 } },
+      { tool: 'search_objects_pattern', params: { pattern: '*', objectType: 'AxForm', limit: 100 } }
     ];
     
     for (const op of operations) {
@@ -360,10 +360,10 @@ describe('⚡ Scalability Tests', () => {
     for (const size of sizes) {
       const startTime = Date.now();
       
-      const result = await mcpClient.executeTool('list_objects_by_type', {
-        objectType: 'classes',
-        limit: size,
-        useSqlite: true
+      const result = await mcpClient.executeTool('search_objects_pattern', {
+        pattern: '*',
+        objectType: 'AxClass',
+        limit: size
       });
       
       const endTime = Date.now();
@@ -406,11 +406,10 @@ describe('⚡ Scalability Tests', () => {
       
       for (let op = 0; op < operationsPerUser; op++) {
         userOperations.push(
-          mcpClient.executeTool('list_objects_by_type', {
-            objectType: 'classes',
-            namePattern: `User${user}_Op${op}*`,
-            limit: 10,
-            useSqlite: true
+          mcpClient.executeTool('search_objects_pattern', {
+            pattern: `User${user}_Op${op}*`,
+            objectType: 'AxClass',
+            limit: 10
           })
         );
       }

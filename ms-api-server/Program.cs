@@ -94,6 +94,7 @@ namespace D365MetadataService
             services.AddSingleton<IRequestHandler, ModelsHandler>();
             services.AddSingleton<IRequestHandler, AOTStructureHandler>();
             services.AddSingleton<IRequestHandler, SetupInfoHandler>();
+            services.AddSingleton<IRequestHandler, ListObjectsByModelHandler>();
             services.AddSingleton<IRequestHandler, ShutdownHandler>(sp =>
                 new ShutdownHandler(sp.GetRequiredService<ILogger>(), () => Environment.Exit(0)));
 

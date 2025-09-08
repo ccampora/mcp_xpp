@@ -210,7 +210,7 @@ export async function findXppObject(objectName: string, objectType?: string, mod
       }
       
       if (model) {
-        objects = objects.filter(obj => obj.package?.toLowerCase() === model.toLowerCase());
+        objects = objects.filter(obj => obj.model?.toLowerCase() === model.toLowerCase());
       }
       
       // Convert to our expected format
@@ -219,7 +219,7 @@ export async function findXppObject(objectName: string, objectType?: string, mod
           name: obj.name,
           path: obj.path,
           type: obj.type,
-          model: obj.package
+          model: obj.model
         });
       }
       

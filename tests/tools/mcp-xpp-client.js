@@ -28,16 +28,13 @@ const CLIENT_CONFIG = {
     validateMCPFormat: true
   },
   tools: {
-    // Available MCP tools
+    // Available MCP tools (5 optimized tools)
     availableTools: [
       'get_current_config',
-      'list_objects_by_type', 
+      'search_objects_pattern', 
       'build_object_index',
       'create_xpp_object',
-      'discover_object_types_json',
-      'browse_directory',
-      'read_file_content',
-      'search_files'
+      'find_xpp_object'
     ],
     defaultTimeout: 30000
   }
@@ -133,16 +130,10 @@ export class MCPXppClient extends EventEmitter {
 
     const methodMap = {
       'get_current_config': 'getCurrentConfig',
-      'list_objects_by_type': 'listObjectsByType',
+      'search_objects_pattern': 'searchObjectsPattern',
       'build_object_index': 'buildObjectIndex',
       'create_xpp_object': 'createXppObject',
-      'discover_object_types_json': 'discoverObjectTypesJson',
-      'browse_directory': 'browseDirectory',
-      'read_file_content': 'readFileContent',
-      'search_files': 'searchFiles',
-      'find_xpp_object': 'findXppObject',
-      'search_objects_pattern': 'searchObjectsPattern',
-      'browse_package_objects': 'browsePackageObjects'
+      'find_xpp_object': 'findXppObject'
     };
 
     const methodName = methodMap[toolName];
@@ -190,7 +181,7 @@ export class MCPXppClient extends EventEmitter {
       case 'get_current_config':
         return args; // No special formatting needed
       
-      case 'list_objects_by_type':
+      case 'search_objects_pattern':
         return args; // Direct pass-through
       
       case 'build_object_index':
@@ -199,7 +190,7 @@ export class MCPXppClient extends EventEmitter {
       case 'create_xpp_object':
         return { arguments: args }; // Wrap in arguments object
       
-      case 'discover_object_types_json':
+      case 'find_xpp_object':
         return args; // Direct pass-through
       
       default:
@@ -309,10 +300,13 @@ export class MCPTestUtils {
         const contentStr = typeof resp.content === 'string' ? resp.content : JSON.stringify(resp.content);
         if (!contentStr.includes('applicationInfo')) throw new Error('Missing applicationInfo');
       },
-      'list_objects_by_type': (resp) => {
+      'search_objects_pattern': (resp) => {
         if (!resp.content) throw new Error('Missing content');
       },
       'build_object_index': (resp) => {
+        if (!resp.content) throw new Error('Missing content');
+      },
+      'find_xpp_object': (resp) => {
         if (!resp.content) throw new Error('Missing content');
       }
     };
@@ -328,9 +322,10 @@ export class MCPTestUtils {
   static generateTestRequest(toolName, customArgs = {}) {
     const defaultArgs = {
       'get_current_config': {},
-      'list_objects_by_type': { objectType: 'CLASSES', limit: 5 },
+      'search_objects_pattern': { pattern: '*', objectType: 'AxClass', limit: 5 },
       'build_object_index': { mode: 'fast' },
-      'create_xpp_object': { objectType: 'AxModel', name: 'TestModel_' + Date.now(), model: 'cc' }
+      'create_xpp_object': { objectType: 'AxModel', name: 'TestModel_' + Date.now(), model: 'cc' },
+      'find_xpp_object': { objectName: 'SalesTable' }
     };
 
     return {

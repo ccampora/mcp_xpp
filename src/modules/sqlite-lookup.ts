@@ -12,17 +12,19 @@ import path from 'path';
 export interface ObjectLocation {
     name: string;
     path: string;
-    package: string;
+    model: string;
     type: string;
-    size?: number;
-    lastModified?: number;
+    lastModified?: string;
+    hasCode?: boolean;
+    isValid?: boolean;
+    processingTime?: number;
 }
 
 export interface LookupStats {
     totalObjects: number;
     uniqueNames: number;
     nameConflicts: number;
-    packages: number;
+    models: number;
     types: number;
 }
 
@@ -42,12 +44,14 @@ export class SQLiteObjectLookup {
     private prepared: {
         findByName?: Database.Statement;
         findByNameExact?: Database.Statement;
-        findByPackage?: Database.Statement;
+        findByModel?: Database.Statement;
         findByType?: Database.Statement;
-        findByPackageAndType?: Database.Statement;
-        findByNameAndPackage?: Database.Statement;
+        findByModelAndType?: Database.Statement;
+        findByNameAndModel?: Database.Statement;
         getStats?: Database.Statement;
         searchByNamePattern?: Database.Statement;
+        getTotalCount?: Database.Statement;
+        getTypeCount?: Database.Statement;
     } = {};
 
     constructor(private dbPath: string = 'cache/object-lookup.db') {}
@@ -88,47 +92,47 @@ export class SQLiteObjectLookup {
         this.prepared = {
             // Find object by name (may return multiple if conflicts exist)
             findByName: this.db.prepare(`
-                SELECT name, path, package, type, size, lastModified 
+                SELECT name, path, model, type, lastModified 
                 FROM objects 
                 WHERE name = ? 
-                ORDER BY package, type
+                ORDER BY model, type
             `),
 
-            // Find unique object by name and package
-            findByNameAndPackage: this.db.prepare(`
-                SELECT name, path, package, type, size, lastModified 
+            // Find unique object by name and model
+            findByNameAndModel: this.db.prepare(`
+                SELECT name, path, model, type, lastModified 
                 FROM objects 
-                WHERE name = ? AND package = ?
+                WHERE name = ? AND model = ?
                 LIMIT 1
             `),
 
-            // Find all objects in a package
-            findByPackage: this.db.prepare(`
-                SELECT name, path, package, type, size, lastModified 
+            // Find all objects in a model
+            findByModel: this.db.prepare(`
+                SELECT name, path, model, type, lastModified 
                 FROM objects 
-                WHERE package = ? 
+                WHERE model = ? 
                 ORDER BY type, name
             `),
 
             // Find all objects of a specific type
             findByType: this.db.prepare(`
-                SELECT name, path, package, type, size, lastModified 
+                SELECT name, path, model, type, lastModified 
                 FROM objects 
                 WHERE type = ? 
-                ORDER BY package, name
+                ORDER BY model, name
             `),
 
-            // Find objects by package and type
-            findByPackageAndType: this.db.prepare(`
-                SELECT name, path, package, type, size, lastModified 
+            // Find objects by model and type
+            findByModelAndType: this.db.prepare(`
+                SELECT name, path, model, type, lastModified 
                 FROM objects 
-                WHERE package = ? AND type = ? 
+                WHERE model = ? AND type = ? 
                 ORDER BY name
             `),
 
             // Pattern search for object names
             searchByNamePattern: this.db.prepare(`
-                SELECT name, path, package, type, size, lastModified 
+                SELECT name, path, model, type, lastModified 
                 FROM objects 
                 WHERE name LIKE ? 
                 ORDER BY 
@@ -143,9 +147,23 @@ export class SQLiteObjectLookup {
                 SELECT 
                     COUNT(*) as totalObjects,
                     COUNT(DISTINCT name) as uniqueNames,
-                    COUNT(DISTINCT package) as packages,
+                    COUNT(DISTINCT model) as models,
                     COUNT(DISTINCT type) as types
                 FROM objects
+            `),
+
+            // Get total count of objects
+            getTotalCount: this.db.prepare(`
+                SELECT COUNT(*) as count 
+                FROM objects
+            `),
+
+            // Get count of objects by type
+            getTypeCount: this.db.prepare(`
+                SELECT type, COUNT(*) as count 
+                FROM objects 
+                GROUP BY type 
+                ORDER BY count DESC
             `)
         };
     }
@@ -167,11 +185,11 @@ export class SQLiteObjectLookup {
     /**
      * Find a specific object by name and package (for conflict resolution)
      */
-    public findObjectExact(name: string, packageName: string): ObjectLocation | null {
-        if (!this.prepared.findByNameAndPackage) return null;
+    public findObjectExact(name: string, modelName: string): ObjectLocation | null {
+        if (!this.prepared.findByNameAndModel) return null;
         
         try {
-            return this.prepared.findByNameAndPackage.get(name, packageName) as ObjectLocation || null;
+            return this.prepared.findByNameAndModel.get(name, modelName) as ObjectLocation || null;
         } catch (error) {
             console.error('❌ Error finding exact object:', error);
             return null;
@@ -179,15 +197,15 @@ export class SQLiteObjectLookup {
     }
 
     /**
-     * Find all objects in a package
+     * Find all objects in a model
      */
-    public findObjectsByPackage(packageName: string): ObjectLocation[] {
-        if (!this.prepared.findByPackage) return [];
+    public findObjectsByModel(modelName: string): ObjectLocation[] {
+        if (!this.prepared.findByModel) return [];
         
         try {
-            return this.prepared.findByPackage.all(packageName) as ObjectLocation[];
+            return this.prepared.findByModel.all(modelName) as ObjectLocation[];
         } catch (error) {
-            console.error('❌ Error finding objects by package:', error);
+            console.error('❌ Error finding objects by model:', error);
             return [];
         }
     }
@@ -207,15 +225,15 @@ export class SQLiteObjectLookup {
     }
 
     /**
-     * Find objects by package and type
+     * Find objects by model and type
      */
-    public findObjectsByPackageAndType(packageName: string, type: string): ObjectLocation[] {
-        if (!this.prepared.findByPackageAndType) return [];
+    public findObjectsByModelAndType(modelName: string, type: string): ObjectLocation[] {
+        if (!this.prepared.findByModelAndType) return [];
         
         try {
-            return this.prepared.findByPackageAndType.all(packageName, type) as ObjectLocation[];
+            return this.prepared.findByModelAndType.all(modelName, type) as ObjectLocation[];
         } catch (error) {
-            console.error('❌ Error finding objects by package and type:', error);
+            console.error('❌ Error finding objects by model and type:', error);
             return [];
         }
     }
@@ -248,7 +266,7 @@ export class SQLiteObjectLookup {
                 totalObjects: stats.totalObjects,
                 uniqueNames: stats.uniqueNames,
                 nameConflicts: stats.totalObjects - stats.uniqueNames,
-                packages: stats.packages,
+                models: stats.models,
                 types: stats.types
             };
         } catch (error) {
@@ -258,10 +276,10 @@ export class SQLiteObjectLookup {
     }
 
     /**
-     * Smart lookup that handles conflicts automatically
+     * Object lookup with conflict resolution
      * Returns the most likely match or suggests alternatives
      */
-    public smartLookup(name: string, preferredPackage?: string): {
+    public lookupObject(name: string, preferredPackage?: string): {
         result: ObjectLocation | null;
         alternatives: ObjectLocation[];
         isAmbiguous: boolean;
@@ -288,9 +306,9 @@ export class SQLiteObjectLookup {
         let bestMatch = matches[0];
         
         if (preferredPackage) {
-            const packageMatch = matches.find(m => m.package === preferredPackage);
-            if (packageMatch) {
-                bestMatch = packageMatch;
+            const modelMatch = matches.find(m => m.model === preferredPackage);
+            if (modelMatch) {
+                bestMatch = modelMatch;
             }
         }
         
@@ -385,6 +403,65 @@ export class SQLiteObjectLookup {
         if (this.db) {
             this.db.close();
             this.db = null;
+        }
+    }
+
+    /**
+     * Get total count of objects in the database
+     */
+    public getTotalCount(): number {
+        if (!this.prepared.getTotalCount) return 0;
+        
+        try {
+            const result = this.prepared.getTotalCount.get() as { count: number };
+            return result.count;
+        } catch (error) {
+            console.error('❌ Error getting total count:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * Get object count by type
+     */
+    public getTypeStats(): Record<string, number> {
+        if (!this.prepared.getTypeCount) return {};
+        
+        try {
+            const results = this.prepared.getTypeCount.all() as { type: string; count: number }[];
+            const stats: Record<string, number> = {};
+            for (const row of results) {
+                stats[row.type] = row.count;
+            }
+            return stats;
+        } catch (error) {
+            console.error('❌ Error getting type stats:', error);
+            return {};
+        }
+    }
+
+    /**
+     * Get object count by model
+     */
+    public getModelStats(): Record<string, number> {
+        if (!this.db) return {};
+        
+        try {
+            const stmt = this.db.prepare(`
+                SELECT model, COUNT(*) as count 
+                FROM objects 
+                GROUP BY model 
+                ORDER BY count DESC
+            `);
+            const results = stmt.all() as { model: string; count: number }[];
+            const stats: Record<string, number> = {};
+            for (const row of results) {
+                stats[row.model] = row.count;
+            }
+            return stats;
+        } catch (error) {
+            console.error('❌ Error getting model stats:', error);
+            return {};
         }
     }
 

@@ -135,4 +135,31 @@ export class ObjectCreators {
       return `ERROR: Enum creation for ${enumName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
+
+  /**
+   * Create a form using VS2022 service
+   */
+  static async createForm(formName: string, options: { layer?: string; outputPath: string }): Promise<string> {
+    try {
+      const client = this.getServiceClient();
+      await client.connect();
+      
+      const result = await client.createObject('AxForm', {
+        ObjectName: formName,
+        OutputPath: options.outputPath,
+        Layer: options.layer || 'usr'
+      });
+      
+      await client.disconnect();
+      
+      if (result.Success) {
+        return `Form '${formName}' created successfully`;
+      } else {
+        return `ERROR: Form creation for ${formName} failed: ${result.Message || 'Unknown error'}`;
+      }
+    } catch (error) {
+      await DiskLogger.logError(error, 'Form creation failed');
+      return `ERROR: Form creation for ${formName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
 }

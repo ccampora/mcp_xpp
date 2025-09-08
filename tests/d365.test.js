@@ -88,7 +88,7 @@ describe('🏢 D365 Environment Validation', () => {
     expect(configStr).toContain('PackagesLocalDirectory');
     
     console.log('✅ D365 configuration validated through MCP');
-  }, D365_CONFIG.timeouts.fast);
+  }, D365_CONFIG.timeouts.medium);
 
   test('should verify D365 paths accessibility', async () => {
     if (!(await isD365Available())) return;
@@ -103,7 +103,7 @@ describe('🏢 D365 Environment Validation', () => {
     expect(configContent).toBeDefined();
     
     console.log('✅ D365 paths are accessible through MCP');
-  }, D365_CONFIG.timeouts.fast);
+  }, D365_CONFIG.timeouts.medium);
 
   test('should validate VS2022 extension integration', async () => {
     if (!(await isD365Available())) return;
@@ -129,9 +129,14 @@ describe('🏢 AOT Structure Discovery', () => {
   test('should discover D365 object types through MCP', async () => {
     if (!(await isD365Available())) return;
     
-    console.log('🔍 Testing AOT structure discovery...');
+    console.log('🔍 Testing object pattern search...');
     
-    const result = await mcpClient.executeTool('discover_object_types_json');
+    const result = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 10,
+      format: 'json'
+    });
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
     
@@ -154,14 +159,19 @@ describe('🏢 AOT Structure Discovery', () => {
     
     console.log('📦 Testing standard object type identification...');
     
-    // Use list_objects_by_type to test different object types
-    const testTypes = ['classes', 'tables', 'forms'];
+    // Use search_objects_pattern to test different object types
+    const testTypes = [
+      { type: 'AxClass', name: 'classes' },
+      { type: 'AxTable', name: 'tables' },
+      { type: 'AxForm', name: 'forms' }
+    ];
     let foundTypes = 0;
     
-    for (const type of testTypes) {
+    for (const typeInfo of testTypes) {
       try {
-        const result = await mcpClient.executeTool('list_objects_by_type', {
-          objectType: type,
+        const result = await mcpClient.executeTool('search_objects_pattern', {
+          pattern: '*',
+          objectType: typeInfo.type,
           limit: 1
         });
         
@@ -179,17 +189,27 @@ describe('🏢 AOT Structure Discovery', () => {
     console.log(`✅ Found ${foundTypes} standard D365 object types`);
   }, D365_CONFIG.timeouts.medium);
 
-  test('should handle AOT structure caching', async () => {
+  test('should handle object index caching', async () => {
     if (!(await isD365Available())) return;
     
-    console.log('💾 Testing AOT structure caching...');
+    console.log('💾 Testing object index caching...');
     
-    // First call - builds cache
-    const firstResult = await mcpClient.executeTool('discover_object_types_json');
+    // First call - builds cache  
+    const firstResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 5,
+      format: 'json'
+    });
     expect(firstResult).toBeDefined();
     
     // Second call - should use cache
-    const secondResult = await mcpClient.executeTool('discover_object_types_json');
+    const secondResult = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
+      limit: 5,
+      format: 'json'
+    });
     expect(secondResult).toBeDefined();
     
     // Both should return data
@@ -210,8 +230,9 @@ describe('🏢 Object Type Detection', () => {
     
     console.log('🔍 Testing object type detection with SQLite...');
     
-    const result = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
+    const result = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
       limit: 10
     });
     
@@ -239,8 +260,9 @@ describe('🏢 Object Type Detection', () => {
     
     const startTime = Date.now();
     
-    const result = await mcpClient.executeTool('list_objects_by_type', {
-      objectType: 'classes',
+    const result = await mcpClient.executeTool('search_objects_pattern', {
+      pattern: '*',
+      objectType: 'AxClass',
       limit: 50
     });
     
@@ -261,13 +283,19 @@ describe('🏢 Object Type Detection', () => {
     
     console.log('🎯 Testing object type filters...');
     
-    const testTypes = ['classes', 'tables', 'forms', 'enums'];
+    const testTypes = [
+      { type: 'AxClass', name: 'classes' },
+      { type: 'AxTable', name: 'tables' },
+      { type: 'AxForm', name: 'forms' },
+      { type: 'AxEnum', name: 'enums' }
+    ];
     let successfulQueries = 0;
     
-    for (const type of testTypes) {
+    for (const typeInfo of testTypes) {
       try {
-        const result = await mcpClient.executeTool('list_objects_by_type', {
-          objectType: type,
+        const result = await mcpClient.executeTool('search_objects_pattern', {
+          pattern: '*',
+          objectType: typeInfo.type,
           limit: 5
         });
         
