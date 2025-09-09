@@ -206,7 +206,7 @@ export class AOTStructureCacheManager {
    */
   async generateAOTStructureCache(): Promise<void> {
     const startTime = Date.now();
-    console.log('Generating AOT structure cache using Template-First architecture...');
+    console.log('Generating AOT structure cache using VS2022 service integration...');
 
     let sqliteLookup: SQLiteObjectLookup | null = null;
 

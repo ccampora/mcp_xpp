@@ -84,6 +84,9 @@ namespace D365MetadataService
             services.AddSingleton<D365ObjectFactory>(sp =>
                 new D365ObjectFactory(config.D365Config, sp.GetRequiredService<ILogger>()));
 
+            // Register Dynamic D365 Reflection Service
+            services.AddSingleton<DynamicD365ReflectionService>();
+
             // Register all request handlers
             services.AddSingleton<IRequestHandler, CreateObjectHandler>();
             services.AddSingleton<IRequestHandler, HealthCheckHandler>();
@@ -98,6 +101,11 @@ namespace D365MetadataService
             services.AddSingleton<IRequestHandler, AvailableObjectTypesHandler>();
             services.AddSingleton<IRequestHandler, ShutdownHandler>(sp =>
                 new ShutdownHandler(sp.GetRequiredService<ILogger>(), () => Environment.Exit(0)));
+            
+            // Register dynamic reflection handlers
+            services.AddSingleton<IRequestHandler, DiscoverModificationCapabilitiesHandler>();
+            services.AddSingleton<IRequestHandler, DiscoverAvailableTypesHandler>();
+            services.AddSingleton<IRequestHandler, ExecuteObjectModificationHandler>();
 
             // Register handler factory
             services.AddSingleton<RequestHandlerFactory>();

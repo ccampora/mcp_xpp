@@ -16,7 +16,7 @@ export class ToolDefinitions {
       tools: [
         {
           name: "create_xpp_object",
-          description: "🔍 BROWSE OBJECT TYPES: Call without parameters to see all 544+ available D365 F&O object types organized by category. 🏗️ CREATE OBJECTS: Provide parameters to create D365 F&O objects using template-first architecture. Supports classes, tables, forms, enums, data entities, reports, workflows, services, and more with VS2022 service integration.",
+          description: "🔍 BROWSE OBJECT TYPES: Call without parameters to see all 544+ available D365 F&O object types organized by category. 🏗️ CREATE OBJECTS: Provide parameters to create D365 F&O objects using VS2022 service integration. Supports classes, tables, forms, enums, data entities, reports, workflows, services, and more.",
           inputSchema: {
             type: "object",
             properties: {
@@ -267,6 +267,109 @@ export class ToolDefinitions {
               }
             ]
           },
+        },
+        {
+          name: "discover_modification_capabilities", 
+          description: "Discover available modification methods for any D365 object type in real-time using reflection. Shows what operations (AddField, AddMethod, etc.) are possible for the specified object type.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              objectType: {
+                type: "string",
+                description: "D365 object type name (e.g., 'AxTable', 'AxClass', 'AxForm'). Use get_current_config with objectTypeList=true to see all available types.",
+                examples: ["AxTable", "AxClass", "AxForm", "AxEnum", "AxView", "AxQuery", "AxReport"]
+              }
+            },
+            required: ["objectType"],
+            examples: [
+              {
+                description: "🔍 TABLE CAPABILITIES: Discover what modifications are possible on D365 tables",
+                parameters: {
+                  objectType: "AxTable"
+                }
+              },
+              {
+                description: "🔍 CLASS CAPABILITIES: Discover what modifications are possible on D365 classes", 
+                parameters: {
+                  objectType: "AxClass"
+                }
+              },
+              {
+                description: "🔍 FORM CAPABILITIES: Discover what modifications are possible on D365 forms",
+                parameters: {
+                  objectType: "AxForm"
+                }
+              }
+            ]
+          }
+        },
+        {
+          name: "execute_object_modification",
+          description: "Execute a specific modification method on a D365 object. Use discover_modification_capabilities first to see available methods and required parameters.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              objectType: {
+                type: "string",
+                description: "D365 object type name (e.g., 'AxTable', 'AxClass', 'AxForm')",
+                examples: ["AxTable", "AxClass", "AxForm", "AxEnum", "AxView", "AxQuery", "AxReport"]
+              },
+              objectName: {
+                type: "string",
+                description: "Name of the existing D365 object to modify (e.g., 'CustTable', 'SalesTable')"
+              },
+              methodName: {
+                type: "string",
+                description: "Name of the modification method to execute (e.g., 'AddField', 'AddMethod', 'AddIndex')"
+              },
+              parameters: {
+                type: "object",
+                description: "Parameters required by the modification method. Structure depends on the specific method being called.",
+                additionalProperties: true
+              }
+            },
+            required: ["objectType", "objectName", "methodName"],
+            examples: [
+              {
+                description: "🔧 ADD FIELD: Add a new field to a D365 table",
+                parameters: {
+                  objectType: "AxTable",
+                  objectName: "CustTable", 
+                  methodName: "AddField",
+                  parameters: {
+                    fieldName: "MyCustomField",
+                    fieldType: "String",
+                    label: "My Custom Field"
+                  }
+                }
+              },
+              {
+                description: "🔧 ADD METHOD: Add a new method to a D365 class",
+                parameters: {
+                  objectType: "AxClass",
+                  objectName: "SalesTable",
+                  methodName: "AddMethod", 
+                  parameters: {
+                    methodName: "myCustomMethod",
+                    returnType: "void",
+                    source: "public void myCustomMethod() { }"
+                  }
+                }
+              },
+              {
+                description: "🔧 ADD INDEX: Add a new index to a D365 table",
+                parameters: {
+                  objectType: "AxTable", 
+                  objectName: "CustTable",
+                  methodName: "AddIndex",
+                  parameters: {
+                    indexName: "MyCustomIndex",
+                    fields: ["MyCustomField"]
+                  }
+                }
+              }
+            ]
+          }
         },
       ],
     };

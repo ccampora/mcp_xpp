@@ -186,6 +186,25 @@ export class D365ServiceClient extends EventEmitter {
     }
 
     /**
+     * Discover modification capabilities for a specific object type using reflection
+     */
+    async discoverModificationCapabilities(objectType: string): Promise<any> {
+        return this.sendRequest('discoverModificationCapabilities', undefined, { objectType });
+    }
+
+    /**
+     * Execute a modification method on a specific D365 object
+     */
+    async executeObjectModification(objectType: string, objectName: string, methodName: string, parameters: Record<string, any> = {}): Promise<any> {
+        return this.sendRequest('executeObjectModification', undefined, { 
+            objectType, 
+            objectName, 
+            methodName, 
+            parameters 
+        });
+    }
+
+    /**
      * Check if connected
      */
     get connected(): boolean {

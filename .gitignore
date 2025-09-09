@@ -131,3 +131,5 @@ ms-api-server/obj/*
 ms-api-server/app.config
 ms-api-server/D365MetadataService.csproj
 ms-api-server/appsettings.json
+
+docs/internal

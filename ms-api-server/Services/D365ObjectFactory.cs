@@ -241,6 +241,24 @@ namespace D365MetadataService.Services
         {
             var properties = axType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
+            _logger.Information("=== PARAMETER MAPPING DEBUG === for {ObjectType}", axType.Name);
+            _logger.Information("Received parameters: {Parameters}", string.Join(", ", parameters.Select(kvp => $"{kvp.Key}={kvp.Value}")));
+
+            // Special handling for ObjectName -> Name mapping
+            if (parameters.ContainsKey("ObjectName") && !parameters.ContainsKey("Name"))
+            {
+                parameters["Name"] = parameters["ObjectName"];
+                _logger.Information("✅ Mapped ObjectName '{ObjectName}' to Name property", parameters["ObjectName"]);
+            }
+            else if (parameters.ContainsKey("ObjectName") && parameters.ContainsKey("Name"))
+            {
+                _logger.Information("⚠️ Both ObjectName and Name exist. Name='{Name}', ObjectName='{ObjectName}'", parameters["Name"], parameters["ObjectName"]);
+            }
+            else if (!parameters.ContainsKey("ObjectName") && !parameters.ContainsKey("Name"))
+            {
+                _logger.Error("❌ Neither ObjectName nor Name parameter found!");
+            }
+
             foreach (var kvp in parameters)
             {
                 var property = properties.FirstOrDefault(p => 
@@ -252,12 +270,17 @@ namespace D365MetadataService.Services
                     {
                         var value = ConvertValue(kvp.Value, property.PropertyType);
                         property.SetValue(axInstance, value);
-                        _logger.Debug("Set {PropertyName} = {Value}", property.Name, value);
+                        _logger.Information("✅ Set {PropertyName} = '{Value}' on {ObjectType}", property.Name, value, axType.Name);
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warning(ex, "Failed to set property {PropertyName}", property.Name);
+                        _logger.Warning(ex, "❌ Failed to set property {PropertyName}", property.Name);
                     }
+                }
+                else
+                {
+                    _logger.Warning("Property {PropertyName} not found or not writable on {ObjectType}. Available properties: {Properties}", 
+                        kvp.Key, axType.Name, string.Join(", ", properties.Where(p => p.CanWrite).Select(p => p.Name).Take(10)));
                 }
             }
         }
@@ -268,9 +291,15 @@ namespace D365MetadataService.Services
         private PropertyInfo FindProviderProperty(string objectType)
         {
             _logger.Information("Finding provider property for object type: {ObjectType}", objectType);
+            _logger.Information("Provider property cache has {Count} entries", _providerPropertyCache.Count);
             
             // BREAKTHROUGH DISCOVERY: All object types use the same "Item" property!
             // The provider only has one collection property with Create methods: Item
+            
+            foreach (var kvp in _providerPropertyCache)
+            {
+                _logger.Information("Cache entry: Key='{Key}', Property='{PropertyName}'", kvp.Key, kvp.Value?.Name ?? "null");
+            }
             
             if (_providerPropertyCache.TryGetValue("Item", out var itemProperty))
             {
@@ -577,6 +606,276 @@ namespace D365MetadataService.Services
                     ["source"] = "DynamicD365ObjectFactory"
                 };
             }
+        }
+
+        /// <summary>
+        /// Retrieve an existing D365 object from the metadata provider
+        /// </summary>
+        public object GetExistingObject(string objectType, string objectName)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(objectType) || string.IsNullOrWhiteSpace(objectName))
+                {
+                    _logger.Warning("Invalid parameters for GetExistingObject: objectType={ObjectType}, objectName={ObjectName}", objectType, objectName);
+                    return null;
+                }
+
+                _logger.Information("Retrieving existing object: {ObjectType}:{ObjectName}", objectType, objectName);
+
+                // Get the Ax type
+                if (!_axTypeCache.TryGetValue(objectType, out var axType))
+                {
+                    _logger.Warning("Object type {ObjectType} not found in cache", objectType);
+                    return null;
+                }
+
+                // Find the provider property for this object type using the same logic as creation
+                var providerProperty = FindProviderProperty(objectType);
+                if (providerProperty == null)
+                {
+                    _logger.Warning("Provider property not found for {ObjectType}", objectType);
+                    return null;
+                }
+
+                _logger.Information("Using provider property: {ProviderProperty} for {ObjectType}", providerProperty.Name, objectType);
+
+                // Access the provider collection (e.g., Item[AxTable])
+                var providerCollection = providerProperty.GetValue(_metadataProvider, new object[] { axType });
+                if (providerCollection == null)
+                {
+                    _logger.Warning("Provider collection is null for {ObjectType}", objectType);
+                    return null;
+                }
+
+                // Look for a Read or Get method on the provider collection
+                var providerType = providerCollection.GetType();
+                var readMethod = providerType.GetMethod("Read", new[] { typeof(string) }) ??
+                                providerType.GetMethod("Get", new[] { typeof(string) });
+
+                if (readMethod == null)
+                {
+                    _logger.Warning("No Read or Get method found on provider collection for {ObjectType}", objectType);
+                    return null;
+                }
+
+                _logger.Information("Using method {MethodName} to retrieve {ObjectType}:{ObjectName}", readMethod.Name, objectType, objectName);
+
+                // Invoke the Read/Get method
+                var result = readMethod.Invoke(providerCollection, new object[] { objectName });
+                
+                if (result != null)
+                {
+                    _logger.Information("Successfully retrieved {ObjectType}:{ObjectName}", objectType, objectName);
+                }
+                else
+                {
+                    _logger.Information("Object {ObjectType}:{ObjectName} not found in metadata store", objectType, objectName);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to retrieve existing object {ObjectType}:{ObjectName}", objectType, objectName);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Save a modified object back to the metadata store
+        /// </summary>
+        public async Task<bool> SaveObjectAsync(string objectType, string objectName, object modifiedObject)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(objectType) || string.IsNullOrWhiteSpace(objectName) || modifiedObject == null)
+                {
+                    _logger.Warning("Invalid parameters for SaveObjectAsync: objectType={ObjectType}, objectName={ObjectName}, object is null={IsNull}", 
+                        objectType, objectName, modifiedObject == null);
+                    return false;
+                }
+
+                _logger.Information("Saving modified object: {ObjectType}:{ObjectName}", objectType, objectName);
+
+                // First, try to save using the provider itself (not the collection)
+                var providerType = _metadataProvider.GetType();
+                var providerMethods = providerType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+                
+                _logger.Information("Available methods on provider for {ObjectType}: {Methods}", 
+                    objectType, string.Join(", ", providerMethods.Select(m => $"{m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name))})")));
+
+                // Look for save methods on the provider itself
+                var providerSaveMethod = providerType.GetMethod("CreateObject", new[] { modifiedObject.GetType() }) ??
+                                       providerType.GetMethod("UpdateObject", new[] { modifiedObject.GetType() }) ??
+                                       providerType.GetMethod("SaveObject", new[] { modifiedObject.GetType() }) ??
+                                       providerType.GetMethod("WriteObject", new[] { modifiedObject.GetType() }) ??
+                                       providerMethods.FirstOrDefault(m => m.Name.Contains("Create") && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType())) ??
+                                       providerMethods.FirstOrDefault(m => m.Name.Contains("Save") && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType())) ??
+                                       providerMethods.FirstOrDefault(m => m.Name.Contains("Write") && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType()));
+
+                if (providerSaveMethod != null)
+                {
+                    _logger.Information("Using provider method {MethodName} to save {ObjectType}:{ObjectName}", providerSaveMethod.Name, objectType, objectName);
+                    providerSaveMethod.Invoke(_metadataProvider, new object[] { modifiedObject });
+                    _logger.Information("Successfully saved {ObjectType}:{ObjectName} to metadata store using provider method", objectType, objectName);
+                    return true;
+                }
+
+                // If no provider method found, try the collection approach as fallback
+                _logger.Information("No provider save method found, trying collection approach for {ObjectType}", objectType);
+
+                // Get the Ax type
+                if (!_axTypeCache.TryGetValue(objectType, out var axType))
+                {
+                    _logger.Warning("Object type {ObjectType} not found in cache", objectType);
+                    return false;
+                }
+
+                // Find the provider property
+                var providerProperty = FindProviderProperty(objectType);
+                if (providerProperty == null)
+                {
+                    _logger.Warning("Provider property not found for {ObjectType}", objectType);
+                    return false;
+                }
+
+                // Access the provider collection (e.g., Item[AxTable])
+                var providerCollection = providerProperty.GetValue(_metadataProvider, new object[] { axType });
+                if (providerCollection == null)
+                {
+                    _logger.Warning("Provider collection is null for {ObjectType}", objectType);
+                    return false;
+                }
+
+                // Discover available methods on the provider collection
+                var collectionType = providerCollection.GetType();
+                var allMethods = collectionType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+                
+                _logger.Information("Available methods on provider collection for {ObjectType}: {Methods}", 
+                    objectType, string.Join(", ", allMethods.Select(m => $"{m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name))})")));
+
+                // Look for methods that could save the object - these methods typically require ModelSaveInfo as second parameter
+                var createMethod = allMethods.FirstOrDefault(m => m.Name == "Create" && 
+                    m.GetParameters().Length == 2 && 
+                    m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType()));
+                
+                var updateMethod = allMethods.FirstOrDefault(m => m.Name == "Update" && 
+                    m.GetParameters().Length == 2 && 
+                    m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType()));
+
+                MethodInfo saveMethod = null;
+                object[] parameters = null;
+
+                if (createMethod != null)
+                {
+                    saveMethod = createMethod;
+                    // Create a properly initialized ModelSaveInfo
+                    var modelSaveInfoType = createMethod.GetParameters()[1].ParameterType;
+                    var modelSaveInfo = CreateModelSaveInfo(modelSaveInfoType, objectName);
+                    parameters = new object[] { modifiedObject, modelSaveInfo };
+                    _logger.Information("Using Create method with parameters: {ObjectType}, {ModelSaveInfoType}", modifiedObject.GetType().Name, modelSaveInfoType.Name);
+                }
+                else if (updateMethod != null)
+                {
+                    saveMethod = updateMethod;
+                    // Create a properly initialized ModelSaveInfo  
+                    var modelSaveInfoType = updateMethod.GetParameters()[1].ParameterType;
+                    var modelSaveInfo = CreateModelSaveInfo(modelSaveInfoType, objectName);
+                    parameters = new object[] { modifiedObject, modelSaveInfo };
+                    _logger.Information("Using Update method with parameters: {ObjectType}, {ModelSaveInfoType}", modifiedObject.GetType().Name, modelSaveInfoType.Name);
+                }
+
+                if (saveMethod == null)
+                {
+                    _logger.Warning("No suitable save method found on provider or collection for {ObjectType}", objectType);
+                    return false;
+                }
+
+                _logger.Information("Using collection method {MethodName} to save {ObjectType}:{ObjectName}", saveMethod.Name, objectType, objectName);
+
+                // Invoke the save method with proper parameters
+                saveMethod.Invoke(providerCollection, parameters);
+                
+                _logger.Information("Successfully saved {ObjectType}:{ObjectName} to metadata store using collection method", objectType, objectName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error saving object {ObjectType}:{ObjectName}", objectType, objectName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Create a properly initialized ModelSaveInfo object
+        /// </summary>
+        private object CreateModelSaveInfo(Type modelSaveInfoType, string objectName)
+        {
+            try
+            {
+                var modelSaveInfo = Activator.CreateInstance(modelSaveInfoType);
+                
+                // Log all properties to understand the structure
+                var properties = modelSaveInfoType.GetProperties();
+                _logger.Information("ModelSaveInfo properties: {Properties}", 
+                    string.Join(", ", properties.Select(p => $"{p.Name}:{p.PropertyType.Name}")));
+                
+                // Set all required properties based on discovered structure
+                // Properties: Id:Int32, SequenceId:Int32, Layer:Int32, Name:String, Precedence:Int64
+                                
+                var idProperty = modelSaveInfoType.GetProperty("Id");
+                if (idProperty != null && idProperty.CanWrite)
+                {
+                    idProperty.SetValue(modelSaveInfo, 1);
+                    _logger.Information("Set Id property to: 1");
+                }
+
+                var sequenceIdProperty = modelSaveInfoType.GetProperty("SequenceId");
+                if (sequenceIdProperty != null && sequenceIdProperty.CanWrite)
+                {
+                    sequenceIdProperty.SetValue(modelSaveInfo, 1);
+                    _logger.Information("Set SequenceId property to: 1");
+                }
+
+                var layerProperty = modelSaveInfoType.GetProperty("Layer");
+                if (layerProperty != null && layerProperty.CanWrite)
+                {
+                    // Use layer enum value - 8 is typically USR layer
+                    layerProperty.SetValue(modelSaveInfo, 8);
+                    _logger.Information("Set Layer property to: 8 (USR)");
+                }
+
+                var nameProperty = modelSaveInfoType.GetProperty("Name");
+                if (nameProperty != null && nameProperty.CanWrite)
+                {
+                    // Use a default model name - this could be made configurable
+                    nameProperty.SetValue(modelSaveInfo, "MyCustomModel");
+                    _logger.Information("Set Name property to: MyCustomModel");
+                }
+
+                var precedenceProperty = modelSaveInfoType.GetProperty("Precedence");
+                if (precedenceProperty != null && precedenceProperty.CanWrite)
+                {
+                    precedenceProperty.SetValue(modelSaveInfo, 1L);
+                    _logger.Information("Set Precedence property to: 1");
+                }
+
+                return modelSaveInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to create ModelSaveInfo for {ObjectName}", objectName);
+                return Activator.CreateInstance(modelSaveInfoType);
+            }
+        }
+
+        /// <summary>
+        /// Get an Ax type by name for external use
+        /// </summary>
+        public Type GetAxType(string typeName)
+        {
+            return _axTypeCache.TryGetValue(typeName, out var type) ? type : null;
         }
     }
 }

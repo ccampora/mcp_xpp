@@ -28,13 +28,15 @@ const CLIENT_CONFIG = {
     validateMCPFormat: true
   },
   tools: {
-    // Available MCP tools (5 optimized tools)
+    // Available MCP tools (7 optimized tools)
     availableTools: [
       'get_current_config',
       'search_objects_pattern', 
       'build_object_index',
       'create_xpp_object',
-      'find_xpp_object'
+      'find_xpp_object',
+      'discover_modification_capabilities',
+      'execute_object_modification'
     ],
     defaultTimeout: 30000
   }
@@ -133,7 +135,9 @@ export class MCPXppClient extends EventEmitter {
       'search_objects_pattern': 'searchObjectsPattern',
       'build_object_index': 'buildCache',
       'create_xpp_object': 'createXppObject',
-      'find_xpp_object': 'findXppObject'
+      'find_xpp_object': 'findXppObject',
+      'discover_modification_capabilities': 'discoverModificationCapabilities',
+      'execute_object_modification': 'executeObjectModification'
     };
 
     const methodName = methodMap[toolName];

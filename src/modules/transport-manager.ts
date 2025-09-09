@@ -216,6 +216,12 @@ export class TransportManager {
         case "search_objects_pattern":
           return await ToolHandlers.searchObjectsPattern(args, requestId);
         
+        case "discover_modification_capabilities":
+          return await ToolHandlers.discoverModificationCapabilities(args, requestId);
+        
+        case "execute_object_modification":
+          return await ToolHandlers.executeObjectModification(args, requestId);
+        
         default:
           throw new McpError(
             ErrorCode.MethodNotFound,

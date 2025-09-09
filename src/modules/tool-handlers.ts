@@ -126,48 +126,18 @@ export class ToolHandlers {
     const startTime = Date.now();
     
     try {
-      // Direct VS2022 service integration based on objectType
-      switch (params.objectType.toLowerCase()) {
-        case "model":
-          content = await ObjectCreators.createModel(params.objectName, { 
-            layer: params.layer, 
-            publisher: params.publisher, 
-            version: params.version, 
-            dependencies: params.dependencies, 
-            outputPath: params.outputPath 
-          });
-          break;
-        case "class":
-          content = await ObjectCreators.createClass(params.objectName, { 
-            layer: params.layer, 
-            outputPath: params.outputPath 
-          });
-          break;
-        case "table":
-          content = await ObjectCreators.createTable(params.objectName, { 
-            layer: params.layer, 
-            outputPath: params.outputPath 
-          });
-          break;
-        case "enum":
-          content = await ObjectCreators.createEnum(params.objectName, { 
-            layer: params.layer, 
-            outputPath: params.outputPath 
-          });
-          break;
-        case "form":
-          content = await ObjectCreators.createForm(params.objectName, { 
-            layer: params.layer, 
-            outputPath: params.outputPath 
-          });
-          break;
-        default:
-          throw new Error(`Unsupported object type: ${params.objectType}. Supported types: model, class, table, enum, form`);
-      }
+      // Direct VS2022 service integration - supports all 544+ D365 object types
+      content = await ObjectCreators.createGenericObject(params.objectType, params.objectName, {
+        layer: params.layer,
+        publisher: params.publisher,
+        version: params.version,
+        dependencies: params.dependencies,
+        outputPath: params.outputPath,
+        properties: params.properties
+      });
       
       const executionTime = Date.now() - startTime;
-      content += `\n\nPerformance: ${executionTime}ms using direct VS2022 service integration\n`;
-      content += `Direct Microsoft API: Zero configuration overhead\n`;
+      content += `\n\nPerformance: ${executionTime}ms using VS2022 service integration\n`;
       
       return await createLoggedResponse(content, requestId, "create_xpp_object");
       
@@ -792,6 +762,249 @@ export class ToolHandlers {
       if (lookup) {
         lookup.close();
       }
+    }
+  }
+
+  static async discoverModificationCapabilities(args: any, requestId: string): Promise<any> {
+    console.log('🔍 Starting discoverModificationCapabilities with args:', JSON.stringify(args, null, 2));
+    
+    const actualArgs = args?.arguments || args;
+    
+    // Validate required parameters
+    const objectTypeSchema = z.object({
+      objectType: z.string().min(1, "objectType is required and must be non-empty")
+    });
+
+    const validationResult = objectTypeSchema.safeParse(actualArgs);
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+      throw new McpError(ErrorCode.InvalidParams, `Validation failed: ${errors}`);
+    }
+
+    const { objectType } = validationResult.data;
+
+    try {
+      console.log(`🔍 Discovering modification capabilities for object type: ${objectType}`);
+
+      // Import D365ServiceClient dynamically to avoid circular dependencies
+      const { D365ServiceClient } = await import('./d365-service-client.js');
+      const client = new D365ServiceClient('mcp-xpp-d365-service', 10000, 30000);
+      
+      // Connect to the service
+      console.log('🔗 Connecting to D365 service...');
+      await client.connect();
+      console.log('✅ Connected to D365 service');
+
+      // Discover modification capabilities
+      console.log(`🚀 Requesting modification capabilities for ${objectType}...`);
+      const response = await client.discoverModificationCapabilities(objectType);
+      console.log('📦 Raw service response:', JSON.stringify(response, null, 2));
+
+      // Ensure we disconnect
+      await client.disconnect();
+      console.log('🔌 Disconnected from D365 service');
+
+      // Extract the capabilities data
+      const capabilities = response.Data || response.data || response;
+      
+      if (!capabilities) {
+        return await createLoggedResponse(
+          `❌ No modification capabilities found for object type: ${objectType}`,
+          requestId,
+          "discover_modification_capabilities"
+        );
+      }
+
+      // Format the response for display
+      const formattedResponse = {
+        objectType: capabilities.ObjectType || objectType,
+        fullTypeName: capabilities.FullTypeName,
+        availableMethods: capabilities.Methods || [],
+        methodCount: (capabilities.Methods || []).length,
+        reflectionInfo: {
+          namespace: capabilities.Namespace,
+          assembly: capabilities.Assembly,
+          isPublic: capabilities.IsPublic,
+          isAbstract: capabilities.IsAbstract,
+          isSealed: capabilities.IsSealed
+        }
+      };
+
+      const summary = `🎯 **MODIFICATION CAPABILITIES FOR ${objectType.toUpperCase()}**\n\n` +
+        `📋 **Object Information:**\n` +
+        `   • Type: ${formattedResponse.objectType}\n` +
+        `   • Full Name: ${formattedResponse.fullTypeName}\n` +
+        `   • Namespace: ${formattedResponse.reflectionInfo.namespace}\n` +
+        `   • Assembly: ${formattedResponse.reflectionInfo.assembly}\n\n` +
+        `🔧 **Available Modification Methods (${formattedResponse.methodCount}):**\n` +
+        formattedResponse.availableMethods.map((method: any) => 
+          `   • ${method.Name}: ${method.Description || 'No description available'}\n` +
+          `     Parameters: ${method.Parameters?.length || 0} | Returns: ${method.ReturnType || 'void'}`
+        ).join('\n') + '\n\n' +
+        `💡 **Usage:** These methods can be called via the execute_object_modification tool (when implemented).\n` +
+        `📊 **Type Properties:** Public: ${formattedResponse.reflectionInfo.isPublic}, Abstract: ${formattedResponse.reflectionInfo.isAbstract}, Sealed: ${formattedResponse.reflectionInfo.isSealed}`;
+
+      return await createLoggedResponse(
+        summary,
+        requestId,
+        "discover_modification_capabilities"
+      );
+
+    } catch (error: any) {
+      console.error('❌ Error discovering modification capabilities:', error);
+      
+      const errorMessage = error.message || 'An unexpected error occurred';
+      
+      if (errorMessage.includes('timeout') || errorMessage.includes('ENOENT')) {
+        return await createLoggedResponse(
+          `⚠️ **Connection Error**: Could not connect to D365 metadata service.\n\n` +
+          `**Possible Solutions:**\n` +
+          `1. Ensure the C# service is running (Build and Run C# Service task)\n` +
+          `2. Check if Visual Studio 2022 with D365 tools is installed\n` +
+          `3. Verify the service configuration\n\n` +
+          `**Error:** ${errorMessage}`,
+          requestId,
+          "discover_modification_capabilities"
+        );
+      }
+
+      return await createLoggedResponse(
+        `❌ **Error discovering modification capabilities for ${objectType}:**\n${errorMessage}`,
+        requestId,
+        "discover_modification_capabilities"
+      );
+    }
+  }
+
+  static async executeObjectModification(args: any, requestId: string): Promise<any> {
+    console.log('🔧 Starting executeObjectModification with args:', JSON.stringify(args, null, 2));
+    
+    const actualArgs = args?.arguments || args;
+    
+    // Validate required parameters
+    const modificationSchema = z.object({
+      objectType: z.string().min(1, "objectType is required and must be non-empty"),
+      objectName: z.string().min(1, "objectName is required and must be non-empty"),
+      methodName: z.string().min(1, "methodName is required and must be non-empty"),
+      parameters: z.record(z.any()).optional().default({})
+    });
+
+    const validationResult = modificationSchema.safeParse(actualArgs);
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+      throw new McpError(ErrorCode.InvalidParams, `Validation failed: ${errors}`);
+    }
+
+    const { objectType, objectName, methodName, parameters } = validationResult.data;
+
+    try {
+      console.log(`🔧 Executing modification: ${methodName} on ${objectType}:${objectName}`);
+      console.log('📋 Parameters:', JSON.stringify(parameters, null, 2));
+
+      // Import D365ServiceClient dynamically to avoid circular dependencies
+      const { D365ServiceClient } = await import('./d365-service-client.js');
+      const client = new D365ServiceClient('mcp-xpp-d365-service', 10000, 60000); // Longer timeout for modifications
+      
+      // Connect to the service
+      console.log('🔗 Connecting to D365 service...');
+      await client.connect();
+      console.log('✅ Connected to D365 service');
+
+      // Execute the modification
+      console.log(`🚀 Executing ${methodName} on ${objectType}:${objectName}...`);
+      const response = await client.executeObjectModification(objectType, objectName, methodName, parameters);
+      console.log('📦 Raw service response:', JSON.stringify(response, null, 2));
+
+      // Ensure we disconnect
+      await client.disconnect();
+      console.log('🔌 Disconnected from D365 service');
+
+      // Extract the result data
+      const result = response.Data || response.data || response;
+      
+      if (!result) {
+        return await createLoggedResponse(
+          `❌ No result returned from ${methodName} execution on ${objectType}:${objectName}`,
+          requestId,
+          "execute_object_modification"
+        );
+      }
+
+      // Check for errors in the result
+      if (result.Error || result.error || !result.Success) {
+        const errorMsg = result.Error || result.error || 'Unknown error occurred during modification';
+        return await createLoggedResponse(
+          `❌ **Modification Failed:**\n\n` +
+          `🎯 **Operation:** ${methodName} on ${objectType}:${objectName}\n` +
+          `💥 **Error:** ${errorMsg}\n\n` +
+          `💡 **Suggestions:**\n` +
+          `   • Verify the object exists in the metadata\n` +
+          `   • Check parameter format using discover_modification_capabilities\n` +
+          `   • Ensure required parameters are provided`,
+          requestId,
+          "execute_object_modification"
+        );
+      }
+
+      // Format successful response
+      const summary = `✅ **MODIFICATION EXECUTED SUCCESSFULLY**\n\n` +
+        `🎯 **Operation Details:**\n` +
+        `   • Method: ${methodName}\n` +
+        `   • Target: ${objectType}:${objectName}\n` +
+        `   • Parameters: ${Object.keys(parameters).length} provided\n\n` +
+        `📊 **Execution Results:**\n` +
+        `   • Status: ${result.Success ? 'Success' : 'Completed'}\n` +
+        `   • Processing Time: ${response.ProcessingTimeMs || 'N/A'}ms\n` +
+        `   • Timestamp: ${new Date(response.Timestamp || Date.now()).toLocaleString()}\n\n` +
+        `💾 **Next Steps:**\n` +
+        `   • Save the modified object to persist changes\n` +
+        `   • Build/compile the project to apply modifications\n` +
+        `   • Test the modified object functionality`;
+
+      return await createLoggedResponse(
+        summary,
+        requestId,
+        "execute_object_modification"
+      );
+
+    } catch (error: any) {
+      console.error('❌ Error executing object modification:', error);
+      
+      const errorMessage = error.message || 'An unexpected error occurred';
+      
+      if (errorMessage.includes('timeout') || errorMessage.includes('ENOENT')) {
+        return await createLoggedResponse(
+          `⚠️ **Connection Error**: Could not connect to D365 metadata service.\n\n` +
+          `**Possible Solutions:**\n` +
+          `1. Ensure the C# service is running (Build and Run C# Service task)\n` +
+          `2. Check if Visual Studio 2022 with D365 tools is installed\n` +
+          `3. Verify the service configuration\n\n` +
+          `**Error:** ${errorMessage}`,
+          requestId,
+          "execute_object_modification"
+        );
+      }
+
+      if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
+        return await createLoggedResponse(
+          `🔍 **Object Not Found**: The specified object could not be located.\n\n` +
+          `**Target:** ${objectType}:${objectName}\n` +
+          `**Method:** ${methodName}\n\n` +
+          `**Suggestions:**\n` +
+          `• Verify object name spelling and case\n` +
+          `• Check if object exists in the current model\n` +
+          `• Use find_xpp_object to locate the object first\n\n` +
+          `**Error:** ${errorMessage}`,
+          requestId,
+          "execute_object_modification"
+        );
+      }
+
+      return await createLoggedResponse(
+        `❌ **Error executing ${methodName} on ${objectType}:${objectName}:**\n${errorMessage}`,
+        requestId,
+        "execute_object_modification"
+      );
     }
   }
 }

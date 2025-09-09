@@ -8,8 +8,7 @@ import { DiskLogger } from "./logger.js";
 /**
  * Object creation handlers for different D365 object types
  * 
- * This class uses direct VS2022 extension integration for object creation,
- * maintaining backward compatibility with existing MCP tool interfaces.
+ * This class uses direct VS2022 extension integration for object creation.
  */
 export class ObjectCreators {
   /**
@@ -17,6 +16,52 @@ export class ObjectCreators {
    */
   private static getServiceClient(timeoutMs: number = 10000): D365ServiceClient {
     return new D365ServiceClient('mcp-xpp-d365-service', timeoutMs, timeoutMs);
+  }
+
+  /**
+   * Create any D365 object type using VS2022 service (supports all 544+ object types)
+   */
+  static async createGenericObject(objectType: string, objectName: string, options: {
+    layer?: string;
+    publisher?: string;
+    version?: string;
+    dependencies?: string[];
+    outputPath?: string;
+    properties?: Record<string, any>;
+  }): Promise<string> {
+    try {
+      const client = this.getServiceClient();
+      await client.connect();
+      
+      // Build parameters dynamically based on object type and options
+      const parameters: Record<string, any> = {
+        ObjectName: objectName,
+        OutputPath: options.outputPath || 'Models',
+        Layer: options.layer || 'usr'
+      };
+
+      // Add optional parameters if provided
+      if (options.publisher) parameters.Publisher = options.publisher;
+      if (options.version) parameters.Version = options.version;
+      if (options.dependencies) parameters.Dependencies = options.dependencies;
+      if (options.properties) {
+        // Merge custom properties
+        Object.assign(parameters, options.properties);
+      }
+      
+      const result = await client.createObject(objectType, parameters);
+      
+      await client.disconnect();
+      
+      if (result.Success) {
+        return `${objectType} '${objectName}' created successfully`;
+      } else {
+        return `ERROR: ${objectType} creation for ${objectName} failed: ${result.Message || 'Unknown error'}`;
+      }
+    } catch (error) {
+      await DiskLogger.logError(error, `${objectType} creation failed`);
+      return `ERROR: ${objectType} creation for ${objectName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
   }
   
   /**

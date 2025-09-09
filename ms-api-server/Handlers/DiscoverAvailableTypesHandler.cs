@@ -4,46 +4,58 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
-using Microsoft.Dynamics.Framework.Tools.MetaModel.Core;
 using D365MetadataService.Models;
+using Newtonsoft.Json;
 using Serilog;
 
 namespace D365MetadataService.Handlers
 {
     /// <summary>
-    /// Handler for retrieving available object types from VS2022 service
+    /// Handler for discovering available D365 types
+    /// Reuses the proven logic from AvailableObjectTypesHandler
     /// </summary>
-    public class AvailableObjectTypesHandler : BaseRequestHandler
+    public class DiscoverAvailableTypesHandler : BaseRequestHandler
     {
-        public AvailableObjectTypesHandler(ILogger logger) : base(logger)
+        public DiscoverAvailableTypesHandler(ILogger logger) : base(logger)
         {
         }
 
-        public override string SupportedAction => "getAvailableObjectTypes";
+        public override string SupportedAction => "discoverAvailableTypes";
 
         protected override Task<ServiceResponse> HandleRequestAsync(ServiceRequest request)
         {
             try
             {
-                // Get all available object types that can be created in D365
-                var availableTypes = GetAvailableObjectTypes();
+                Logger.Information("Discovering available D365 types");
 
-                return Task.FromResult(ServiceResponse.CreateSuccess(new
+                // Reuse the proven approach from AvailableObjectTypesHandler
+                var typeNames = GetAvailableObjectTypes();
+                
+                // Convert to TypeInfo format for consistency with dynamic reflection API
+                var types = typeNames.Select(typeName => new Models.TypeInfo
                 {
-                    ObjectTypes = availableTypes,
-                    Count = availableTypes.Count
-                }));
+                    Name = typeName,
+                    FullName = $"Microsoft.Dynamics.AX.Metadata.MetaModel.{typeName}",
+                    Description = $"D365 {typeName} object type - supports creation and modification operations",
+                    IsAbstract = false,
+                    BaseType = "Microsoft.Dynamics.AX.Metadata.MetaModel.MetadataNode"
+                }).ToList();
+
+                Logger.Information("Found {TypeCount} available D365 types", types.Count);
+
+                return Task.FromResult(ServiceResponse.CreateSuccess(types));
             }
             catch (Exception ex)
             {
-                Logger.Error(ex, "Failed to get available object types");
-                return Task.FromResult(ServiceResponse.CreateError(
-                    $"Failed to get available object types: {ex.Message}"));
+                Logger.Error(ex, "Error discovering available D365 types");
+                
+                return Task.FromResult(ServiceResponse.CreateError($"Failed to discover available D365 types: {ex.Message}"));
             }
         }
 
         /// <summary>
         /// Get all available object types from D365 metadata model using reflection
+        /// Reused from AvailableObjectTypesHandler - proven working approach
         /// </summary>
         private List<string> GetAvailableObjectTypes()
         {
@@ -56,9 +68,9 @@ namespace D365MetadataService.Handlers
                 
                 // Get all types that start with "Ax" and are public classes
                 var axTypes = metadataAssembly.GetTypes()
-                    .Where(type =>
-                        type.IsClass &&
-                        type.IsPublic &&
+                    .Where(type => 
+                        type.IsClass && 
+                        type.IsPublic && 
                         type.Name.StartsWith("Ax") &&
                         !type.IsAbstract &&
                         // Filter out internal/helper types
@@ -69,7 +81,6 @@ namespace D365MetadataService.Handlers
                         // Only include types that appear to be creatable objects
                         HasDefaultConstructor(type))
                     .Select(type => type.Name)
-                    .Distinct()
                     .OrderBy(name => name)
                     .ToList();
 
