@@ -16,47 +16,100 @@ export class ToolDefinitions {
       tools: [
         {
           name: "create_xpp_object",
-          description: "Create D365 F&O objects (models, classes, tables, enums, forms, etc.) with unified interface",
+          description: "🔍 BROWSE OBJECT TYPES: Call without parameters to see all 544+ available D365 F&O object types organized by category. 🏗️ CREATE OBJECTS: Provide parameters to create D365 F&O objects using template-first architecture. Supports classes, tables, forms, enums, data entities, reports, workflows, services, and more with VS2022 service integration.",
           inputSchema: {
             type: "object",
             properties: {
               objectName: {
                 type: "string",
-                description: "Name of the object to create",
+                description: "Name of the D365 object to create (e.g., 'MyCustomClass', 'CustInvoiceTable', 'SalesOrderForm'). Must follow D365 naming conventions.",
               },
               objectType: {
                 type: "string",
                 enum: availableObjectTypes,
-                description: "Type of X++ object to create"
+                description: "D365 object type to create. 🔍 IMPORTANT: Call this tool WITHOUT parameters first to see all 544+ available types organized by category! Common types: 'AxClass' (X++ classes), 'AxTable' (data tables), 'AxForm' (UI forms), 'AxEnum' (enumerations), 'AxEdt' (extended data types), 'AxView' (database views), 'AxQuery' (queries), 'AxReport' (SSRS reports), 'AxMenuItemDisplay' (menu items), 'AxDataEntityView' (OData entities), 'AxWorkflowHierarchyProvider' (workflow), 'AxService' (services), 'AxMap' (data maps)."
               },
               layer: {
                 type: "string",
                 enum: availableLayers,
-                description: "Application layer for the object"
+                description: "D365 application layer for the object. Common layers: 'usr' (user layer - customizations), 'cus' (customer layer - modifications), 'var' (partner layer - VAR solutions), 'isl' (independent software layer), 'sys' (system layer - Microsoft). Choose 'usr' for most custom development."
               },
               outputPath: {
                 type: "string",
-                description: "Output path for the object structure (relative to X++ codebase root)",
+                description: "Output directory path for the created object structure (relative to D365 metadata root). Default 'Models' creates under Models/ directory. Use existing model names like 'MyCustomModel' to add objects to specific models.",
                 default: "Models",
               },
               publisher: {
                 type: "string",
-                description: "Publisher name for the object",
+                description: "Publisher/company name for the object metadata. Used in model descriptors and copyright headers. Should match your organization name.",
                 default: "YourCompany",
               },
               version: {
                 type: "string",
-                description: "Version number for the object (e.g., '1.0.0.0')",
+                description: "Version number for the object in semantic versioning format (Major.Minor.Build.Revision). Used for model versioning and dependency tracking.",
                 default: "1.0.0.0",
               },
               dependencies: {
                 type: "array",
                 items: { type: "string" },
-                description: "List of object dependencies",
+                description: "List of D365 model dependencies required by this object. Common dependencies: 'ApplicationPlatform' (core platform APIs), 'ApplicationFoundation' (base business logic), 'ApplicationSuite' (standard business processes), 'ApplicationCommon' (shared components). Add specific models for custom dependencies.",
                 default: ["ApplicationPlatform", "ApplicationFoundation"],
+              },
+              properties: {
+                type: "object",
+                description: "Advanced object-specific properties for specialized configuration. Use for complex scenarios like custom table relations, form data sources, report parameters, workflow configurations, etc. Structure varies by object type."
               }
             },
-            required: ["objectName", "objectType"],
+            required: [], // No required fields - allows calling without parameters to list object types
+            examples: [
+              {
+                description: "🔍 DISCOVER: Browse all 544+ available object types organized by category (CALL THIS FIRST)",
+                parameters: {}
+              },
+              {
+                description: "🏗️ CREATE: Custom business logic class",
+                parameters: {
+                  objectName: "MyBusinessLogicClass",
+                  objectType: "AxClass",
+                  layer: "usr"
+                }
+              },
+              {
+                description: "🏗️ CREATE: Data table for customer extensions",
+                parameters: {
+                  objectName: "CustTableExtension",
+                  objectType: "AxTable",
+                  layer: "usr",
+                  dependencies: ["ApplicationPlatform", "ApplicationFoundation", "ApplicationSuite"]
+                }
+              },
+              {
+                description: "🏗️ CREATE: Form for data entry",
+                parameters: {
+                  objectName: "MyDataEntryForm",
+                  objectType: "AxForm",
+                  layer: "usr",
+                  outputPath: "MyCustomModel"
+                }
+              },
+              {
+                description: "🏗️ CREATE: Enumeration for status values",
+                parameters: {
+                  objectName: "MyStatusEnum",
+                  objectType: "AxEnum",
+                  layer: "usr"
+                }
+              },
+              {
+                description: "🏗️ CREATE: Data entity for OData/integration",
+                parameters: {
+                  objectName: "MyDataEntity",
+                  objectType: "AxDataEntityView",
+                  layer: "usr",
+                  dependencies: ["ApplicationPlatform", "ApplicationFoundation", "ApplicationSuite"]
+                }
+              }
+            ]
           },
         },
         {
@@ -101,10 +154,49 @@ export class ToolDefinitions {
         },
         {
           name: "get_current_config",
-          description: "Get comprehensive server configuration including paths, index statistics, VS2022 service status, and models grouped by custom vs standard",
+          description: "Get server configuration with flexible detail levels. No parameters = summary view with model names only. Use 'objectTypeList' for available object types, or specify model name for detailed model info.",
           inputSchema: {
             type: "object",
-            properties: {},
+            properties: {
+              model: {
+                type: "string",
+                description: "Optional: Get detailed information for a specific model name (e.g., 'ApplicationSuite', 'CaseManagement'). Returns full model details including dependencies, version, and description.",
+              },
+              objectTypeList: {
+                type: "boolean",
+                description: "Optional: Set to true to return the list of all available D365 object types (536+ types). Use this to see what object types can be created.",
+                default: false,
+              },
+              includeVS2022Service: {
+                type: "boolean",
+                description: "Optional: Include VS2022 service status check (may add latency). Default false for faster response.",
+                default: false,
+              },
+            },
+            examples: [
+              {
+                description: "📋 SUMMARY: Get configuration summary with model names only (fast)",
+                parameters: {}
+              },
+              {
+                description: "🏗️ OBJECT TYPES: Get list of all available D365 object types for creation",
+                parameters: {
+                  objectTypeList: true
+                }
+              },
+              {
+                description: "🔍 MODEL DETAILS: Get detailed information for a specific model",
+                parameters: {
+                  model: "ApplicationSuite"
+                }
+              },
+              {
+                description: "🔧 FULL STATUS: Include VS2022 service status (slower)",
+                parameters: {
+                  includeVS2022Service: true
+                }
+              }
+            ]
           },
         },
         {

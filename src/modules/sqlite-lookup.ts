@@ -41,6 +41,42 @@ export interface AOTMetadata {
 
 export class SQLiteObjectLookup {
     private db: Database.Database | null = null;
+    
+    /**
+     * Static method to safely check if database exists and has objects
+     * without initializing the full SQLite instance
+     */
+    public static safeGetTotalCount(dbPath?: string): number {
+        const targetPath = dbPath || path.join(process.cwd(), 'cache', 'object-lookup.db');
+        
+        if (!existsSync(targetPath)) {
+            return 0;
+        }
+        
+        let tempDb: Database.Database | null = null;
+        try {
+            // Try to open in read-write mode to avoid read-only issues
+            tempDb = new Database(targetPath, { 
+                fileMustExist: true
+            });
+            
+            // Use a simple count query
+            const stmt = tempDb.prepare('SELECT COUNT(*) as count FROM objects');
+            const result = stmt.get() as { count: number };
+            return result?.count || 0;
+        } catch (error) {
+            console.log('📖 Could not read existing database, will rebuild');
+            return 0;
+        } finally {
+            if (tempDb) {
+                try {
+                    tempDb.close();
+                } catch (error) {
+                    // Ignore close errors
+                }
+            }
+        }
+    }
     private prepared: {
         findByName?: Database.Statement;
         findByNameExact?: Database.Statement;
@@ -50,8 +86,10 @@ export class SQLiteObjectLookup {
         findByNameAndModel?: Database.Statement;
         getStats?: Database.Statement;
         searchByNamePattern?: Database.Statement;
+        searchByNamePatternAndType?: Database.Statement;
         getTotalCount?: Database.Statement;
         getTypeCount?: Database.Statement;
+        insertObject?: Database.Statement;
     } = {};
 
     constructor(private dbPath: string = 'cache/object-lookup.db') {}
@@ -69,12 +107,33 @@ export class SQLiteObjectLookup {
 
             this.db = new Database(this.dbPath, { readonly: true });
             
-            // Optimize for reading
-            this.db.pragma('cache_size = 10000');
-            this.db.pragma('temp_store = MEMORY');
+            // Optimize for reading performance (ignore errors on read-only database)
+            try {
+                this.db.pragma('cache_size = 20000');        // Increased from 10000
+                this.db.pragma('temp_store = MEMORY');
+                this.db.pragma('mmap_size = 268435456');     // 256MB memory mapping
+                this.db.pragma('query_only = true');        // Read-only optimization
+            } catch (error) {
+                // Ignore pragma errors on read-only database
+                console.log('📖 Read-only database - skipping pragma optimizations');
+            }
             
             // Prepare commonly used statements
-            this.prepareStatements();
+            try {
+                this.prepareStatements();
+            } catch (error) {
+                console.log('📖 Read-only database - will prepare statements on-demand');
+                // Statements will be prepared on-demand when needed
+            }
+
+            // For new databases or when we can write, ensure optimized indexes exist
+            if (!this.db.readonly) {
+                try {
+                    this.createOptimizedIndexes();
+                } catch (error) {
+                    console.log('📖 Could not create indexes (read-only database)');
+                }
+            }
             
             return true;
         } catch (error) {
@@ -142,6 +201,18 @@ export class SQLiteObjectLookup {
                 LIMIT 50
             `),
 
+            // Optimized pattern + type search (most common search pattern)
+            searchByNamePatternAndType: this.db.prepare(`
+                SELECT name, path, model, type, lastModified 
+                FROM objects 
+                WHERE name LIKE ? AND type = ?
+                ORDER BY 
+                    CASE WHEN name = ? THEN 0 ELSE 1 END,
+                    LENGTH(name),
+                    name
+                LIMIT 50
+            `),
+
             // Get database statistics
             getStats: this.db.prepare(`
                 SELECT 
@@ -164,6 +235,12 @@ export class SQLiteObjectLookup {
                 FROM objects 
                 GROUP BY type 
                 ORDER BY count DESC
+            `),
+
+            // Insert object statement for indexing
+            insertObject: this.db.prepare(`
+                INSERT OR REPLACE INTO objects (name, path, model, type, lastModified)
+                VALUES (?, ?, ?, ?, ?)
             `)
         };
     }
@@ -211,6 +288,89 @@ export class SQLiteObjectLookup {
     }
 
     /**
+     * Insert an object into the database
+     * Automatically handles database mode switching if needed
+     */
+    public insertObject(obj: ObjectLocation): boolean {
+        // Check if database needs to be reopened in write mode
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for object insertion...');
+            this.close();
+            
+            // Reopen in write mode
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+        
+        if (!this.prepared.insertObject) return false;
+        
+        try {
+            // Convert lastModified to integer timestamp if it's a string
+            const timestamp = typeof obj.lastModified === 'string' 
+                ? new Date(obj.lastModified).getTime() 
+                : (obj.lastModified || Date.now());
+                
+            this.prepared.insertObject.run(
+                obj.name,
+                obj.path,
+                obj.model,
+                obj.type,
+                timestamp
+            );
+            return true;
+        } catch (error) {
+            console.error('❌ Error inserting object:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Bulk insert objects into the database using transactions for optimal performance
+     * Much faster than individual insertObject calls for large datasets
+     */
+    public insertObjectsBulk(objects: ObjectLocation[]): boolean {
+        if (objects.length === 0) return true;
+        
+        // Check if database needs to be reopened in write mode
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for bulk insertion...');
+            this.close();
+            
+            // Reopen in write mode
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+        
+        if (!this.prepared.insertObject) return false;
+        
+        try {
+            // Use transaction for bulk insert - much faster!
+            const insertMany = this.db.transaction((objs: ObjectLocation[]) => {
+                for (const obj of objs) {
+                    // Convert lastModified to integer timestamp if it's a string
+                    const timestamp = typeof obj.lastModified === 'string' 
+                        ? new Date(obj.lastModified).getTime() 
+                        : (obj.lastModified || Date.now());
+                        
+                    this.prepared.insertObject!.run(
+                        obj.name,
+                        obj.path,
+                        obj.model,
+                        obj.type,
+                        timestamp
+                    );
+                }
+            });
+
+            insertMany(objects);
+            return true;
+        } catch (error) {
+            console.error('❌ Error bulk inserting objects:', error);
+            return false;
+        }
+    }
+
+    /**
      * Find all objects of a specific type
      */
     public findObjectsByType(type: string): ObjectLocation[] {
@@ -250,6 +410,22 @@ export class SQLiteObjectLookup {
             return this.prepared.searchByNamePattern.all(sqlPattern, pattern) as ObjectLocation[];
         } catch (error) {
             console.error('❌ Error searching objects:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Search objects by name pattern and type (optimized for most common search)
+     */
+    public searchObjectsByPatternAndType(pattern: string, type: string): ObjectLocation[] {
+        if (!this.prepared.searchByNamePatternAndType) return [];
+        
+        try {
+            // Convert simple wildcards to SQL LIKE patterns
+            const sqlPattern = pattern.replace(/\*/g, '%').replace(/\?/g, '_');
+            return this.prepared.searchByNamePatternAndType.all(sqlPattern, type, pattern) as ObjectLocation[];
+        } catch (error) {
+            console.error('❌ Error searching objects by pattern and type:', error);
             return [];
         }
     }
@@ -410,10 +586,18 @@ export class SQLiteObjectLookup {
      * Get total count of objects in the database
      */
     public getTotalCount(): number {
-        if (!this.prepared.getTotalCount) return 0;
+        if (!this.db) return 0;
         
         try {
-            const result = this.prepared.getTotalCount.get() as { count: number };
+            // If prepared statement exists, use it
+            if (this.prepared?.getTotalCount) {
+                const result = this.prepared.getTotalCount.get() as { count: number };
+                return result.count;
+            }
+            
+            // Otherwise prepare and execute on-demand for read-only databases
+            const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM objects');
+            const result = countStmt.get() as { count: number };
             return result.count;
         } catch (error) {
             console.error('❌ Error getting total count:', error);
@@ -470,6 +654,149 @@ export class SQLiteObjectLookup {
      */
     public isReady(): boolean {
         return this.db !== null;
+    }
+
+    /**
+     * Clear all objects from the database (for force rebuild)
+     * This ensures a clean slate when forceRebuild is requested
+     */
+    public clearDatabase(): void {
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for clearing...');
+            this.close();
+            
+            // Reopen in write mode
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+
+        try {
+            if (!this.db) {
+                throw new Error('Failed to initialize database for clearing');
+            }
+
+            // Clear all data from objects table
+            this.db.exec('DELETE FROM objects');
+            
+            // Also clear object types cache if it exists
+            this.db.exec('DELETE FROM object_types_cache');
+            
+            // Ensure all optimized indexes exist for best performance
+            console.log('� Ensuring optimized indexes exist...');
+            this.createOptimizedIndexes();
+            
+            console.log('�🗑️ Database cleared successfully');
+            
+            // Reopen in readonly mode for future operations
+            this.close();
+            this.initialize();
+        } catch (error) {
+            console.error('❌ Error clearing database:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Create all optimized indexes for best search performance
+     */
+    private createOptimizedIndexes(): void {
+        if (!this.db) return;
+
+        const indexes = [
+            'CREATE INDEX IF NOT EXISTS idx_objects_name ON objects(name)',
+            'CREATE INDEX IF NOT EXISTS idx_objects_type ON objects(type)',
+            'CREATE INDEX IF NOT EXISTS idx_objects_model ON objects(model)',
+            'CREATE INDEX IF NOT EXISTS idx_objects_model_type ON objects(model, type)',
+            'CREATE INDEX IF NOT EXISTS idx_objects_name_type ON objects(name, type)',
+            'CREATE INDEX IF NOT EXISTS idx_objects_type_name ON objects(type, name)',
+            'CREATE INDEX IF NOT EXISTS idx_objects_name_collate ON objects(name COLLATE NOCASE)'
+        ];
+
+        for (const indexSql of indexes) {
+            try {
+                this.db.exec(indexSql);
+            } catch (error) {
+                // Ignore errors if index already exists
+                console.log('📝 Index may already exist, continuing...');
+            }
+        }
+        
+        // Update table statistics for query optimizer
+        try {
+            this.db.exec('ANALYZE objects');
+        } catch (error) {
+            // Ignore analyze errors
+        }
+    }
+
+    /**
+     * Cache object types for fast retrieval
+     * Stores the complete list of available object types from VS2022 service
+     */
+    public async cacheObjectTypes(objectTypes: string[]): Promise<void> {
+        // For write operations, we need to reopen database in write mode
+        if (!this.db || this.db.readonly) {
+            console.log('📝 Reopening database in write mode for caching...');
+            this.close();
+            
+            // Reopen in write mode (readonly: false)
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+
+        try {
+            if (!this.db) {
+                throw new Error('Failed to initialize database for caching');
+            }
+
+            // Create cache table if it doesn't exist
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS object_types_cache (
+                    type_name TEXT PRIMARY KEY,
+                    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+                )
+            `);
+            
+            const insertMany = this.db.transaction((types: string[]) => {
+                // Clear existing cache first
+                this.db!.exec('DELETE FROM object_types_cache');
+                const insert = this.db!.prepare('INSERT OR REPLACE INTO object_types_cache (type_name) VALUES (?)');
+                for (const type of types) {
+                    insert.run(type);
+                }
+            });
+
+            insertMany(objectTypes);
+            console.log(`✅ Cached ${objectTypes.length} object types in SQLite`);
+            
+            // Reopen in readonly mode for future operations
+            this.close();
+            this.initialize();
+        } catch (error) {
+            console.error('❌ Error caching object types:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get cached object types from SQLite
+     * Returns the complete list of available object types
+     */
+    public async getCachedObjectTypes(): Promise<string[]> {
+        if (!this.db) {
+            throw new Error('Database not initialized');
+        }
+
+        try {
+            const stmt = this.db.prepare('SELECT type_name FROM object_types_cache ORDER BY type_name');
+            const rows = stmt.all() as Array<{ type_name: string }>;
+            
+            return rows.map(row => row.type_name);
+        } catch (error) {
+            console.error('❌ Error retrieving cached object types:', error);
+            // Return empty array if table doesn't exist yet
+            return [];
+        }
     }
 }
 

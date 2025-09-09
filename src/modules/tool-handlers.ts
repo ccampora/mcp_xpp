@@ -6,6 +6,7 @@ import { AppConfig } from "./app-config.js";
 import { AOTStructureManager } from "./aot-structure.js";
 import { ObjectIndexManager } from "./object-index.js";
 import { findXppObject } from "./parsers.js";
+import { getServerStartTime } from "../index.js";
 
 import { ObjectCreators } from "./object-creators.js";
 import { SQLiteObjectLookup, ObjectLocation } from "./sqlite-lookup.js";
@@ -16,6 +17,95 @@ import { SQLiteObjectLookup, ObjectLocation } from "./sqlite-lookup.js";
 export class ToolHandlers {
 
   static async createXppObject(args: any, requestId: string): Promise<any> {
+    // DEBUG: Let's see what we actually receive
+    console.log('🔍 DEBUG createXppObject received args:', JSON.stringify(args, null, 2));
+    
+    // Handle the client's argument wrapping - check both direct args and wrapped args
+    const actualArgs = args?.arguments || args;
+    console.log('🔍 DEBUG actualArgs after unwrapping:', JSON.stringify(actualArgs, null, 2));
+    
+    // Special case: if no args provided, return cached object types
+    if (!actualArgs || Object.keys(actualArgs).length === 0) {
+      console.log('📋 No parameters provided, returning cached object types from index...');
+      
+      try {
+        const cachedTypes = await ObjectIndexManager.getCachedObjectTypes();
+        
+        if (cachedTypes.length === 0) {
+          return await createLoggedResponse(
+            "❌ No object types cached. Please run build_object_index first to cache object types from VS2022 service.",
+            requestId,
+            "create_xpp_object"
+          );
+        }
+        
+        // Organize types by category for better display
+        const typesByCategory: Record<string, string[]> = {
+          'Core Objects': [],
+          'Data Entities': [],
+          'Reports': [],
+          'Forms': [],
+          'Security': [],
+          'Workflow': [],
+          'Other': []
+        };
+        
+        cachedTypes.forEach(type => {
+          if (type.includes('Class') || type.includes('Table') || type.includes('Enum') || type.includes('View')) {
+            typesByCategory['Core Objects'].push(type);
+          } else if (type.includes('DataEntity') || type.includes('Aggregate')) {
+            typesByCategory['Data Entities'].push(type);
+          } else if (type.includes('Report') || type.includes('Ssrs')) {
+            typesByCategory['Reports'].push(type);
+          } else if (type.includes('Form') || type.includes('Menu')) {
+            typesByCategory['Forms'].push(type);
+          } else if (type.includes('Security') || type.includes('Role') || type.includes('Duty') || type.includes('Privilege')) {
+            typesByCategory['Security'].push(type);
+          } else if (type.includes('Workflow')) {
+            typesByCategory['Workflow'].push(type);
+          } else {
+            typesByCategory['Other'].push(type);
+          }
+        });
+        
+        let content = `Available D365 Object Types (${cachedTypes.length} total)\n`;
+        content += `Cached from VS2022 service reflection\n\n`;
+        
+        // Show organized categories
+        Object.entries(typesByCategory).forEach(([category, types]) => {
+          if (types.length > 0) {
+            content += `${category} (${types.length}):\n`;
+            types.slice(0, 10).forEach(type => {
+              content += `  • ${type}\n`;
+            });
+            if (types.length > 10) {
+              content += `  ... and ${types.length - 10} more\n`;
+            }
+            content += '\n';
+          }
+        });
+        
+        content += `\nTo create an object, use:\n`;
+        content += `create_xpp_object with objectName and objectType parameters\n`;
+        content += `\nCommon examples:\n`;
+        content += `• AxClass - X++ Class\n`;
+        content += `• AxTable - Table definition\n`;
+        content += `• AxEnum - Enumeration\n`;
+        content += `• AxForm - User interface form\n`;
+        content += `• AxDataEntity - Data entity\n`;
+        
+        return await createLoggedResponse(content, requestId, "create_xpp_object");
+        
+      } catch (error) {
+        return await createLoggedResponse(
+          `❌ Error retrieving cached object types: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          requestId,
+          "create_xpp_object"
+        );
+      }
+    }
+    
+    // Regular object creation flow with parameters
     const schema = z.object({
       objectName: z.string(),
       objectType: z.string(),
@@ -27,13 +117,9 @@ export class ToolHandlers {
       properties: z.record(z.any()).optional(),
     });
     
-    const params = schema.parse(args);
+    const params = schema.parse(actualArgs);
     
-    const xppPath = AppConfig.getXppPath();
-    if (!xppPath) {
-      throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
-    }
-    
+    // Note: xppPath no longer required - VS2022 service handles all operations
     console.log(`Creating ${params.objectType} '${params.objectName}' using direct VS2022 service integration...`);
     
     let content: string;
@@ -130,20 +216,17 @@ export class ToolHandlers {
     return await createLoggedResponse(content, requestId, "find_xpp_object");
   }
 
-  static async buildObjectIndex(args: any, requestId: string): Promise<any> {
+  static async buildCache(args: any, requestId: string): Promise<any> {
     const schema = z.object({
       objectType: z.string().optional(),
       forceRebuild: z.boolean().optional().default(false),
     });
     const { objectType, forceRebuild } = schema.parse(args);
     
-    const xppPath = AppConfig.getXppPath();
-    if (!xppPath) {
-      throw new Error("X++ codebase path not configured. Use --xpp-path argument when starting the server.");
-    }
-    
+    // Note: xppPath no longer required for index building - VS2022 service provides all data
     let content = "";
   
+    // Build file object index
     await ObjectIndexManager.buildFullIndex(forceRebuild);
     const stats = ObjectIndexManager.getStats();
     content = `Full index build complete:\n`;
@@ -151,6 +234,36 @@ export class ToolHandlers {
     content += "By type:\n";
     for (const [type, count] of Object.entries(stats.byType)) {
       content += `- ${type}: ${count}\n`;
+    }
+    
+    // Also cache object types from VS2022 service during index build
+    try {
+      content += "\n=== Caching Object Types from VS2022 Service ===\n";
+      const availableTypes = await AOTStructureManager.getAvailableObjectTypes();
+      
+      // Cache object types in SQLite for fast retrieval
+      await ObjectIndexManager.cacheObjectTypes(availableTypes);
+      
+      content += `✅ Cached ${availableTypes.length} object types from VS2022 reflection\n`;
+      content += `📊 Sample types: ${availableTypes.slice(0, 10).join(', ')}...\n`;
+      
+      // Show type distribution
+      const typePatterns: Record<string, number> = {};
+      availableTypes.forEach(type => {
+        const prefix = type.substring(0, 4);
+        typePatterns[prefix] = (typePatterns[prefix] || 0) + 1;
+      });
+      
+      content += "\n🏷️ Type Distribution (top 10):\n";
+      Object.entries(typePatterns)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .forEach(([prefix, count]) => {
+          content += `   ${prefix}*: ${count} types\n`;
+        });
+        
+    } catch (error) {
+      content += `⚠️ Failed to cache object types: ${error instanceof Error ? error.message : 'Unknown error'}\n`;
     }
 
     return await createLoggedResponse(content, requestId, "build_object_index");
@@ -160,7 +273,75 @@ export class ToolHandlers {
     try {
       const config = await AppConfig.getApplicationConfiguration();
       
-      // Group models by type (custom vs standard)
+      // Handle specific model request
+      if (args?.model) {
+        const targetModel = config.models.find(m => 
+          m.name.toLowerCase() === args.model.toLowerCase() ||
+          m.displayName?.toLowerCase() === args.model.toLowerCase()
+        );
+        
+        if (!targetModel) {
+          const availableModels = config.models.map(m => m.name).slice(0, 10);
+          return await createLoggedResponse(
+            `Model '${args.model}' not found. Available models (first 10): ${availableModels.join(', ')}...`, 
+            requestId, 
+            "get_current_config"
+          );
+        }
+        
+        const response = {
+          _meta: {
+            type: "model-detail",
+            timestamp: new Date().toISOString(),
+            version: "1.0.0"
+          },
+          model: targetModel,
+          serverInfo: {
+            name: "MCP X++ Server",
+            version: "1.0.0",
+            startTime: getServerStartTime(),
+            uptime: getServerStartTime() ? 
+              Math.floor((Date.now() - getServerStartTime()!.getTime()) / 1000) + "s" : "unknown"
+          }
+        };
+        
+        return await createLoggedResponse(JSON.stringify(response, null, 2), requestId, "get_current_config");
+      }
+      
+      // Handle object type list request
+      if (args?.objectTypeList === true) {
+        const availableObjectTypes = await AOTStructureManager.getAvailableObjectTypes();
+        const objectTypesInfo = ToolHandlers.categorizeObjectTypes(availableObjectTypes);
+        
+        const response = {
+          _meta: {
+            type: "object-types",
+            timestamp: new Date().toISOString(),
+            version: "1.0.0"
+          },
+          objectTypes: {
+            total: availableObjectTypes.length,
+            list: availableObjectTypes,
+            categories: objectTypesInfo.categories,
+            samples: {
+              classes: availableObjectTypes.filter(t => t.includes('Class')).slice(0, 5),
+              tables: availableObjectTypes.filter(t => t.includes('Table')).slice(0, 5),
+              forms: availableObjectTypes.filter(t => t.includes('Form')).slice(0, 5),
+              enums: availableObjectTypes.filter(t => t.includes('Enum')).slice(0, 5),
+              other: availableObjectTypes.filter(t => !t.includes('Class') && !t.includes('Table') && !t.includes('Form') && !t.includes('Enum')).slice(0, 5)
+            }
+          },
+          serverInfo: {
+            name: "MCP X++ Server",
+            version: "1.0.0",
+            cacheStatus: "Using cached object types from SQLite"
+          }
+        };
+        
+        return await createLoggedResponse(JSON.stringify(response, null, 2), requestId, "get_current_config");
+      }
+      
+      // Default: Return summary view with model names only
       const groupedModels = ToolHandlers.groupModelsByType(config.models);
       
       // Only call VS2022 service if explicitly requested via args.includeVS2022Service
@@ -221,14 +402,24 @@ export class ToolHandlers {
         };
       }
       
+      // Summary response: simplified model information (names only)
+      const summaryModels = {
+        custom: groupedModels.custom.map(m => ({ name: m.name, displayName: m.displayName })),
+        standard: groupedModels.standard.map(m => ({ name: m.name, displayName: m.displayName })),
+        summary: groupedModels.summary
+      };
+      
       const response = {
         _meta: {
-          type: "configuration",
+          type: "configuration-summary",
           timestamp: new Date().toISOString(),
           version: "1.0.0"
         },
-        ...config,
-        models: groupedModels, // Replace flat models list with grouped structure
+        serverConfig: config.serverConfig,
+        indexStats: config.indexStats,
+        models: summaryModels, // Simplified model structure with names only
+        applicationInfo: config.applicationInfo,
+        systemInfo: config.systemInfo,
         vs2022Service: vs2022ServiceInfo,
         summary: {
           totalModels: config.models.length,
@@ -293,6 +484,73 @@ export class ToolHandlers {
         standardLayers: [...new Set(standard.map(m => m.layer).filter(Boolean))],
         publishers: [...new Set(models.map(m => m.publisher).filter(Boolean))]
       }
+    };
+  }
+
+  /**
+   * Categorize object types into logical groups for better UX
+   */
+  private static categorizeObjectTypes(objectTypes: string[]): any {
+    const categories = {
+      core: [] as string[],
+      ui: [] as string[],
+      data: [] as string[],
+      workflow: [] as string[],
+      integration: [] as string[],
+      reporting: [] as string[],
+      security: [] as string[],
+      other: [] as string[]
+    };
+
+    // Define categorization rules
+    const coreTypes = ['class', 'enum', 'edt', 'macro', 'interface'];
+    const uiTypes = ['form', 'menu', 'menuItem', 'tile', 'perspective'];
+    const dataTypes = ['table', 'view', 'query', 'dataEntity', 'map'];
+    const workflowTypes = ['workflow'];
+    const integrationTypes = ['service', 'serviceGroup'];
+    const reportingTypes = ['report'];
+    const securityTypes = ['securityKey', 'securityDuty', 'securityPrivilege', 'securityRole', 'securityPolicy'];
+
+    // Categorize each object type
+    for (const type of objectTypes) {
+      const lowerType = type.toLowerCase();
+      
+      if (coreTypes.some(ct => lowerType.includes(ct))) {
+        categories.core.push(type);
+      } else if (uiTypes.some(ut => lowerType.includes(ut))) {
+        categories.ui.push(type);
+      } else if (dataTypes.some(dt => lowerType.includes(dt))) {
+        categories.data.push(type);
+      } else if (workflowTypes.some(wt => lowerType.includes(wt))) {
+        categories.workflow.push(type);
+      } else if (integrationTypes.some(it => lowerType.includes(it))) {
+        categories.integration.push(type);
+      } else if (reportingTypes.some(rt => lowerType.includes(rt))) {
+        categories.reporting.push(type);
+      } else if (securityTypes.some(st => lowerType.includes(st))) {
+        categories.security.push(type);
+      } else {
+        categories.other.push(type);
+      }
+    }
+
+    // Sort each category
+    Object.values(categories).forEach(cat => cat.sort());
+
+    return {
+      total: objectTypes.length,
+      categories,
+      summary: {
+        core: categories.core.length,
+        ui: categories.ui.length,
+        data: categories.data.length,
+        workflow: categories.workflow.length,
+        integration: categories.integration.length,
+        reporting: categories.reporting.length,
+        security: categories.security.length,
+        other: categories.other.length
+      },
+      allTypes: objectTypes.sort()
     };
   }
 
@@ -402,6 +660,9 @@ export class ToolHandlers {
       } else if (pattern === "*" && model && objectType) {
         // Browse specific object type in a specific model
         results = lookup.findObjectsByModelAndType(model, objectType);
+      } else if (objectType && !model) {
+        // Optimized pattern + type search (most common case)
+        results = lookup.searchObjectsByPatternAndType(pattern, objectType);
       } else {
         // Pattern-based search with optional filters
         results = lookup.searchObjects(pattern);

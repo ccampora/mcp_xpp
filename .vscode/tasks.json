@@ -9,7 +9,7 @@
 				"-ExecutionPolicy",
 				"RemoteSigned",
 				"-Command",
-				".\\tools\\build-and-run.ps1 -Action build"
+				"Get-Process -Name 'D365MetadataService' -ErrorAction SilentlyContinue | Stop-Process -Force; .\\tools\\build-and-run.ps1 -Action build"
 			],
 			"group": "build",
 			"problemMatcher": [

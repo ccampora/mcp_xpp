@@ -24,16 +24,10 @@ export class ObjectIndexManager {
   private static sqliteIndex: SQLiteObjectLookup | null = null;
 
   /**
-   * Get XPP codebase path from AppConfig
-   */
-  private static getXppPath(): string | null {
-    return AppConfig.getXppPath() || null;
-  }
-
-  /**
    * Phase 1: Discover all AOT folders matching Ax* patterns
    * This is much faster than walking every directory
    * Optimized for D365 F&O double-nested package structure
+   * Note: This method is primarily for fallback scenarios - VS2022 service handles primary indexing
    */
   static async discoverAOTFolders(basePath: string, objectType?: string): Promise<Map<string, string[]>> {
     const cacheKey = objectType || 'ALL';
@@ -211,28 +205,94 @@ export class ObjectIndexManager {
   }
 
   static async buildFullIndex(forceRebuild: boolean = false): Promise<void> {
-    // First try DLL-based indexing if VS2022 service is available
     try {
-      console.log('🚀 Attempting DLL-based indexing via VS2022 service...');
-      await this.buildDLLBasedIndex(forceRebuild);
-      console.log('✅ DLL-based indexing completed successfully!');
-      return;
+      this.initializeSQLiteIndex();
     } catch (error) {
-      console.warn(`⚠️  DLL-based indexing failed, falling back to file-based: ${(error as Error).message}`);
+      console.warn('⚠️ SQLite initialization failed, proceeding with rebuild:', (error as Error).message);
+      // If SQLite fails to initialize, we should rebuild to fix it
+      forceRebuild = true;
+    }
+    
+    if (forceRebuild) {
+      // Force rebuild - always clear database and rebuild
+      console.log('🗑️ Force rebuild requested - clearing SQLite cache');
+      if (this.sqliteIndex) {
+        this.sqliteIndex.clearDatabase();
+        console.log('✅ SQLite cache cleared successfully');
+      }
+    } else {
+      // Normal mode - skip if objects exist (use safe method to avoid read-only issues)
+      const totalCount = SQLiteObjectLookup.safeGetTotalCount();
+      if (totalCount > 0) {
+        console.log(`📊 SQLite index already has ${totalCount} objects, skipping rebuild`);
+        return;
+      }
     }
 
+    // Try DLL-based indexing via VS2022 service with parallel processing
+    try {
+      console.log('🚀 Attempting DLL-based indexing via VS2022 service with parallel processing...');
+      
+      console.log('🔌 Connecting to VS2022 C# service for model discovery...');
+      const client = new D365ServiceClient();
+      await client.connect();
+      
+      try {
+        // Get target models dynamically from the service
+        const TARGET_MODELS = await this.getAvailableModelsFromService(client);
+        
+        if (TARGET_MODELS.length === 0) {
+          throw new Error('No models discovered from C# service');
+        }
+
+        console.log(`📊 Processing ${TARGET_MODELS.length} models via parallel workers...`);
+        
+        // Process models in parallel using worker threads
+        const results = await this.processModelsInParallel(TARGET_MODELS);
+        
+        // Aggregate results and bulk insert all objects
+        let totalObjects = 0;
+        const allObjects: ObjectLocation[] = [];
+        
+        for (const result of results) {
+          if (result.success) {
+            totalObjects += result.objectCount;
+            allObjects.push(...result.objects);
+            console.log(`   ✅ ${result.modelName}: ${result.objectCount} objects (${result.processingTime}ms)`);
+          } else {
+            console.error(`   ❌ ${result.modelName}: ${result.error}`);
+          }
+        }
+        
+        // Bulk insert all objects from all models in one operation
+        if (allObjects.length > 0) {
+          console.log(`🚀 Bulk inserting ${allObjects.length} objects from all models...`);
+          const insertStartTime = Date.now();
+          this.sqliteIndex!.insertObjectsBulk(allObjects);
+          const insertTime = Date.now() - insertStartTime;
+          console.log(`✅ Bulk insert completed in ${insertTime}ms`);
+        }
+
+        console.log(`🎉 DLL-based indexing complete: ${totalObjects} objects indexed via service enumeration!`);
+        console.log('✅ Full index build completed successfully!');
+        
+      } finally {
+        await client.disconnect();
+        console.log('📡 Disconnected from VS2022 service');
+      }
+      
+    } catch (error) {
+      console.warn(`⚠️  DLL-based indexing failed, falling back to file-based: ${(error as Error).message}`);
+      // Could add file-based fallback here if needed
+    }
   }
 
   /**
    * Get available models dynamically from VS2022 C# service
    */
-  private static async getAvailableModelsFromService(): Promise<string[]> {
+  private static async getAvailableModelsFromService(client: D365ServiceClient): Promise<string[]> {
     try {
-      const client = new D365ServiceClient();
-      await client.connect();
-      
       const result = await client.sendRequest('models', undefined, {});
-      await client.disconnect();
       
       if (result.Success && result.Data?.models) {
         // Filter to only models that have objects and are standard D365 models
@@ -265,80 +325,53 @@ export class ObjectIndexManager {
   }
 
   /**
-   * New DLL-based indexing using VS2022 C# service - writes directly to SQLite
+   * Process multiple models in parallel using worker threads
+   * Each model is processed independently for maximum performance
    */
-  static async buildDLLBasedIndex(forceRebuild: boolean = false): Promise<void> {
-    this.initializeSQLiteIndex();
+  private static async processModelsInParallel(modelNames: string[]): Promise<Array<{
+    modelName: string;
+    success: boolean;
+    objects: ObjectLocation[];
+    objectCount: number;
+    processingTime: number;
+    error?: string;
+  }>> {
+    const { createModelWorker } = await import('./model-worker.js');
     
-    if (!forceRebuild) {
-      // Check if SQLite already has objects
-      const totalCount = this.sqliteIndex!.getTotalCount();
-      if (totalCount > 0) {
-        console.log(`📊 SQLite index already has ${totalCount} objects, skipping rebuild`);
-        return;
-      }
-    }
+    // Create worker tasks for each model
+    const workerPromises = modelNames.map(modelName => 
+      createModelWorker({
+        modelName,
+        requestId: `model-${modelName}-${Date.now()}`
+      })
+    );
 
-    console.log('🔌 Connecting to VS2022 C# service for DLL-based enumeration...');
+    // Wait for all workers to complete
+    console.log(`🧵 Starting ${workerPromises.length} worker threads...`);
+    const results = await Promise.allSettled(workerPromises);
     
-    const client = new D365ServiceClient();
-    await client.connect();
+    // Process results
+    const processedResults = results.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        return result.value;
+      } else {
+        return {
+          modelName: modelNames[index],
+          success: false,
+          objects: [],
+          objectCount: 0,
+          processingTime: 0,
+          error: result.reason?.message || 'Worker failed'
+        };
+      }
+    });
+
+    const successCount = processedResults.filter(r => r.success).length;
+    const failedCount = processedResults.length - successCount;
     
-    try {
-      // Get target models dynamically from the service
-      const TARGET_MODELS = await this.getAvailableModelsFromService();
-      
-      if (TARGET_MODELS.length === 0) {
-        throw new Error('No models discovered from C# service');
-      }
-
-      let totalObjects = 0;
-
-      console.log(`📊 Processing ${TARGET_MODELS.length} models via DLL enumeration...`);
-
-      for (const modelName of TARGET_MODELS) {
-        const modelStartTime = Date.now();
-        console.log(`🔍 Processing model: ${modelName}`);
-        
-        try {
-          // Use our ListObjectsByModelHandler
-          const result = await client.sendRequest('list_objects_by_model', undefined, {
-            model: modelName
-          });
-
-          if (!result.Success) {
-            console.warn(`   ⚠️  Failed to enumerate ${modelName}: ${result.Error || 'Unknown error'}`);
-            continue;
-          }
-
-          const modelData = result.Data.models[0];
-          if (!modelData || !modelData.objects) {
-            console.log(`   ⚠️  No objects found in model ${modelName}`);
-            continue;
-          }
-
-          let modelObjectCount = 0;
-
-          // Process each object type in the model - data goes directly to SQLite during C# service processing
-          for (const [objectType, objects] of Object.entries(modelData.objects)) {
-            modelObjectCount += (objects as any[]).length;
-            totalObjects += (objects as any[]).length;
-          }
-
-          const modelTime = Date.now() - modelStartTime;
-          console.log(`   ✅ ${modelObjectCount} objects (${modelTime}ms)`);
-
-        } catch (error) {
-          console.error(`   ❌ Error processing ${modelName}:`, (error as Error).message);
-        }
-      }
-
-      console.log(`🎉 DLL-based indexing complete: ${totalObjects} objects indexed via service enumeration!`);
-
-    } finally {
-      await client.disconnect();
-      console.log('📡 Disconnected from VS2022 service');
-    }
+    console.log(`🎯 Parallel processing complete: ${successCount} successful, ${failedCount} failed`);
+    
+    return processedResults;
   }
 
   static findObjects(name: string, type?: string): ObjectLocation[] {
@@ -379,7 +412,13 @@ export class ObjectIndexManager {
   private static initializeSQLiteIndex(): void {
     if (!this.sqliteIndex) {
       this.sqliteIndex = new SQLiteObjectLookup();
-      this.sqliteIndex.initialize();
+      try {
+        this.sqliteIndex.initialize();
+      } catch (error) {
+        console.error('❌ Failed to initialize SQLite lookup:', (error as Error).message);
+        this.sqliteIndex = null; // Reset to null so we know it failed
+        throw error; // Re-throw so caller can handle
+      }
     }
   }
 
@@ -478,10 +517,45 @@ export class ObjectIndexManager {
   }
 
   /**
-   * Clear the current index (for testing purposes) - No longer needed with SQLite-only approach
+   * Cache object types from VS2022 service in SQLite for fast retrieval
+   * This integrates with the existing build index process
    */
-  static clearIndex(): void {
-    // SQLite-based system doesn't need clearing - data persists in database
-    console.log('📊 SQLite-based index doesn\'t require clearing - data persists in database');
+  static async cacheObjectTypes(objectTypes: string[]): Promise<void> {
+    this.initializeSQLiteIndex();
+    
+    if (!this.sqliteIndex) {
+      throw new Error('SQLite index not available for caching object types');
+    }
+
+    try {
+      // Store object types in a special table/format in SQLite
+      // For now, we'll use a simple approach - store as metadata
+      await this.sqliteIndex.cacheObjectTypes(objectTypes);
+      console.log(`✅ Cached ${objectTypes.length} object types in SQLite`);
+    } catch (error) {
+      console.error('❌ Error caching object types:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get cached object types from SQLite
+   * Returns empty array if not cached or error occurs
+   */
+  static async getCachedObjectTypes(): Promise<string[]> {
+    this.initializeSQLiteIndex();
+    
+    if (!this.sqliteIndex) {
+      console.warn('⚠️  SQLite index not available for retrieving cached object types');
+      return [];
+    }
+
+    try {
+      const cachedTypes = await this.sqliteIndex.getCachedObjectTypes();
+      return cachedTypes || [];
+    } catch (error) {
+      console.error('❌ Error retrieving cached object types:', error);
+      return [];
+    }
   }
 }

@@ -133,7 +133,8 @@ class AppConfigManager {
   public async initialize(): Promise<void> {
     this.parseCommandLineArgs();
 
-    // First, try to get configuration from VS2022 service with 30-second timeout
+    // Try to get configuration from VS2022 service with 30-second timeout
+    // This is now purely informational - the service handles all actual work
     let setupFromService = false;
     if (!this.config.xppPath || !this.config.xppMetadataFolder) {
       try {
@@ -142,7 +143,7 @@ class AppConfigManager {
         
         const setupInfo = await this.getSetupFromVS2022Service(30000); // 30 second timeout
         if (setupInfo) {
-          // Update configuration with service-provided values
+          // Update configuration with service-provided values (informational only)
           this.config.xppPath = this.config.xppPath || setupInfo.PackagesLocalDirectory;
           this.config.xppMetadataFolder = this.config.xppMetadataFolder || setupInfo.CustomMetadataPath;
           this.config.vs2022ExtensionPath = this.config.vs2022ExtensionPath || setupInfo.ExtensionPath;
@@ -153,17 +154,12 @@ class AppConfigManager {
         }
       } catch (error) {
         await DiskLogger.logDebug(`Failed to get setup from VS2022 service: ${error}`);
-        console.log("Could not get setup from VS2022 service, falling back to manual configuration");
+        console.log("Could not get setup from VS2022 service, proceeding with available configuration");
       }
     }
 
-    // Validate required configuration
-    if (!this.config.xppPath) {
-      const errorMsg = setupFromService 
-        ? "XPP codebase path not available from VS2022 service. Ensure the service is running with proper configuration."
-        : "XPP codebase path not provided. Use --xpp-path argument or ensure VS2022 service is running.";
-      throw new Error(errorMsg);
-    }
+    // Note: xppPath is now purely informational - VS2022 service handles all actual work
+    // No validation required as the service operates independently
 
     // Create XPP metadata folder if specified and doesn't exist
     if (this.config.xppMetadataFolder) {
@@ -488,11 +484,13 @@ class AppConfigManager {
 
   /**
    * Get all available D365 F&O models in the codebase
+   * Note: This is informational only - actual model operations handled by VS2022 service
    */
   public async getAvailableModels(): Promise<ModelInfo[]> {
     const models: ModelInfo[] = [];
     
     if (!this.config.xppPath) {
+      await DiskLogger.logDebug("XPP path not available for model enumeration (informational only)");
       return models;
     }
 

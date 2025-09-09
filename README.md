@@ -327,16 +327,25 @@ The MCP X++ Server provides **5 optimized tools** for D365 F&O codebase analysis
 
 ### 🏗️ Object Creation
 #### `create_xpp_object`
-Create D365 F&O objects (models, classes, tables, enums, forms, etc.) with unified interface supporting multiple layers and dependencies.
-- **Parameters**: 
-  - `objectName` (string, required) - Name of the object
-  - `objectType` (string, required) - Type: "model", "class", "table", "enum"
-  - `layer` (string, optional) - Application layer (usr, cus, var, etc.)
-  - `publisher` (string, optional) - Publisher name (default: "YourCompany")
-  - `version` (string, optional) - Version string (default: "1.0.0.0")
-  - `dependencies` (array, optional) - Dependencies (default: ["ApplicationPlatform", "ApplicationFoundation"])
-- **Returns**: Created object structure with file paths
-- **Use Case**: Generate new X++ objects with proper D365 structure
+Create D365 F&O objects using template-first architecture with VS2022 service integration. Supports 544+ object types including classes, tables, forms, enums, data entities, reports, workflows, services, and more.
+- **Parameters** (all optional - call without parameters to browse available types):
+  - `objectName` (string) - Name of the D365 object (e.g., 'MyCustomClass', 'CustInvoiceTable')
+  - `objectType` (string) - D365 object type from 544+ available types:
+    - **Common**: `AxClass` (classes), `AxTable` (tables), `AxForm` (forms), `AxEnum` (enums)
+    - **Data**: `AxEdt` (extended data types), `AxView` (views), `AxDataEntityView` (OData entities)
+    - **UI**: `AxMenuItemDisplay`, `AxReport`, `AxQuery`, `AxWorkspace`
+    - **Integration**: `AxService`, `AxWorkflowHierarchyProvider`, `AxMap`
+  - `layer` (string) - Application layer: `usr` (user/custom), `cus` (customer), `var` (partner)
+  - `outputPath` (string) - Output directory (default: "Models")
+  - `publisher` (string) - Company name (default: "YourCompany")
+  - `version` (string) - Version number (default: "1.0.0.0")
+  - `dependencies` (array) - Model dependencies (default: ApplicationPlatform, ApplicationFoundation)
+  - `properties` (object) - Advanced object-specific configuration
+- **Returns**: Created object structure with metadata and file paths
+- **Examples**: 
+  - Browse types: `create_xpp_object` (no parameters)
+  - Create class: `create_xpp_object objectName="MyClass" objectType="AxClass" layer="usr"`
+  - Create table: `create_xpp_object objectName="MyTable" objectType="AxTable" layer="usr"`
 
 ### 🔍 Object Discovery & Search
 #### `find_xpp_object`

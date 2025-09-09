@@ -78,7 +78,7 @@ export class ServerManager {
             return await ToolHandlers.findXppObject(args, requestId);
           
           case "build_object_index":
-            return await ToolHandlers.buildObjectIndex(args, requestId);
+            return await ToolHandlers.buildCache(args, requestId);
           
           case "get_current_config":
             return await ToolHandlers.getCurrentConfig(args, requestId);

@@ -400,29 +400,159 @@ export class AOTStructureManager {
     return ["usr", "cus", "var", "isv"];
   }
 
-  static async getObjectTemplates(): Promise<any> {
+  static async getAvailableObjectTypes(): Promise<string[]> {
+    // First try to get cached object types from SQLite
     try {
-      return await loadD365ObjectTemplates();
+      const { ObjectIndexManager } = await import('./object-index.js');
+      const cachedTypes = await ObjectIndexManager.getCachedObjectTypes();
+      
+      if (cachedTypes && cachedTypes.length > 0) {
+        console.log(`✅ Using ${cachedTypes.length} cached object types from SQLite`);
+        return cachedTypes;
+      }
+      
+      console.log('⚠️  No cached object types found, falling back to VS2022 service');
     } catch (error) {
-      console.error('Failed to load D365 object templates:', error);
-      return null;
+      console.warn('Failed to retrieve cached object types:', error);
+    }
+
+    // Fallback to VS2022 service if no cached data available
+    try {
+      // Import D365ServiceClient dynamically to avoid circular dependencies
+      const { D365ServiceClient } = await import('./d365-service-client.js');
+      const client = new D365ServiceClient('mcp-xpp-d365-service', 5000, 5000);
+      
+      await client.connect();
+      
+      // Query VS2022 service for available object types via reflection
+      const result = await client.getAvailableObjectTypes();
+      
+      await client.disconnect();
+      
+      if (result && result.Success && Array.isArray(result.Data?.ObjectTypes)) {
+        // Remove duplicates and sort the array for consistency
+        const objectTypes = result.Data.ObjectTypes as string[];
+        const dedupedTypes = [...new Set(objectTypes)].sort();
+        
+        // Cache the fresh data for future use
+        try {
+          const { ObjectIndexManager } = await import('./object-index.js');
+          await ObjectIndexManager.cacheObjectTypes(dedupedTypes);
+          console.log(`✅ Cached ${dedupedTypes.length} object types from VS2022 service`);
+        } catch (cacheError) {
+          console.warn('Failed to cache object types:', cacheError);
+        }
+        
+        return dedupedTypes;
+      }
+      
+      throw new Error('Failed to get object types from VS2022 service');
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Failed to get object types from VS2022 service:', errorMessage);
+      // Minimal fallback - just enough to not break the system
+      return ["AxModel", "AxClass", "AxTable", "AxEnum", "AxForm"];
     }
   }
 
-  static async getAvailableObjectTypes(): Promise<string[]> {
-    const templates = await this.getObjectTemplates();
-    if (templates && templates.objectTypes) {
-      return Object.keys(templates.objectTypes);
+  /**
+   * Get available object types from VS2022 service using reflection (runtime validation)
+   * This method provides the full list of 544+ object types discovered through reflection
+   * Use this for validation and expansion beyond the basic static list
+   */
+  static async getAvailableObjectTypesFromService(): Promise<string[]> {
+    // First try to get cached object types from SQLite
+    try {
+      const { ObjectIndexManager } = await import('./object-index.js');
+      const cachedTypes = await ObjectIndexManager.getCachedObjectTypes();
+      
+      if (cachedTypes && cachedTypes.length > 0) {
+        console.log(`✅ Using ${cachedTypes.length} cached object types from SQLite (service method)`);
+        return cachedTypes;
+      }
+      
+      console.log('⚠️  No cached object types found, querying VS2022 service');
+    } catch (error) {
+      console.warn('Failed to retrieve cached object types:', error);
     }
-    return ["model"]; // Fallback
+
+    // Query VS2022 service if no cached data available
+    try {
+      // Import D365ServiceClient dynamically to avoid circular dependencies
+      const { D365ServiceClient } = await import('./d365-service-client.js');
+      const client = new D365ServiceClient('mcp-xpp-d365-service', 5000, 5000);
+      
+      await client.connect();
+      
+      // Query VS2022 service for available object types via reflection
+      const result = await client.getAvailableObjectTypes();
+      
+      await client.disconnect();
+      
+      if (result && result.Success && Array.isArray(result.Data?.ObjectTypes)) {
+        // Remove duplicates and sort the array for consistency
+        const objectTypes = result.Data.ObjectTypes as string[];
+        const dedupedTypes = [...new Set(objectTypes)].sort();
+        
+        // Cache the fresh data for future use
+        try {
+          const { ObjectIndexManager } = await import('./object-index.js');
+          await ObjectIndexManager.cacheObjectTypes(dedupedTypes);
+          console.log(`✅ Cached ${dedupedTypes.length} object types from VS2022 service (service method)`);
+        } catch (cacheError) {
+          console.warn('Failed to cache object types:', cacheError);
+        }
+        
+        return dedupedTypes;
+      }
+      
+      // Fallback to static method if service query fails
+      console.warn('VS2022 service reflection failed, using static method');
+      return this.getAvailableObjectTypes();
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.warn('Failed to get object types from VS2022 service, using static method:', errorMessage);
+      // Fallback to static method
+      return this.getAvailableObjectTypes();
+    }
+  }
+
+  /**
+   * Validate if an object type is supported by the VS2022 service
+   * This uses the reflection-based discovery for accurate validation
+   */
+  static async validateObjectTypeSupported(objectType: string): Promise<boolean> {
+    try {
+      const serviceTypes = await this.getAvailableObjectTypesFromService();
+      
+      // Check for exact match or convert from friendly name to Ax* format
+      const axObjectType = objectType.startsWith('Ax') ? objectType : `Ax${objectType.charAt(0).toUpperCase() + objectType.slice(1)}`;
+      
+      return serviceTypes.includes(objectType) || serviceTypes.includes(axObjectType);
+    } catch (error) {
+      console.warn('Failed to validate object type with service, assuming supported:', error);
+      return true; // Optimistic fallback
+    }
   }
 
   static async getObjectTypeDefinition(objectType: string): Promise<any> {
-    const templates = await this.getObjectTemplates();
-    if (templates && templates.objectTypes && templates.objectTypes[objectType]) {
-      return templates.objectTypes[objectType];
+    // Get object type definition directly from VS2022 service
+    // No more template dependencies - use the real service data
+    try {
+      const { D365ServiceClient } = await import('./d365-service-client.js');
+      const client = new D365ServiceClient('mcp-xpp-d365-service', 5000, 5000);
+      
+      await client.connect();
+      // TODO: Add getObjectTypeDefinition method to service
+      await client.disconnect();
+      
+      return null; // For now, until we implement the service method
+    } catch (error) {
+      console.error('Failed to get object type definition from VS2022 service:', error);
+      return null;
     }
-    return null;
   }
 
   private static async getD365ModelConfig(): Promise<any> {

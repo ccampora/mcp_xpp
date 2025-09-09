@@ -179,6 +179,13 @@ export class D365ServiceClient extends EventEmitter {
     }
 
     /**
+     * Get available object types from VS2022 service
+     */
+    async getAvailableObjectTypes(): Promise<any> {
+        return this.sendRequest('getAvailableObjectTypes');
+    }
+
+    /**
      * Check if connected
      */
     get connected(): boolean {

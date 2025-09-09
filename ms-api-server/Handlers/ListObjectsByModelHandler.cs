@@ -10,8 +10,9 @@ using System.Threading.Tasks;
 namespace D365MetadataService.Handlers
 {
     /// <summary>
-    /// Handler for listing all objects by model using D365 metadata DLLs
-    /// Uses proper project references and configuration instead of hardcoded paths
+    /// COMPREHENSIVE Handler for listing ALL objects by model using D365 metadata DLLs
+    /// Enhanced to enumerate ALL object types: AxTable, AxClass, AxForm, AxEnum, AxView, AxDataEntityView, etc.
+    /// This fixes the cache indexing issue where only tables were being returned
     /// </summary>
     public class ListObjectsByModelHandler : BaseRequestHandler
     {
@@ -26,7 +27,7 @@ namespace D365MetadataService.Handlers
 
         protected override async Task<ServiceResponse> HandleRequestAsync(ServiceRequest request)
         {
-            Logger.Information("Starting list objects by model request");
+            Logger.Information("Starting COMPREHENSIVE list objects by model request");
 
             try
             {
@@ -47,7 +48,7 @@ namespace D365MetadataService.Handlers
                 // Execute the CPU-bound metadata work on a background thread
                 var response = await Task.Run(() => PerformMetadataWork(targetModels, metadataPath));
 
-                Logger.Information("Successfully enumerated objects from models");
+                Logger.Information("Successfully enumerated ALL object types from models");
 
                 return new ServiceResponse { Success = true, Data = response };
             }
@@ -60,7 +61,7 @@ namespace D365MetadataService.Handlers
 
         private object PerformMetadataWork(string[] targetModels, string metadataPath)
         {
-            // Use the proper D365 metadata APIs directly (no reflection needed!)
+            // ENHANCED: Use the proper D365 metadata APIs to enumerate ALL object types
             var factory = new MetadataProviderFactory();
             var provider = factory.CreateDiskProvider(metadataPath);
 
@@ -72,27 +73,215 @@ namespace D365MetadataService.Handlers
             {
                 try
                 {
-                    // Get tables for this model using the proper API
-                    var tables = provider.Tables.ListObjectsForModel(modelName);
+                    Logger.Information("🔍 Comprehensively processing model: {ModelName}", modelName);
+                    
+                    var objects = new Dictionary<string, IEnumerable<string>>();
+                    var modelObjectCount = 0;
 
-                    if (tables != null && tables.Any())
+                    // 1. TABLES (AxTable)
+                    try
                     {
-                        var tableList = tables.ToList();
+                        var tables = provider.Tables.ListObjectsForModel(modelName);
+                        if (tables != null && tables.Any())
+                        {
+                            var tableList = tables.ToList();
+                            objects["AxTable"] = tableList;
+                            modelObjectCount += tableList.Count;
+                            Logger.Debug("   📋 Tables: {Count}", tableList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get tables for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // 2. CLASSES (AxClass)
+                    try
+                    {
+                        var classes = provider.Classes.ListObjectsForModel(modelName);
+                        if (classes != null && classes.Any())
+                        {
+                            var classList = classes.ToList();
+                            objects["AxClass"] = classList;
+                            modelObjectCount += classList.Count;
+                            Logger.Debug("   📋 Classes: {Count}", classList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get classes for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // 3. FORMS (AxForm)
+                    try
+                    {
+                        var forms = provider.Forms.ListObjectsForModel(modelName);
+                        if (forms != null && forms.Any())
+                        {
+                            var formsList = forms.ToList();
+                            objects["AxForm"] = formsList;
+                            modelObjectCount += formsList.Count;
+                            Logger.Debug("   📋 Forms: {Count}", formsList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get forms for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // 4. ENUMS (AxEnum)
+                    try
+                    {
+                        var enums = provider.Enums.ListObjectsForModel(modelName);
+                        if (enums != null && enums.Any())
+                        {
+                            var enumsList = enums.ToList();
+                            objects["AxEnum"] = enumsList;
+                            modelObjectCount += enumsList.Count;
+                            Logger.Debug("   📋 Enums: {Count}", enumsList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get enums for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // 5. VIEWS (AxView)
+                    try
+                    {
+                        var views = provider.Views.ListObjectsForModel(modelName);
+                        if (views != null && views.Any())
+                        {
+                            var viewsList = views.ToList();
+                            objects["AxView"] = viewsList;
+                            modelObjectCount += viewsList.Count;
+                            Logger.Debug("   📋 Views: {Count}", viewsList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get views for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // 6. DATA ENTITIES (AxDataEntityView)
+                    try
+                    {
+                        var dataEntities = provider.DataEntityViews.ListObjectsForModel(modelName);
+                        if (dataEntities != null && dataEntities.Any())
+                        {
+                            var dataEntitiesList = dataEntities.ToList();
+                            objects["AxDataEntityView"] = dataEntitiesList;
+                            modelObjectCount += dataEntitiesList.Count;
+                            Logger.Debug("   📋 Data Entities: {Count}", dataEntitiesList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get data entities for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // 7. EXTENDED DATA TYPES (AxEdt)
+                    try
+                    {
+                        var edts = provider.Edts.ListObjectsForModel(modelName);
+                        if (edts != null && edts.Any())
+                        {
+                            var edtsList = edts.ToList();
+                            objects["AxEdt"] = edtsList;
+                            modelObjectCount += edtsList.Count;
+                            Logger.Debug("   📋 EDTs: {Count}", edtsList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get EDTs for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // 8. REPORTS (AxReport)
+                    try
+                    {
+                        var reports = provider.Reports.ListObjectsForModel(modelName);
+                        if (reports != null && reports.Any())
+                        {
+                            var reportsList = reports.ToList();
+                            objects["AxReport"] = reportsList;
+                            modelObjectCount += reportsList.Count;
+                            Logger.Debug("   📋 Reports: {Count}", reportsList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get reports for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // 9. MENU ITEMS (AxMenuItemDisplay, AxMenuItemOutput, AxMenuItemAction)
+                    try
+                    {
+                        var menuItemsDisplay = provider.MenuItemDisplays.ListObjectsForModel(modelName);
+                        if (menuItemsDisplay != null && menuItemsDisplay.Any())
+                        {
+                            var menuItemsDisplayList = menuItemsDisplay.ToList();
+                            objects["AxMenuItemDisplay"] = menuItemsDisplayList;
+                            modelObjectCount += menuItemsDisplayList.Count;
+                            Logger.Debug("   📋 Menu Items (Display): {Count}", menuItemsDisplayList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get menu items (display) for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    try
+                    {
+                        var menuItemsOutput = provider.MenuItemOutputs.ListObjectsForModel(modelName);
+                        if (menuItemsOutput != null && menuItemsOutput.Any())
+                        {
+                            var menuItemsOutputList = menuItemsOutput.ToList();
+                            objects["AxMenuItemOutput"] = menuItemsOutputList;
+                            modelObjectCount += menuItemsOutputList.Count;
+                            Logger.Debug("   📋 Menu Items (Output): {Count}", menuItemsOutputList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get menu items (output) for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    try
+                    {
+                        var menuItemsAction = provider.MenuItemActions.ListObjectsForModel(modelName);
+                        if (menuItemsAction != null && menuItemsAction.Any())
+                        {
+                            var menuItemsActionList = menuItemsAction.ToList();
+                            objects["AxMenuItemAction"] = menuItemsActionList;
+                            modelObjectCount += menuItemsActionList.Count;
+                            Logger.Debug("   📋 Menu Items (Action): {Count}", menuItemsActionList.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to get menu items (action) for {Model}: {Error}", modelName, ex.Message);
+                    }
+
+                    // Only add model if we found objects
+                    if (modelObjectCount > 0)
+                    {
                         var modelData = new
                         {
                             name = modelName,
-                            objectCount = tableList.Count,
-                            objects = new
-                            {
-                                AxTable = tableList
-                            }
+                            objectCount = modelObjectCount,
+                            objects = objects
                         };
 
                         models.Add(modelData);
-                        totalObjects += tableList.Count;
+                        totalObjects += modelObjectCount;
                         modelsProcessed++;
 
-                        Logger.Information("Found {Count} tables in model {Model}", tableList.Count, modelName);
+                        Logger.Information("✅ Found {Count} total objects in model {Model}", modelObjectCount, modelName);
+                    }
+                    else
+                    {
+                        Logger.Information("   ⚠️ No objects found in model {Model}", modelName);
                     }
                 }
                 catch (Exception ex)
@@ -101,6 +290,15 @@ namespace D365MetadataService.Handlers
                     // Continue processing other models
                 }
             }
+
+            var distinctObjectTypes = models.Cast<dynamic>()
+                .SelectMany(m => (IEnumerable<string>)m.objects.Keys)
+                .Distinct()
+                .Count();
+
+            Logger.Information("🎉 COMPREHENSIVE enumeration complete: {TotalObjects} objects across {ObjectTypes} types", 
+                totalObjects, 
+                distinctObjectTypes);
 
             return new
             {

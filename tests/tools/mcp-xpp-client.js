@@ -131,7 +131,7 @@ export class MCPXppClient extends EventEmitter {
     const methodMap = {
       'get_current_config': 'getCurrentConfig',
       'search_objects_pattern': 'searchObjectsPattern',
-      'build_object_index': 'buildObjectIndex',
+      'build_object_index': 'buildCache',
       'create_xpp_object': 'createXppObject',
       'find_xpp_object': 'findXppObject'
     };
@@ -185,10 +185,10 @@ export class MCPXppClient extends EventEmitter {
         return args; // Direct pass-through
       
       case 'build_object_index':
-        return { arguments: args }; // Wrap in arguments object
+        return args; // Direct pass-through (ToolHandlers.buildCache expects args directly)
       
       case 'create_xpp_object':
-        return { arguments: args }; // Wrap in arguments object
+        return args; // Direct pass-through (ToolHandlers.createXppObject expects args directly)
       
       case 'find_xpp_object':
         return args; // Direct pass-through
