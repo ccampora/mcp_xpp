@@ -12,11 +12,11 @@ namespace D365MetadataService.Handlers
     /// </summary>
     public class ExecuteObjectModificationHandler : BaseRequestHandler
     {
-        private readonly DynamicD365ReflectionService _reflectionService;
+        private readonly D365ReflectionService _reflectionService;
 
         public ExecuteObjectModificationHandler(
             ILogger logger,
-            DynamicD365ReflectionService reflectionService) : base(logger)
+            D365ReflectionService reflectionService) : base(logger)
         {
             _reflectionService = reflectionService;
         }

@@ -38,7 +38,7 @@
 │              (C# .NET 4.8 - Named Pipes)                  │
 │  ┌─────────────────────────────────────────────────────────┤
 │  │ • D365ObjectFactory - Object creation APIs             │
-│  │ • DynamicD365ReflectionService - Object modification   │
+│  │ • D365ReflectionService - Object modification   │
 │  │ • ExecuteObjectModificationHandler - Method execution  │
 │  │ • DiscoverModificationCapabilitiesHandler - Discovery  │
 │  └─────────────────────────────────────────────────────────┤

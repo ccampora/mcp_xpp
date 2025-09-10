@@ -80,12 +80,20 @@ namespace D365MetadataService
             services.AddSingleton(config);
             services.AddSingleton(_logger);
 
+            // Register Centralized D365 Reflection Manager (eliminates scattered reflection code)
+            services.AddSingleton<D365ReflectionManager>(sp => 
+            {
+                var manager = D365ReflectionManager.Instance;
+                manager.Initialize(); // Pre-initialize for optimal performance
+                return manager;
+            });
+
             // Register Dynamic D365 Object Factory (supports all 575+ object types)
             services.AddSingleton<D365ObjectFactory>(sp =>
                 new D365ObjectFactory(config.D365Config, sp.GetRequiredService<ILogger>()));
 
-            // Register Dynamic D365 Reflection Service
-            services.AddSingleton<DynamicD365ReflectionService>();
+            // Register D365 Reflection Service
+            services.AddSingleton<D365ReflectionService>();
 
             // Register all request handlers
             services.AddSingleton<IRequestHandler, CreateObjectHandler>();

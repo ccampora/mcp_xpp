@@ -3,220 +3,66 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
-using Microsoft.Dynamics.AX.Metadata.MetaModel;
-using Microsoft.Dynamics.AX.Metadata.Service;
-using Microsoft.Dynamics.AX.Metadata.Storage;
-using Microsoft.Dynamics.AX.Metadata.Providers;
-using Microsoft.Dynamics.AX.Metadata.Core.MetaModel;
 using D365MetadataService.Models;
 
 namespace D365MetadataService.Services
 {
     /// <summary>
-    /// Dynamic reflection-based service that discovers and exposes D365 metadata API capabilities in real-time
+    /// Reflection-based service that discovers and exposes D365 metadata API capabilities in real-time
     /// No hardcoded abstractions - everything is discovered through reflection
     /// </summary>
-    public class DynamicD365ReflectionService
+    public class D365ReflectionService
     {
         private readonly D365ObjectFactory _objectFactory;
-        private readonly Dictionary<string, Type> _cachedTypes;
-        private readonly Dictionary<string, MethodInfo[]> _cachedMethods;
+        private readonly D365ReflectionManager _reflectionManager;
         private readonly Serilog.ILogger _logger;
 
-        public DynamicD365ReflectionService(D365ObjectFactory objectFactory)
+        public D365ReflectionService(D365ObjectFactory objectFactory, D365ReflectionManager reflectionManager)
         {
             _objectFactory = objectFactory ?? throw new ArgumentNullException(nameof(objectFactory));
-            _cachedTypes = new Dictionary<string, Type>();
-            _cachedMethods = new Dictionary<string, MethodInfo[]>();
-            _logger = Serilog.Log.ForContext<DynamicD365ReflectionService>();
+            _reflectionManager = reflectionManager ?? throw new ArgumentNullException(nameof(reflectionManager));
+            _logger = Serilog.Log.ForContext<D365ReflectionService>();
         }
 
-        /// <summary>
-        /// Dynamically discovers the D365 metadata assembly without hardcoding specific types
-        /// Searches for any assembly containing D365 metadata types (Ax* pattern)
-        /// </summary>
-        private Assembly GetD365MetadataAssembly()
-        {
-            try
-            {
-                _logger.Information("Attempting to find D365 metadata assembly...");
-                
-                // First, try to get the assembly directly from a known type
-                // This will force the assembly to be loaded if it's not already
-                try
-                {
-                    var knownType = typeof(AxTable); // This should force assembly loading
-                    var assembly = knownType.Assembly;
-                    _logger.Information("Found D365 metadata assembly via known type: {AssemblyName}", assembly.FullName);
-                    return assembly;
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning(ex, "Could not get assembly from known type, trying discovery...");
-                }
-                
-                // Get all loaded assemblies and find the one containing D365 metadata types
-                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                _logger.Information("Searching through {AssemblyCount} loaded assemblies", assemblies.Length);
-                
-                foreach (var assembly in assemblies)
-                {
-                    try
-                    {
-                        // Look for assemblies that contain types in Microsoft.Dynamics.AX.Metadata.MetaModel namespace
-                        var metaModelTypes = assembly.GetTypes()
-                            .Where(t => t.Namespace == "Microsoft.Dynamics.AX.Metadata.MetaModel" && 
-                                       t.Name.StartsWith("Ax"))
-                            .Take(5);
-                        
-                        if (metaModelTypes.Any())
-                        {
-                            _logger.Information("Found D365 metadata assembly: {AssemblyName} with types: {Types}", 
-                                assembly.FullName, string.Join(", ", metaModelTypes.Select(t => t.Name)));
-                            return assembly;
-                        }
-                    }
-                    catch (ReflectionTypeLoadException ex)
-                    {
-                        _logger.Debug("Could not load types from assembly {AssemblyName}: {Error}", 
-                            assembly.GetName().Name, ex.Message);
-                        continue;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Debug("Error checking assembly {AssemblyName}: {Error}", 
-                            assembly.GetName().Name, ex.Message);
-                        continue;
-                    }
-                }
-                
-                // Fallback: try Microsoft.Dynamics.AX.Metadata assembly by name
-                try
-                {
-                    _logger.Information("Attempting to load Microsoft.Dynamics.AX.Metadata by name...");
-                    return Assembly.Load("Microsoft.Dynamics.AX.Metadata");
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning(ex, "Could not load Microsoft.Dynamics.AX.Metadata by name");
-                }
-                
-                _logger.Error("Could not find D365 metadata assembly using any method");
-                throw new InvalidOperationException("D365 metadata assembly not found. Ensure Microsoft.Dynamics.AX.Metadata is available.");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error discovering D365 metadata assembly");
-                throw;
-            }
-        }
+
 
         /// <summary>
         /// Discovers all modification capabilities for a specific D365 object type
-        /// Returns real-time analysis of what methods are available
+        /// REFACTORED: Now uses centralized D365ReflectionManager
         /// </summary>
         public async Task<ObjectCapabilities> DiscoverModificationCapabilitiesAsync(string objectTypeName)
         {
-            try
+            // Delegate to centralized reflection manager
+            var capabilities = _reflectionManager.DiscoverModificationCapabilities(objectTypeName);
+            
+            // Add any additional processing specific to this service if needed
+            if (capabilities.Success)
             {
-                var type = await GetD365TypeAsync(objectTypeName);
-                if (type == null)
+                // Add parameter creation requirements for advanced scenarios
+                foreach (var method in capabilities.ModificationMethods)
                 {
-                    return new ObjectCapabilities
+                    if (method.Parameters?.Any() == true)
                     {
-                        ObjectType = objectTypeName,
-                        Success = false,
-                        Error = $"Object type '{objectTypeName}' not found"
-                    };
-                }
-
-                var capabilities = new ObjectCapabilities
-                {
-                    ObjectType = objectTypeName,
-                    Success = true,
-                    TypeFullName = type.FullName
-                };
-
-                // Discover modification methods (Add*, Insert*, Create*, Remove*, etc.)
-                var modificationMethods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(m => IsModificationMethod(m))
-                    .ToArray();
-
-                foreach (var method in modificationMethods)
-                {
-                    var methodInfo = new MethodCapability
-                    {
-                        Name = method.Name,
-                        ReturnType = method.ReturnType.Name,
-                        Description = GenerateMethodDescription(method),
-                        Parameters = method.GetParameters().Select(p => new Models.ParameterInfo
+                        // Get the actual method from reflection manager and analyze parameters
+                        var d365Type = _reflectionManager.GetD365Type(objectTypeName);
+                        var methodInfo = d365Type?.GetMethod(method.Name);
+                        if (methodInfo != null)
                         {
-                            Name = p.Name,
-                            Type = p.ParameterType.Name,
-                            TypeFullName = p.ParameterType.FullName,
-                            IsOptional = p.IsOptional,
-                            DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null,
-                            IsOut = p.IsOut,
-                            IsRef = p.ParameterType.IsByRef
-                        }).ToList(),
-                        // NEW: Add detailed parameter creation requirements
-                        ParameterCreationRequirements = await AnalyzeParameterCreationRequirementsAsync(method)
-                    };
-
-                    capabilities.ModificationMethods.Add(methodInfo);
+                            method.ParameterCreationRequirements = await AnalyzeParameterCreationRequirementsAsync(methodInfo);
+                        }
+                    }
                 }
 
-                // Discover writable properties/collections
-                var writableProperties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(p => p.CanWrite && IsModifiableProperty(p))
-                    .ToArray();
-
-                foreach (var property in writableProperties)
+                // Add related type constructors and inheritance hierarchy for complex scenarios
+                var objectType = _reflectionManager.GetD365Type(objectTypeName);
+                if (objectType != null)
                 {
-                    var propInfo = new PropertyCapability
-                    {
-                        Name = property.Name,
-                        Type = property.PropertyType.Name,
-                        TypeFullName = property.PropertyType.FullName,
-                        CanRead = property.CanRead,
-                        CanWrite = property.CanWrite,
-                        IsCollection = IsCollectionType(property.PropertyType),
-                        CollectionMethods = IsCollectionType(property.PropertyType) ? 
-                            GetCollectionMethods(property.PropertyType) : new List<string>()
-                    };
-
-                    capabilities.WritableProperties.Add(propInfo);
+                    capabilities.RelatedTypeConstructors = _reflectionManager.DiscoverRelatedTypeConstructors(objectType);
+                    capabilities.InheritanceHierarchy = _reflectionManager.BuildInheritanceHierarchy(objectType);
                 }
-
-                // Discover constructors for related types (field types, etc.)
-                capabilities.RelatedTypeConstructors = await DiscoverRelatedTypeConstructorsAsync(type);
-
-                // NEW: Build structured inheritance hierarchy mapping
-                capabilities.InheritanceHierarchy = await BuildInheritanceHierarchyAsync(type);
-                
-                // NEW: Add reflection information about the main type
-                capabilities.ReflectionInfo = new TypeReflectionInfo
-                {
-                    Namespace = type.Namespace,
-                    Assembly = type.Assembly.GetName().Name,
-                    IsPublic = type.IsPublic,
-                    IsAbstract = type.IsAbstract,
-                    IsSealed = type.IsSealed,
-                    BaseTypeName = type.BaseType?.Name,
-                    InterfaceNames = type.GetInterfaces().Select(i => i.Name).ToList()
-                };
-
-                return capabilities;
             }
-            catch (Exception ex)
-            {
-                return new ObjectCapabilities
-                {
-                    ObjectType = objectTypeName,
-                    Success = false,
-                    Error = $"Error discovering capabilities: {ex.Message}"
-                };
-            }
+
+            return capabilities;
         }
 
         /// <summary>
@@ -270,7 +116,7 @@ namespace D365MetadataService.Services
                 result.ExecutionTime = DateTime.UtcNow - result.StartTime;
 
                 // Get updated object state
-                result.UpdatedObjectInfo = await GetObjectStateInfoAsync(targetObject);
+                result.UpdatedObjectInfo = _reflectionManager.GetObjectStateInfo(targetObject);
 
                 return result;
             }
@@ -350,44 +196,9 @@ namespace D365MetadataService.Services
 
         private Task<Type> GetD365TypeAsync(string typeName)
         {
-            if (_cachedTypes.ContainsKey(typeName))
-                return Task.FromResult(_cachedTypes[typeName]);
-
-            try
-            {
-                var assembly = GetD365MetadataAssembly();
-                
-                // Try exact match first
-                var type = assembly.GetType(typeName);
-                if (type != null)
-                {
-                    _cachedTypes[typeName] = type;
-                    return Task.FromResult(type);
-                }
-
-                // Try with full namespace
-                var fullTypeName = $"Microsoft.Dynamics.AX.Metadata.MetaModel.{typeName}";
-                type = assembly.GetType(fullTypeName);
-                if (type != null)
-                {
-                    _cachedTypes[typeName] = type;
-                    return Task.FromResult(type);
-                }
-
-                // Search all types
-                type = assembly.GetTypes().FirstOrDefault(t => t.Name == typeName);
-                if (type != null)
-                {
-                    _cachedTypes[typeName] = type;
-                    return Task.FromResult(type);
-                }
-
-                return Task.FromResult<Type>(null);
-            }
-            catch
-            {
-                return Task.FromResult<Type>(null);
-            }
+            // 🚀 REFACTORED: Use centralized reflection manager
+            var type = _reflectionManager.GetD365Type(typeName);
+            return Task.FromResult(type);
         }
 
         private Task<object> GetD365ObjectAsync(string objectType, string objectName)
@@ -423,15 +234,6 @@ namespace D365MetadataService.Services
                    method.GetParameters().Length > 0; // Methods that take parameters are likely modification methods
         }
 
-        private bool IsModifiableProperty(PropertyInfo property)
-        {
-            // Use actual property metadata instead of hardcoded property names
-            return property.CanWrite && 
-                   property.SetMethod != null && 
-                   property.SetMethod.IsPublic && 
-                   !property.SetMethod.IsStatic;
-        }
-
         private bool IsCollectionType(Type type)
         {
             // Use proper type hierarchy checking instead of name matching
@@ -443,231 +245,11 @@ namespace D365MetadataService.Services
                      type.GetGenericTypeDefinition() == typeof(IEnumerable<>)));
         }
 
-        private List<string> GetCollectionMethods(Type collectionType)
-        {
-            // Use actual interface analysis instead of hardcoded method names
-            return collectionType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Where(m => !m.IsSpecialName && // Exclude property getters/setters
-                           !m.Name.StartsWith("get_") && 
-                           !m.Name.StartsWith("set_") &&
-                           m.IsPublic)
-                .Select(m => m.Name)
-                .Distinct()
-                .ToList();
-        }
 
-        private string GenerateMethodDescription(MethodInfo method)
-        {
-            var parameterTypes = string.Join(", ", method.GetParameters().Select(p => p.ParameterType.Name));
-            return $"Modifies object by {method.Name.ToLower()}. Parameters: ({parameterTypes}) -> {method.ReturnType.Name}";
-        }
 
-        private string GenerateTypeDescription(Type type)
-        {
-            // Check for actual Description attributes first
-            var descriptionAttr = type.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>();
-            if (descriptionAttr != null)
-            {
-                return descriptionAttr.Description;
-            }
 
-            // Check for Display attributes
-            var displayAttr = type.GetCustomAttribute<System.ComponentModel.DisplayNameAttribute>();
-            if (displayAttr != null)
-            {
-                return displayAttr.DisplayName;
-            }
 
-            // Generic description based on actual type information
-            return $"D365 metadata type: {type.Name} (Namespace: {type.Namespace})";
-        }
 
-        private Task<List<Models.TypeInfo>> DiscoverRelatedTypeConstructorsAsync(Type mainType)
-        {
-            var relatedTypes = new List<Models.TypeInfo>();
-            
-            // Get all modification methods to see what parameter types they need
-            var modificationMethods = mainType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Where(m => IsModificationMethod(m))
-                .ToArray();
-
-            // For each parameter type in modification methods, find all concrete implementations
-            var parameterTypes = modificationMethods
-                .SelectMany(m => m.GetParameters())
-                .Select(p => p.ParameterType)
-                .Where(t => t.Name.StartsWith("Ax"))
-                .Distinct()
-                .ToArray();
-
-            var assembly = GetD365MetadataAssembly();
-            
-            foreach (var paramType in parameterTypes)
-            {
-                if (paramType.IsAbstract || paramType.IsInterface)
-                {
-                    // Find all concrete implementations of this abstract type
-                    var concreteTypes = assembly.GetTypes()
-                        .Where(t => t.IsSubclassOf(paramType) && !t.IsAbstract && t.IsPublic)
-                        .ToArray();
-
-                    foreach (var concreteType in concreteTypes)
-                    {
-                        relatedTypes.Add(new Models.TypeInfo
-                        {
-                            Name = concreteType.Name,
-                            FullName = concreteType.FullName,
-                            Description = GenerateTypeDescription(concreteType),
-                            IsAbstract = false,
-                            BaseType = paramType.Name,
-                            Constructors = concreteType.GetConstructors().Select(c => new Models.ConstructorInfo
-                            {
-                                Parameters = c.GetParameters().Select(p => new Models.ParameterInfo
-                                {
-                                    Name = p.Name,
-                                    Type = p.ParameterType.Name,
-                                    TypeFullName = p.ParameterType.FullName,
-                                    IsOptional = p.IsOptional,
-                                    DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null
-                                }).ToList(),
-                                IsPublic = c.IsPublic
-                            }).ToList()
-                        });
-                    }
-                }
-                else
-                {
-                    // For concrete types, just add the type itself
-                    relatedTypes.Add(new Models.TypeInfo
-                    {
-                        Name = paramType.Name,
-                        FullName = paramType.FullName,
-                        Description = GenerateTypeDescription(paramType),
-                        IsAbstract = paramType.IsAbstract,
-                        BaseType = paramType.BaseType?.Name,
-                        Constructors = paramType.GetConstructors().Select(c => new Models.ConstructorInfo
-                        {
-                            Parameters = c.GetParameters().Select(p => new Models.ParameterInfo
-                            {
-                                Name = p.Name,
-                                Type = p.ParameterType.Name,
-                                TypeFullName = p.ParameterType.FullName,
-                                IsOptional = p.IsOptional,
-                                DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null
-                            }).ToList(),
-                            IsPublic = c.IsPublic
-                        }).ToList()
-                    });
-                }
-            }
-            
-            return Task.FromResult(relatedTypes.Distinct().ToList());
-        }
-
-        /// <summary>
-        /// NEW: Build structured inheritance hierarchy mapping for concrete type resolution
-        /// This provides explicit mapping of abstract types to their concrete implementations
-        /// </summary>
-        private Task<Dictionary<string, List<Models.TypeInfo>>> BuildInheritanceHierarchyAsync(Type mainType)
-        {
-            var hierarchy = new Dictionary<string, List<Models.TypeInfo>>();
-            
-            // Get all modification methods to see what parameter types they need
-            var modificationMethods = mainType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Where(m => IsModificationMethod(m))
-                .ToArray();
-
-            // For each parameter type in modification methods
-            var parameterTypes = modificationMethods
-                .SelectMany(m => m.GetParameters())
-                .Select(p => p.ParameterType)
-                .Where(t => t.Name.StartsWith("Ax")) // D365 types
-                .Distinct()
-                .ToArray();
-
-            var assembly = GetD365MetadataAssembly();
-            
-            foreach (var paramType in parameterTypes)
-            {
-                var concreteImplementations = new List<Models.TypeInfo>();
-                
-                if (paramType.IsAbstract || paramType.IsInterface)
-                {
-                    // Find all concrete implementations of this abstract type
-                    var concreteTypes = assembly.GetTypes()
-                        .Where(t => (t.IsSubclassOf(paramType) || paramType.IsAssignableFrom(t)) 
-                                   && !t.IsAbstract 
-                                   && t.IsPublic
-                                   && t != paramType) // Exclude the abstract type itself
-                        .ToArray();
-
-                    foreach (var concreteType in concreteTypes)
-                    {
-                        concreteImplementations.Add(new Models.TypeInfo
-                        {
-                            Name = concreteType.Name,
-                            FullName = concreteType.FullName,
-                            Description = GenerateTypeDescription(concreteType),
-                            IsAbstract = false,
-                            BaseType = GetMostRelevantBaseType(concreteType, paramType),
-                            Constructors = concreteType.GetConstructors().Select(c => new Models.ConstructorInfo
-                            {
-                                Parameters = c.GetParameters().Select(p => new Models.ParameterInfo
-                                {
-                                    Name = p.Name,
-                                    Type = p.ParameterType.Name,
-                                    TypeFullName = p.ParameterType.FullName,
-                                    IsOptional = p.IsOptional,
-                                    DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null
-                                }).ToList(),
-                                IsPublic = c.IsPublic
-                            }).ToList()
-                        });
-                    }
-                    
-                    // Only add to hierarchy if we found concrete implementations
-                    if (concreteImplementations.Any())
-                    {
-                        hierarchy[paramType.Name] = concreteImplementations;
-                    }
-                }
-                else
-                {
-                    // For concrete types, add them as implementations of themselves
-                    concreteImplementations.Add(new Models.TypeInfo
-                    {
-                        Name = paramType.Name,
-                        FullName = paramType.FullName,
-                        Description = GenerateTypeDescription(paramType),
-                        IsAbstract = false,
-                        BaseType = paramType.BaseType?.Name
-                    });
-                    
-                    hierarchy[paramType.Name] = concreteImplementations;
-                }
-            }
-            
-            return Task.FromResult(hierarchy);
-        }
-        
-        /// <summary>
-        /// Helper to get the most relevant base type name for inheritance display
-        /// </summary>
-        private string GetMostRelevantBaseType(Type concreteType, Type abstractType)
-        {
-            // Walk up the inheritance chain to find the direct relationship
-            var current = concreteType.BaseType;
-            while (current != null && current != typeof(object))
-            {
-                if (current == abstractType || abstractType.IsAssignableFrom(current))
-                {
-                    return current.Name;
-                }
-                current = current.BaseType;
-            }
-            
-            // If we couldn't find the relationship, return the immediate base type
-            return concreteType.BaseType?.Name ?? "object";
-        }
 
         /// <summary>
         /// Analyze what parameters are required to create objects for a method's parameters
@@ -1026,24 +608,6 @@ namespace D365MetadataService.Services
             return Task.FromResult(instance);
         }
 
-        // REMOVED: All fuzzy matching and guessing code
-        // Now using explicit parameter requirements from DiscoverModificationCapabilitiesAsync
-
-        /// <summary>
-        /// Create collection objects
-        /// </summary>
-        private object CreateCollectionObject(Type collectionType)
-        {
-            try
-            {
-                return Activator.CreateInstance(collectionType);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         private object ConvertParameterValue(object value, Type targetType)
         {
             if (value == null) return null;
@@ -1064,84 +628,7 @@ namespace D365MetadataService.Services
             return type.IsValueType ? Activator.CreateInstance(type) : null;
         }
 
-        private Task<Dictionary<string, object>> GetObjectStateInfoAsync(object obj)
-        {
-            var stateInfo = new Dictionary<string, object>();
-            
-            try
-            {
-                var type = obj.GetType();
-                
-                // Get collection counts
-                var collections = type.GetProperties()
-                    .Where(p => IsCollectionType(p.PropertyType))
-                    .ToList();
 
-                foreach (var collection in collections)
-                {
-                    try
-                    {
-                        var collectionValue = collection.GetValue(obj);
-                        if (collectionValue != null)
-                        {
-                            var countProperty = collectionValue.GetType().GetProperty("Count");
-                            if (countProperty != null)
-                            {
-                                stateInfo[$"{collection.Name}Count"] = countProperty.GetValue(collectionValue);
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore errors getting collection info
-                    }
-                }
-
-                // Get key properties dynamically - discover what properties exist rather than hardcoding
-                var commonPropertyNames = new List<string>();
-                var allProperties = type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                
-                // Dynamically identify key properties that are strings and commonly used for identification
-                foreach (var prop in allProperties)
-                {
-                    if (prop.CanRead && prop.PropertyType == typeof(string))
-                    {
-                        var propName = prop.Name;
-                        // Include properties that are typically used for object identification/description
-                        // but don't hardcode the specific names - check if they exist
-                        if (propName.EndsWith("Name") || propName.EndsWith("Label") || propName.EndsWith("Description") ||
-                            propName.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
-                            propName.Equals("Label", StringComparison.OrdinalIgnoreCase) ||
-                            propName.Equals("Description", StringComparison.OrdinalIgnoreCase))
-                        {
-                            commonPropertyNames.Add(propName);
-                        }
-                    }
-                }
-                
-                foreach (var propName in commonPropertyNames)
-                {
-                    var prop = type.GetProperty(propName);
-                    if (prop != null && prop.CanRead)
-                    {
-                        try
-                        {
-                            stateInfo[propName] = prop.GetValue(obj);
-                        }
-                        catch
-                        {
-                            // Ignore errors
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // Return empty state info on any error
-            }
-
-            return Task.FromResult(stateInfo);
-        }
 
         /// <summary>
         /// Discover available D365 types that can be instantiated and modified
@@ -1151,42 +638,27 @@ namespace D365MetadataService.Services
         {
             try
             {
-                var availableTypes = new List<Models.TypeInfo>();
+                // 🚀 REFACTORED: Use centralized reflection manager
+                var supportedTypes = _reflectionManager.GetSupportedObjectTypes();
                 
-                // Use the same assembly discovery approach as other working methods
-                var assembly = GetD365MetadataAssembly();
-
-                if (assembly != null)
+                var availableTypes = supportedTypes.Select(typeName =>
                 {
-                    // Find all types that start with "Ax" and are in the MetaModel namespace
-                    var d365Types = assembly.GetTypes()
-                        .Where(t => t.Name.StartsWith("Ax") && 
-                                   t.Namespace != null && 
-                                   t.Namespace.Contains("MetaModel") &&
-                                   !t.IsAbstract &&
-                                   t.IsPublic &&
-                                   HasModificationCapabilities(t))
-                        .OrderBy(t => t.Name)
-                        .ToArray();
-
-                    foreach (var type in d365Types)
+                    var type = _reflectionManager.GetD365Type(typeName);
+                    return new Models.TypeInfo
                     {
-                        availableTypes.Add(new Models.TypeInfo
-                        {
-                            Name = type.Name,
-                            FullName = type.FullName,
-                            Description = $"D365 {type.Name} object type - supports creation and modification operations",
-                            IsAbstract = type.IsAbstract,
-                            BaseType = type.BaseType?.Name
-                        });
-                    }
-                }
+                        Name = typeName,
+                        FullName = type?.FullName ?? $"Microsoft.Dynamics.AX.Metadata.MetaModel.{typeName}",
+                        Description = $"D365 {typeName} object type - supports creation and modification operations",
+                        IsAbstract = type?.IsAbstract ?? false,
+                        BaseType = type?.BaseType?.Name ?? "MetadataNode"
+                    };
+                }).ToList();
 
                 return Task.FromResult(availableTypes);
             }
-            catch
+            catch (Exception ex)
             {
-                // Return empty list on error rather than throwing
+                _logger.Warning(ex, "Error discovering available types");
                 return Task.FromResult(new List<Models.TypeInfo>());
             }
         }
@@ -1212,43 +684,8 @@ namespace D365MetadataService.Services
 
         private Type GetTypeFromCache(string typeName)
         {
-            try
-            {
-                // Check cache first
-                if (_cachedTypes.TryGetValue(typeName, out var cachedType))
-                {
-                    return cachedType;
-                }
-
-                // Try to find in loaded assemblies
-                var assembly = AppDomain.CurrentDomain.GetAssemblies()
-                    .FirstOrDefault(a => a.GetName().Name.Contains("Microsoft.Dynamics.AX.Metadata"));
-
-                if (assembly == null) return null;
-
-                // Try with full namespace
-                var fullTypeName = $"Microsoft.Dynamics.AX.Metadata.MetaModel.{typeName}";
-                var type = assembly.GetType(fullTypeName);
-                if (type != null)
-                {
-                    _cachedTypes[typeName] = type;
-                    return type;
-                }
-
-                // Search all types
-                type = assembly.GetTypes().FirstOrDefault(t => t.Name == typeName);
-                if (type != null)
-                {
-                    _cachedTypes[typeName] = type;
-                    return type;
-                }
-
-                return null;
-            }
-            catch
-            {
-                return null;
-            }
+            // 🚀 REFACTORED: Use centralized reflection manager
+            return _reflectionManager.GetD365Type(typeName);
         }
 
         /// <summary>
@@ -1347,12 +784,6 @@ namespace D365MetadataService.Services
                 return result;
             }
         }
-
-
-
-
-
-
 
         /// <summary>
         /// Save a modified object back to the metadata store

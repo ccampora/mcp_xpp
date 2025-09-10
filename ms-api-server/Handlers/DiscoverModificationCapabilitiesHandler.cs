@@ -14,10 +14,10 @@ namespace D365MetadataService.Handlers
     /// </summary>
     public class DiscoverModificationCapabilitiesHandler : BaseRequestHandler
     {
-        private readonly DynamicD365ReflectionService _reflectionService;
+        private readonly D365ReflectionService _reflectionService;
 
         public DiscoverModificationCapabilitiesHandler(
-            DynamicD365ReflectionService reflectionService,
+            D365ReflectionService reflectionService,
             ILogger logger) : base(logger)
         {
             _reflectionService = reflectionService;

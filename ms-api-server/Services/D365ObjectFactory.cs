@@ -11,6 +11,7 @@ using Microsoft.Dynamics.AX.Metadata.Providers;
 using Microsoft.Dynamics.AX.Metadata.Core.MetaModel;
 using Serilog;
 using D365MetadataService.Models;
+using D365MetadataService.Services;
 using Newtonsoft.Json;
 
 namespace D365MetadataService.Services
@@ -22,6 +23,7 @@ namespace D365MetadataService.Services
     {
         private readonly IMetadataProvider _metadataProvider;
         private readonly ILogger _logger;
+        private readonly D365ReflectionManager _reflectionManager;
         private readonly Dictionary<string, Type> _axTypeCache;
         private readonly Dictionary<string, PropertyInfo> _providerPropertyCache;
         private readonly Dictionary<string, MethodInfo> _createMethodCache;
@@ -29,6 +31,7 @@ namespace D365MetadataService.Services
         public D365ObjectFactory(D365Configuration config, ILogger logger)
         {
             _logger = logger.ForContext<D365ObjectFactory>();
+            _reflectionManager = D365ReflectionManager.Instance;
             _axTypeCache = new Dictionary<string, Type>();
             _providerPropertyCache = new Dictionary<string, PropertyInfo>();
             _createMethodCache = new Dictionary<string, MethodInfo>();
@@ -51,56 +54,7 @@ namespace D365MetadataService.Services
             }
         }
 
-        /// <summary>
-        /// Dynamically discovers the D365 metadata assembly without hardcoding specific types
-        /// </summary>
-        private Assembly GetD365MetadataAssembly()
-        {
-            try
-            {
-                // Get all loaded assemblies and find the one containing D365 metadata types
-                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                
-                foreach (var assembly in assemblies)
-                {
-                    try
-                    {
-                        // Look for assemblies that contain types in Microsoft.Dynamics.AX.Metadata.MetaModel namespace
-                        var metaModelTypes = assembly.GetTypes()
-                            .Where(t => t.Namespace == "Microsoft.Dynamics.AX.Metadata.MetaModel" && 
-                                       t.Name.StartsWith("Ax"))
-                            .Take(5);
-                        
-                        if (metaModelTypes.Any())
-                        {
-                            _logger.Debug("Found D365 metadata assembly: {AssemblyName}", assembly.FullName);
-                            return assembly;
-                        }
-                    }
-                    catch (ReflectionTypeLoadException)
-                    {
-                        // Skip assemblies that can't be loaded
-                        continue;
-                    }
-                }
-                
-                // Fallback: try Microsoft.Dynamics.AX.Metadata assembly by name
-                try
-                {
-                    return Assembly.Load("Microsoft.Dynamics.AX.Metadata");
-                }
-                catch
-                {
-                    _logger.Warning("Could not find D365 metadata assembly dynamically or by name");
-                    throw new InvalidOperationException("D365 metadata assembly not found. Ensure Microsoft.Dynamics.AX.Metadata is available.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error discovering D365 metadata assembly");
-                throw;
-            }
-        }
+
 
         /// <summary>
         /// Initialize reflection caches for performance
@@ -109,8 +63,8 @@ namespace D365MetadataService.Services
         {
             _logger.Information("Initializing reflection caches...");
 
-            // Cache all Ax types from Microsoft.Dynamics.AX.Metadata.MetaModel namespace
-            var metaModelAssembly = GetD365MetadataAssembly();
+            // Cache all Ax types from Microsoft.Dynamics.AX.Metadata.MetaModel namespace using centralized reflection manager
+            var metaModelAssembly = _reflectionManager.GetD365MetadataAssembly();
             var axTypes = metaModelAssembly.GetTypes().Where(t => 
                 t.IsClass && 
                 !t.IsAbstract && 
@@ -718,7 +672,7 @@ namespace D365MetadataService.Services
             try
             {
                 // Return a dynamic schema based on discovered types rather than hardcoded schemas
-                var assembly = GetD365MetadataAssembly();
+                var assembly = _reflectionManager.GetD365MetadataAssembly();
                 var axTypes = assembly.GetTypes()
                     .Where(t => t.Name.StartsWith("Ax") && 
                                t.IsClass && 

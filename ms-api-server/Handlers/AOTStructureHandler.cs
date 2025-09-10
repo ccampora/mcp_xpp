@@ -1,4 +1,5 @@
 using D365MetadataService.Models;
+using D365MetadataService.Services;
 using Serilog;
 using System;
 using System.IO;
@@ -13,11 +14,13 @@ namespace D365MetadataService.Handlers
     public class AOTStructureHandler : BaseRequestHandler
     {
         private readonly ServiceConfiguration _config;
+        private readonly FileSystemManager _fileSystemManager;
 
         public AOTStructureHandler(ServiceConfiguration config, ILogger logger) 
             : base(logger)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _fileSystemManager = FileSystemManager.Instance;
         }
 
         public override string SupportedAction => "aotstructure";
@@ -32,7 +35,7 @@ namespace D365MetadataService.Handlers
 
             try
             {
-                // Load the D365 Metadata assembly
+                // Load the D365 Metadata assembly using centralized filesystem manager
                 string assemblyPath = null;
                 if (!string.IsNullOrEmpty(_config.D365Config.MetadataAssemblyPath))
                 {
@@ -41,22 +44,22 @@ namespace D365MetadataService.Handlers
                 else
                 {
                     // Try to find it in VS2022 extension directory
-                    var extensionPath = GetVS2022ExtensionPath();
-                    if (extensionPath != null)
+                    var extensionPath = _fileSystemManager.GetVS2022ExtensionPath();
+                    if (!string.IsNullOrEmpty(extensionPath))
                     {
-                        assemblyPath = Path.Combine(extensionPath, "Microsoft.Dynamics.AX.Metadata.dll");
+                        assemblyPath = _fileSystemManager.CombinePath(extensionPath, "Microsoft.Dynamics.AX.Metadata.dll");
                     }
                 }
 
-                if (string.IsNullOrEmpty(assemblyPath) || !File.Exists(assemblyPath))
+                if (string.IsNullOrEmpty(assemblyPath) || !_fileSystemManager.FileExists(assemblyPath))
                 {
                     return ServiceResponse.CreateError("Microsoft.Dynamics.AX.Metadata.dll not found");
                 }
 
-                // Load assembly and get types using reflection
+                // Load assembly and get types using centralized filesystem manager
                 var result = await Task.Run(() =>
                 {
-                    var assembly = System.Reflection.Assembly.LoadFrom(assemblyPath);
+                    var assembly = _fileSystemManager.LoadAssemblyFromPath(assemblyPath);
                     var types = assembly.GetTypes()
                         .Where(t => t.IsPublic && t.IsClass && !t.IsAbstract && t.Name.StartsWith("Ax"))
                         .Select(t => new
@@ -97,43 +100,6 @@ namespace D365MetadataService.Handlers
             }
         }
 
-        private string GetVS2022ExtensionPath()
-        {
-            try
-            {
-                // Try to find VS2022 extension path from common locations
-                var commonPaths = new[]
-                {
-                    @"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions",
-                    @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions",
-                    @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions"
-                };
 
-                foreach (var basePath in commonPaths)
-                {
-                    if (Directory.Exists(basePath))
-                    {
-                        // Look for directories containing AX-related files
-                        var extensionDirs = Directory.GetDirectories(basePath, "*", SearchOption.TopDirectoryOnly);
-                        foreach (var dir in extensionDirs)
-                        {
-                            if (File.Exists(Path.Combine(dir, "Microsoft.Dynamics.AX.Metadata.dll")))
-                            {
-                                return dir;
-                            }
-                        }
-                    }
-                }
-
-                return _config.D365Config.MetadataAssemblyPath != null 
-                    ? Path.GetDirectoryName(_config.D365Config.MetadataAssemblyPath)
-                    : null;
-            }
-            catch (Exception ex)
-            {
-                Logger.Warning(ex, "Failed to determine VS2022 extension path");
-                return null;
-            }
-        }
     }
 }

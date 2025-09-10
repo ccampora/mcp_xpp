@@ -13,9 +13,9 @@ namespace D365MetadataService.Tests
     /// </summary>
     public class DynamicReflectionTest
     {
-        private readonly DynamicD365ReflectionService _reflectionService;
+        private readonly D365ReflectionService _reflectionService;
 
-        public DynamicReflectionTest(DynamicD365ReflectionService reflectionService)
+        public DynamicReflectionTest(D365ReflectionService reflectionService)
         {
             _reflectionService = reflectionService;
         }

@@ -1,4 +1,5 @@
 using D365MetadataService.Models;
+using D365MetadataService.Services;
 using Microsoft.Dynamics.AX.Metadata.Providers;
 using Microsoft.Dynamics.AX.Metadata.Storage;
 using Newtonsoft.Json;
@@ -6,129 +7,29 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 
 namespace D365MetadataService.Handlers
 {
     /// <summary>
     /// COMPREHENSIVE Handler for listing ALL objects by model using D365 metadata DLLs
-    /// Enhanced to enumerate ALL object types: AxTable, AxClass, AxForm, AxEnum, AxView, AxDataEntityView, etc.
-    /// This fixes the cache indexing issue where only tables were being returned
+    /// Uses centralized D365ReflectionManager for dynamic object type discovery
+    /// Eliminates hardcoded object type mappings with reflection-based enumeration
     /// </summary>
     public class ListObjectsByModelHandler : BaseRequestHandler
     {
         private readonly ServiceConfiguration _config;
+        private readonly D365ReflectionManager _reflectionManager;
 
         public override string SupportedAction => "list_objects_by_model";
 
         public ListObjectsByModelHandler(ServiceConfiguration config, ILogger logger) : base(logger)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _reflectionManager = D365ReflectionManager.Instance;
         }
 
-        /// <summary>
-        /// Dynamically discovers and enumerates all object collection properties on the metadata provider
-        /// Replaces the massive hardcoded object type dictionary with reflection-based discovery
-        /// </summary>
-        private Dictionary<string, object> GetAllObjectsForModelDynamically(IMetadataProvider provider, string modelName)
-        {
-            var objects = new Dictionary<string, object>();
-            var totalObjectCount = 0;
 
-            try
-            {
-                Logger.Debug("🔍 Dynamically discovering all provider collection properties...");
-                
-                // Get all properties on the provider that represent object collections
-                var providerType = provider.GetType();
-                var collectionProperties = providerType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(prop => 
-                        // Look for properties that have a ListObjectsForModel method (indicating they're D365 object collections)
-                        prop.PropertyType.GetMethod("ListObjectsForModel") != null &&
-                        prop.CanRead)
-                    .OrderBy(prop => prop.Name)
-                    .ToArray();
-
-                Logger.Information("📊 Found {Count} object collection properties to enumerate", collectionProperties.Length);
-
-                foreach (var collectionProp in collectionProperties)
-                {
-                    try
-                    {
-                        Logger.Debug("   🔄 Processing collection: {PropertyName} ({PropertyType})", 
-                            collectionProp.Name, collectionProp.PropertyType.Name);
-
-                        // Get the collection instance
-                        var collection = collectionProp.GetValue(provider);
-                        if (collection == null)
-                        {
-                            Logger.Debug("   ⚠️ Collection {PropertyName} is null, skipping", collectionProp.Name);
-                            continue;
-                        }
-
-                        // Call ListObjectsForModel on the collection
-                        var listMethod = collection.GetType().GetMethod("ListObjectsForModel");
-                        if (listMethod == null)
-                        {
-                            Logger.Debug("   ⚠️ Collection {PropertyName} has no ListObjectsForModel method, skipping", collectionProp.Name);
-                            continue;
-                        }
-
-                        // Invoke the method to get objects for this model
-                        var result = listMethod.Invoke(collection, new object[] { modelName });
-                        if (result != null)
-                        {
-                            // Convert to list to get count and allow enumeration
-                            var resultList = ((System.Collections.IEnumerable)result).Cast<object>().ToList();
-                            
-                            if (resultList.Any())
-                            {
-                                // Determine the object type name from the collection property name
-                                // e.g., "Tables" -> "AxTable", "Classes" -> "AxClass"
-                                var objectTypeName = DetermineObjectTypeFromCollectionName(collectionProp.Name);
-                                
-                                objects[objectTypeName] = resultList;
-                                totalObjectCount += resultList.Count;
-                                
-                                Logger.Debug("   ✅ {ObjectType}: {Count} objects", objectTypeName, resultList.Count);
-                            }
-                            else
-                            {
-                                Logger.Debug("   📭 {PropertyName}: No objects found for model {Model}", 
-                                    collectionProp.Name, modelName);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to process collection {PropertyName}: {Error}", 
-                            collectionProp.Name, ex.Message);
-                    }
-                }
-
-                Logger.Information("🎯 Dynamic enumeration complete: {TotalObjects} total objects across {CollectionCount} collections", 
-                    totalObjectCount, objects.Count);
-
-                return objects;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, "❌ Error during dynamic object enumeration for model {Model}", modelName);
-                return objects; // Return whatever we managed to collect
-            }
-        }
-
-        /// <summary>
-        /// NO HARDCODING: Simply return the collection property name as-is or derive it dynamically
-        /// The D365 metadata provider collections already have meaningful names
-        /// </summary>
-        private string DetermineObjectTypeFromCollectionName(string collectionName)
-        {
-            // NO HARDCODED MAPPINGS! Just return the collection name as-is for now
-            // The caller can use whatever naming convention they prefer
-            return collectionName;
-        }
 
         protected override async Task<ServiceResponse> HandleRequestAsync(ServiceRequest request)
         {
@@ -215,8 +116,8 @@ namespace D365MetadataService.Handlers
                 {
                     Logger.Information("🔍 Comprehensively processing model: {ModelName}", modelName);
                     
-                    // ✅ HARDCODING ELIMINATED: Use ONLY the dynamic reflection-based approach
-                    var objects = GetAllObjectsForModelDynamically(provider, modelName);
+                    // ✅ HARDCODING ELIMINATED: Use centralized D365ReflectionManager
+                    var objects = _reflectionManager.GetAllObjectsForModel(provider, modelName);
                     var modelObjectCount = objects.Values.OfType<System.Collections.IEnumerable>()
                         .Sum(collection => collection.Cast<object>().Count());
 
