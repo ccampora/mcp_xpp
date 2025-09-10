@@ -136,6 +136,28 @@ export class ToolHandlers {
         properties: params.properties
       });
       
+      // Immediately add the created object to the search index for instant searchability
+      try {
+        const model = params.properties?.model || 'UnknownModel';
+        const filePath = `Models/${model}/${params.objectType}/${params.objectName}.xml`;
+        
+        const indexSuccess = await ObjectIndexManager.addObjectToIndex(
+          params.objectName,
+          params.objectType,
+          model,
+          filePath
+        );
+        
+        if (indexSuccess) {
+          content += `\n🔍 Object added to search index - immediately searchable`;
+        } else {
+          content += `\n⚠️  Object created but not added to search index`;
+        }
+      } catch (indexError) {
+        console.warn(`Failed to add object to search index: ${indexError}`);
+        content += `\n⚠️  Object created but search index update failed`;
+      }
+      
       const executionTime = Date.now() - startTime;
       content += `\n\nPerformance: ${executionTime}ms using VS2022 service integration\n`;
       

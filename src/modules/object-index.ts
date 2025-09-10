@@ -558,4 +558,41 @@ export class ObjectIndexManager {
       return [];
     }
   }
+
+  /**
+   * Add a single object to the search index immediately
+   * Perfect for adding newly created objects to make them immediately searchable
+   */
+  static async addObjectToIndex(objectName: string, objectType: string, model: string, filePath: string): Promise<boolean> {
+    this.initializeSQLiteIndex();
+    
+    if (!this.sqliteIndex) {
+      console.warn('⚠️  SQLite index not available for adding object');
+      return false;
+    }
+
+    try {
+      const objectLocation: ObjectLocation = {
+        name: objectName,
+        path: filePath,
+        model: model,
+        type: objectType,
+        lastModified: new Date().toISOString(),
+        hasCode: true,
+        isValid: true
+      };
+
+      const success = this.sqliteIndex.insertObject(objectLocation);
+      if (success) {
+        console.log(`✅ Added ${objectType} '${objectName}' to search index (model: ${model})`);
+      } else {
+        console.warn(`⚠️  Failed to add ${objectType} '${objectName}' to search index`);
+      }
+      
+      return success;
+    } catch (error) {
+      console.error(`❌ Error adding object to index: ${error}`);
+      return false;
+    }
+  }
 }

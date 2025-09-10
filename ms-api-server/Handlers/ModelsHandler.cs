@@ -11,7 +11,8 @@ namespace D365MetadataService.Handlers
 {
     /// <summary>
     /// Handler for comprehensive models information requests
-    /// Returns both custom development models AND standard D365 models
+    /// Uses dynamic model discovery via MetadataProvider.ModelManifest.ListModels()
+    /// Discovers both Microsoft and custom models automatically
     /// </summary>
     public class ModelsHandler : BaseRequestHandler
     {
@@ -52,54 +53,27 @@ namespace D365MetadataService.Handlers
         {
             try
             {
-                // Get custom development models from D365ObjectFactory
-                Logger.Information("Getting custom development models...");
-                var customModelsResult = _objectFactory.GetAllModelsInformation();
-                var customModels = new List<object>();
-                
-                if (customModelsResult != null && customModelsResult.TryGetValue("models", out var modelsValue))
-                {
-                    // Handle the models array
-                    if (modelsValue is IEnumerable<object> models)
-                    {
-                        foreach (var model in models)
-                        {
-                            // Convert to dictionary to safely access properties
-                            if (model is IDictionary<string, object> modelDict)
-                            {
-                                customModels.Add(new
-                                {
-                                    Name = modelDict.ContainsKey("Name") ? modelDict["Name"]?.ToString() : "Unknown",
-                                    Type = "Custom",
-                                    Publisher = modelDict.ContainsKey("Publisher") ? modelDict["Publisher"]?.ToString() : "Unknown",
-                                    Version = GetVersionString(modelDict),
-                                    Layer = modelDict.ContainsKey("Layer") ? modelDict["Layer"]?.ToString() : "Unknown",
-                                    ObjectCount = 0, // Custom models don't have easy object count
-                                    HasObjects = false,
-                                    Status = "Available"
-                                });
-                            }
-                        }
-                    }
-                }
+                // Use dynamic model discovery for both standard and custom models
+                Logger.Information("Getting all models via dynamic discovery...");
+                var allModels = GetStandardD365Models(); // Now discovers ALL models dynamically
 
-                // Get standard D365 models using metadata provider
-                Logger.Information("Getting standard D365 models...");
-                var standardModels = GetStandardD365Models();
-
-                // Combine both types
-                var allModels = new List<object>();
-                allModels.AddRange(customModels);
-                allModels.AddRange(standardModels);
-
-                var totalObjects = standardModels.Sum(m => {
+                var totalObjects = allModels.Sum(m => {
                     var props = m.GetType().GetProperty("ObjectCount");
-                    return props != null ? (int)(props.GetValue(m) ?? 0) : 0;
+                    var count = props != null ? (int)(props.GetValue(m) ?? 0) : 0;
+                    return count > 0 ? count : 0; // Exclude failed enumerations (-1)
                 });
+                
                 var modelsWithObjects = allModels.Count(m => {
                     var props = m.GetType().GetProperty("HasObjects");
                     return props != null ? (bool)(props.GetValue(m) ?? false) : false;
                 });
+
+                var customModels = allModels.Count(m => {
+                    var props = m.GetType().GetProperty("Type");
+                    return props != null && props.GetValue(m)?.ToString() == "Custom";
+                });
+
+                var standardModels = allModels.Count - customModels;
 
                 var result = new
                 {
@@ -110,16 +84,16 @@ namespace D365MetadataService.Handlers
                     summary = new
                     {
                         totalModels = allModels.Count,
-                        customModels = customModels.Count,
-                        standardModels = standardModels.Count,
+                        customModels = customModels,
+                        standardModels = standardModels,
                         modelsWithObjects = modelsWithObjects,
                         totalObjects = totalObjects,
                         retrievedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
                     }
                 };
 
-                Logger.Information("Comprehensive models enumeration complete: {TotalModels} total ({CustomModels} custom, {StandardModels} standard), {TotalObjects} total objects", 
-                    allModels.Count, customModels.Count, standardModels.Count, totalObjects);
+                Logger.Information("Dynamic model discovery complete: {TotalModels} total ({CustomModels} custom, {StandardModels} standard), {TotalObjects} total objects", 
+                    allModels.Count, customModels, standardModels, totalObjects);
 
                 return result;
             }
@@ -132,87 +106,130 @@ namespace D365MetadataService.Handlers
 
         private List<object> GetStandardD365Models()
         {
-            var standardModels = new List<object>();
+            var discoveredModels = new List<object>();
             
             try
             {
                 // Get metadata path from configuration
                 var metadataPath = _config.D365Config.PackagesLocalDirectory;
-                Logger.Information("Creating metadata provider for standard models: {MetadataPath}", metadataPath);
+                Logger.Information("Creating metadata provider for dynamic model discovery: {MetadataPath}", metadataPath);
 
-                // Create the metadata provider using the same pattern as ListObjectsByModelHandler
+                // Create the metadata provider using the same pattern as D365ObjectFactory
                 var factory = new MetadataProviderFactory();
                 var provider = factory.CreateDiskProvider(metadataPath);
 
-                // Known standard D365 models (expanded from our discovery)
-                var candidateModels = new List<string>
+                // Use the metadata provider's ModelManifest to dynamically discover ALL models
+                // This is the same approach used in D365ObjectFactory.cs
+                if (provider?.ModelManifest != null)
                 {
-                    "ApplicationSuite", "ApplicationFoundation", "ApplicationPlatform", "ApplicationCommon",
-                    "Foundation", "ApplicationWorkspaces", "BusinessProcessDesigner", "Calendar",
-                    "ContactPerson", "Currency", "Dimensions", "Directory", "ElectronicReporting",
-                    "ElectronicReportingConfiguration", "ElectronicReportingMapping", "GeneralLedger",
-                    "Ledger", "Policy", "SourceDocumentation", "Tax", "UnitOfMeasure",
-                    "TestEssentials", "ApplicationSuiteTest", "ApplicationFoundationTest"
-                };
-
-                foreach (var modelName in candidateModels.OrderBy(m => m))
-                {
+                    Logger.Information("Getting models from MetadataProvider.ModelManifest");
+                    
                     try
                     {
-                        // Test if this model exists by trying to get tables from it
-                        var tables = provider.Tables.ListObjectsForModel(modelName);
-                        
-                        if (tables != null)
+                        var modelList = provider.ModelManifest.ListModels();
+                        Logger.Information("Found {Count} models using ListModels()", modelList?.Count ?? 0);
+
+                        if (modelList != null)
                         {
-                            var tableList = tables.ToList();
-                            var objectCount = tableList.Count;
-
-                            standardModels.Add(new
+                            foreach (var modelName in modelList.OrderBy(m => m))
                             {
-                                Name = modelName,
-                                Type = "Standard",
-                                Publisher = "Microsoft",
-                                Version = "10.0",
-                                Layer = "Standard",
-                                ObjectCount = objectCount,
-                                HasObjects = objectCount > 0,
-                                Status = "Available"
-                            });
+                                try
+                                {
+                                    Logger.Debug("Processing model: {ModelName}", modelName);
+                                    
+                                    var modelInfo = provider.ModelManifest.Read(modelName);
+                                    if (modelInfo != null)
+                                    {
+                                        // Get object count by trying to enumerate tables (quick check)
+                                        var objectCount = 0;
+                                        try
+                                        {
+                                            var tables = provider.Tables.ListObjectsForModel(modelName);
+                                            objectCount = tables?.Count() ?? 0;
+                                        }
+                                        catch
+                                        {
+                                            // If table enumeration fails, still include the model
+                                            objectCount = -1; // Indicates enumeration failed
+                                        }
 
-                            Logger.Debug("Standard model {ModelName}: {ObjectCount} tables", modelName, objectCount);
+                                        var modelData = new
+                                        {
+                                            Name = modelInfo.Name,
+                                            Type = modelInfo.Publisher == "ccampora" ? "Custom" : "Standard",
+                                            Publisher = modelInfo.Publisher ?? "Microsoft",
+                                            Version = $"{modelInfo.VersionMajor}.{modelInfo.VersionMinor}.{modelInfo.VersionBuild}.{modelInfo.VersionRevision}",
+                                            Layer = modelInfo.Layer.ToString(),
+                                            Id = modelInfo.Id,
+                                            DisplayName = modelInfo.DisplayName ?? modelInfo.Name,
+                                            Description = modelInfo.Description ?? "N/A",
+                                            ObjectCount = objectCount,
+                                            HasObjects = objectCount > 0,
+                                            Status = "Available"
+                                        };
+
+                                        discoveredModels.Add(modelData);
+                                        Logger.Debug("Added model: {Name} (ID: {Id}, Layer: {Layer}, Publisher: {Publisher}, Objects: {ObjectCount})", 
+                                            modelInfo.Name, modelInfo.Id, modelInfo.Layer, modelInfo.Publisher, objectCount);
+                                    }
+                                    else
+                                    {
+                                        Logger.Warning("Could not read model info for: {ModelName}", modelName);
+                                        discoveredModels.Add(new
+                                        {
+                                            Name = modelName,
+                                            Type = "Unknown",
+                                            Publisher = "Unknown",
+                                            Version = "Unknown",
+                                            Layer = "Unknown",
+                                            ObjectCount = 0,
+                                            HasObjects = false,
+                                            Status = "Error",
+                                            Error = "Could not read model info"
+                                        });
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error(ex, "Error processing model {ModelName}: {Message}", modelName, ex.Message);
+                                    discoveredModels.Add(new
+                                    {
+                                        Name = modelName,
+                                        Type = "Unknown", 
+                                        Publisher = "Unknown",
+                                        Version = "Unknown",
+                                        Layer = "Unknown",
+                                        ObjectCount = 0,
+                                        HasObjects = false,
+                                        Status = "Error",
+                                        Error = ex.Message
+                                    });
+                                }
+                            }
                         }
                     }
-                    catch (Exception modelEx)
+                    catch (Exception listEx)
                     {
-                        Logger.Debug("Standard model {ModelName} not available: {Error}", modelName, modelEx.Message);
-                        // Model doesn't exist or isn't accessible - skip it
+                        Logger.Error(listEx, "Error calling ListModels(): {Message}", listEx.Message);
+                        throw;
                     }
                 }
+                else
+                {
+                    Logger.Error("MetadataProvider or ModelManifest is null");
+                    throw new InvalidOperationException("MetadataProvider or ModelManifest is null");
+                }
 
-                Logger.Information("Found {Count} standard D365 models", standardModels.Count);
-                return standardModels;
+                Logger.Information("Dynamic model discovery complete: {Count} models discovered", discoveredModels.Count);
+                return discoveredModels;
             }
             catch (Exception ex)
             {
-                Logger.Error(ex, "Error getting standard D365 models");
-                return standardModels; // Return partial results
+                Logger.Error(ex, "Error in dynamic model discovery");
+                return discoveredModels; // Return partial results
             }
         }
 
-        private string GetVersionString(IDictionary<string, object> modelDict)
-        {
-            try
-            {
-                var major = modelDict.ContainsKey("VersionMajor") ? modelDict["VersionMajor"]?.ToString() ?? "0" : "0";
-                var minor = modelDict.ContainsKey("VersionMinor") ? modelDict["VersionMinor"]?.ToString() ?? "0" : "0";
-                var build = modelDict.ContainsKey("VersionBuild") ? modelDict["VersionBuild"]?.ToString() ?? "0" : "0";
-                var revision = modelDict.ContainsKey("VersionRevision") ? modelDict["VersionRevision"]?.ToString() ?? "0" : "0";
-                return $"{major}.{minor}.{build}.{revision}";
-            }
-            catch
-            {
-                return "Unknown";
-            }
-        }
+
     }
 }
