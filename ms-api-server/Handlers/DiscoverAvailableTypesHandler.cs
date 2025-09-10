@@ -4,6 +4,10 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
+using Microsoft.Dynamics.AX.Metadata.Service;
+using Microsoft.Dynamics.AX.Metadata.Storage;
+using Microsoft.Dynamics.AX.Metadata.Providers;
+using Microsoft.Dynamics.AX.Metadata.Core.MetaModel;
 using D365MetadataService.Models;
 using Newtonsoft.Json;
 using Serilog;
@@ -27,13 +31,32 @@ namespace D365MetadataService.Handlers
         {
             try
             {
+                Logger.Information("Attempting to find D365 metadata assembly...");
+                
+                // First, try to get the assembly directly from a known type
+                // This will force the assembly to be loaded if it's not already
+                try
+                {
+                    var knownType = typeof(AxTable); // This should force assembly loading
+                    var assembly = knownType.Assembly;
+                    Logger.Information("Found D365 metadata assembly via known type: {AssemblyName}", assembly.FullName);
+                    return assembly;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "Could not get assembly from known type, trying discovery...");
+                }
+                
                 // Get all loaded assemblies and find the one containing D365 metadata types
                 var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                Logger.Information("Searching through {AssemblyCount} loaded assemblies", assemblies.Length);
                 
                 foreach (var assembly in assemblies)
                 {
                     try
                     {
+                        Logger.Debug("Checking assembly: {AssemblyName}", assembly.GetName().Name);
+                        
                         // Look for assemblies that contain types in Microsoft.Dynamics.AX.Metadata.MetaModel namespace
                         var metaModelTypes = assembly.GetTypes()
                             .Where(t => t.Namespace == "Microsoft.Dynamics.AX.Metadata.MetaModel" && 
@@ -42,13 +65,21 @@ namespace D365MetadataService.Handlers
                         
                         if (metaModelTypes.Any())
                         {
-                            Logger.Debug("Found D365 metadata assembly: {AssemblyName}", assembly.FullName);
+                            Logger.Information("Found D365 metadata assembly: {AssemblyName} with types: {Types}", 
+                                assembly.FullName, string.Join(", ", metaModelTypes.Select(t => t.Name)));
                             return assembly;
                         }
                     }
-                    catch (ReflectionTypeLoadException)
+                    catch (ReflectionTypeLoadException ex)
                     {
-                        // Skip assemblies that can't be loaded
+                        Logger.Debug("Could not load types from assembly {AssemblyName}: {Error}", 
+                            assembly.GetName().Name, ex.Message);
+                        continue;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Debug("Error checking assembly {AssemblyName}: {Error}", 
+                            assembly.GetName().Name, ex.Message);
                         continue;
                     }
                 }
@@ -56,13 +87,16 @@ namespace D365MetadataService.Handlers
                 // Fallback: try Microsoft.Dynamics.AX.Metadata assembly by name
                 try
                 {
+                    Logger.Information("Attempting to load Microsoft.Dynamics.AX.Metadata by name...");
                     return Assembly.Load("Microsoft.Dynamics.AX.Metadata");
                 }
-                catch
+                catch (Exception ex)
                 {
-                    Logger.Warning("Could not find D365 metadata assembly dynamically or by name");
-                    throw new InvalidOperationException("D365 metadata assembly not found.");
+                    Logger.Warning(ex, "Could not load Microsoft.Dynamics.AX.Metadata by name");
                 }
+                
+                Logger.Error("Could not find D365 metadata assembly using any method");
+                throw new InvalidOperationException("D365 metadata assembly not found.");
             }
             catch (Exception ex)
             {
