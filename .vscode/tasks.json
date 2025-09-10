@@ -2,22 +2,6 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Build Only",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-ExecutionPolicy",
-				"RemoteSigned",
-				"-Command",
-				"Get-Process -Name 'D365MetadataService' -ErrorAction SilentlyContinue | Stop-Process -Force; .\\tools\\build-and-run.ps1 -Action build"
-			],
-			"group": "build",
-			"problemMatcher": [
-				"$tsc",
-				"$msCompile"
-			]
-		},
-		{
 			"label": "Build and Run MCP Server",
 			"type": "shell",
 			"command": "powershell",
@@ -123,38 +107,6 @@
 			],
 			"group": "test",
 			"dependsOn": "Build and Run MCP Server"
-		},
-		{
-			"label": "Build C# Service",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-ExecutionPolicy",
-				"RemoteSigned",
-				"-Command",
-				".\\tools\\build-and-run.ps1 -Action build -Target csharp"
-			],
-			"group": "build",
-			"problemMatcher": [
-				"$msCompile"
-			]
-		},
-		{
-			"label": "Run C# Service",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-ExecutionPolicy",
-				"RemoteSigned",
-				"-Command",
-				".\\tools\\build-and-run.ps1 -Action run -Target csharp"
-			],
-			"group": "build",
-			"isBackground": true,
-			"dependsOn": "Build C# Service",
-			"problemMatcher": [
-				"$msCompile"
-			]
 		},
 		{
 			"label": "Build and Run C# Service",

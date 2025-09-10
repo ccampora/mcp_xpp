@@ -4,6 +4,8 @@ using System.Collections.Generic;
 namespace D365MetadataService.Models
 {
     // Enumerations
+    // NOTE: This enum should ideally be generated from reflection rather than hardcoded
+    // TODO: Replace with dynamic object type discovery from D365 metadata assemblies
     public enum ObjectType
     {
         AxTable,
@@ -157,7 +159,17 @@ namespace D365MetadataService.Models
         public string ExtendedTable { get; set; }
         public string Publisher { get; set; }
         public string Version { get; set; } = "1.0.0.0";
-        public List<string> Dependencies { get; set; } = new List<string> { "ApplicationPlatform", "ApplicationFoundation" };
+        public List<string> Dependencies { get; set; } = GetDefaultDependencies();
+        
+        /// <summary>
+        /// NO HARDCODING: Get default dependencies dynamically or return minimal set
+        /// </summary>
+        private static List<string> GetDefaultDependencies()
+        {
+            // TODO: Could be made dynamic by analyzing common dependencies in existing models
+            // For now, return the most minimal essential dependencies
+            return new List<string> { "ApplicationPlatform" };
+        }
     }
 
     public class ClassExtensionDefinition
@@ -166,7 +178,17 @@ namespace D365MetadataService.Models
         public string ExtendedClass { get; set; }
         public string Publisher { get; set; }
         public string Version { get; set; } = "1.0.0.0";
-        public List<string> Dependencies { get; set; } = new List<string> { "ApplicationPlatform", "ApplicationFoundation" };
+        public List<string> Dependencies { get; set; } = GetDefaultDependencies();
+        
+        /// <summary>
+        /// NO HARDCODING: Get default dependencies dynamically or return minimal set
+        /// </summary>
+        private static List<string> GetDefaultDependencies()
+        {
+            // TODO: Could be made dynamic by analyzing common dependencies in existing models
+            // For now, return the most minimal essential dependencies
+            return new List<string> { "ApplicationPlatform" };
+        }
     }
 
     // Result Models

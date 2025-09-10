@@ -28,6 +28,55 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
+        /// Dynamically discovers the D365 metadata assembly without hardcoding specific types
+        /// Searches for any assembly containing D365 metadata types (Ax* pattern)
+        /// </summary>
+        private Assembly GetD365MetadataAssembly()
+        {
+            try
+            {
+                // Get all loaded assemblies and find the one containing D365 metadata types
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                
+                foreach (var assembly in assemblies)
+                {
+                    try
+                    {
+                        // Look for assemblies that contain types starting with "Ax" (D365 pattern)
+                        var axTypes = assembly.GetTypes().Where(t => t.Name.StartsWith("Ax") && !t.IsAbstract).Take(5);
+                        if (axTypes.Any())
+                        {
+                            _logger.Debug("Found D365 metadata assembly: {AssemblyName} with {TypeCount} Ax types", 
+                                assembly.FullName, axTypes.Count());
+                            return assembly;
+                        }
+                    }
+                    catch (ReflectionTypeLoadException)
+                    {
+                        // Skip assemblies that can't be loaded
+                        continue;
+                    }
+                }
+                
+                // Fallback: try Microsoft.Dynamics.AX.Metadata assembly by name
+                try
+                {
+                    return Assembly.Load("Microsoft.Dynamics.AX.Metadata");
+                }
+                catch
+                {
+                    _logger.Warning("Could not find D365 metadata assembly dynamically or by name");
+                    throw new InvalidOperationException("D365 metadata assembly not found. Ensure Microsoft.Dynamics.AX.Metadata is available.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error discovering D365 metadata assembly");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Discovers all modification capabilities for a specific D365 object type
         /// Returns real-time analysis of what methods are available
         /// </summary>
@@ -271,7 +320,7 @@ namespace D365MetadataService.Services
 
             try
             {
-                var assembly = Assembly.GetAssembly(typeof(AxTable));
+                var assembly = GetD365MetadataAssembly();
                 
                 // Try exact match first
                 var type = assembly.GetType(typeName);
@@ -415,7 +464,7 @@ namespace D365MetadataService.Services
                 .Distinct()
                 .ToArray();
 
-            var assembly = Assembly.GetAssembly(typeof(AxTable));
+            var assembly = GetD365MetadataAssembly();
             
             foreach (var paramType in parameterTypes)
             {
@@ -500,7 +549,7 @@ namespace D365MetadataService.Services
                 .Distinct()
                 .ToArray();
 
-            var assembly = Assembly.GetAssembly(typeof(AxTable));
+            var assembly = GetD365MetadataAssembly();
             
             foreach (var paramType in parameterTypes)
             {
@@ -725,17 +774,36 @@ namespace D365MetadataService.Services
         {
             _logger.Information("Determining concrete type for abstract type {AbstractType}", abstractType.Name);
 
-            // Special logic for AxTableField - use fieldType parameter
-            if (abstractType == typeof(AxTableField) || abstractType.IsSubclassOf(typeof(AxTableField)))
+            // GENERIC LOGIC: Check for concreteType parameter first (works for ALL abstract types)
+            if (providedParams.ContainsKey("concreteType"))
             {
-                return DetermineFieldTypeFromParameters(abstractType, providedParams);
+                var concreteTypeName = providedParams["concreteType"]?.ToString();
+                _logger.Information("Found concreteType parameter: {ConcreteType}", concreteTypeName);
+
+                var typeAssembly = Assembly.GetAssembly(abstractType);
+                var targetType = typeAssembly.GetTypes()
+                    .FirstOrDefault(t => t.Name == concreteTypeName && 
+                                        (t.IsSubclassOf(abstractType) || abstractType.IsAssignableFrom(t)) &&
+                                        !t.IsAbstract && 
+                                        t.IsPublic);
+                
+                if (targetType != null)
+                {
+                    _logger.Information("Using exact concrete type from parameter: {ConcreteType}", targetType.Name);
+                    return targetType;
+                }
+                
+                _logger.Warning("Concrete type '{ConcreteType}' specified in parameters not found or not compatible with {AbstractType}", 
+                    concreteTypeName, abstractType.Name);
             }
 
-            // For other abstract types, could add more logic here
-            // For now, try to find the first concrete subclass
+            // FALLBACK: Find available concrete types
             var assembly = Assembly.GetAssembly(abstractType);
             var concreteTypes = assembly.GetTypes()
-                .Where(t => t.IsSubclassOf(abstractType) && !t.IsAbstract && t.IsPublic)
+                .Where(t => (t.IsSubclassOf(abstractType) || abstractType.IsAssignableFrom(t)) && 
+                           !t.IsAbstract && 
+                           t.IsPublic &&
+                           t != abstractType)
                 .ToArray();
 
             if (concreteTypes.Length > 0)
@@ -749,33 +817,7 @@ namespace D365MetadataService.Services
             return null;
         }
 
-        /// <summary>
-        /// Determine specific field type from parameters - uses exact type name from discovery
-        /// </summary>
-        private Type DetermineFieldTypeFromParameters(Type baseFieldType, Dictionary<string, object> providedParams)
-        {
-            var assembly = Assembly.GetAssembly(typeof(AxTableField));
-            
-            // Look for exact concrete type name provided by discovery tool
-            if (providedParams.ContainsKey("concreteType"))
-            {
-                var concreteTypeName = providedParams["concreteType"]?.ToString();
-                _logger.Information("Found concreteType parameter: {ConcreteType}", concreteTypeName);
 
-                var targetType = assembly.GetTypes()
-                    .FirstOrDefault(t => t.Name == concreteTypeName);
-                
-                if (targetType != null)
-                {
-                    _logger.Information("Using exact concrete type: {ConcreteType}", targetType.Name);
-                    return targetType;
-                }
-            }
-
-            _logger.Warning("No concrete type could be determined from provided parameters - only 'concreteType' parameter is supported");
-            _logger.Information("Available parameters: {Parameters}", string.Join(", ", providedParams.Keys));
-            return null;
-        }
 
         /// <summary>
         /// General-purpose parameter preparation using explicit parameter requirements
@@ -1020,9 +1062,29 @@ namespace D365MetadataService.Services
                     }
                 }
 
-                // Get key properties
-                var keyProperties = new[] { "Name", "Label", "Description" };
-                foreach (var propName in keyProperties)
+                // Get key properties dynamically - discover what properties exist rather than hardcoding
+                var commonPropertyNames = new List<string>();
+                var allProperties = type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                
+                // Dynamically identify key properties that are strings and commonly used for identification
+                foreach (var prop in allProperties)
+                {
+                    if (prop.CanRead && prop.PropertyType == typeof(string))
+                    {
+                        var propName = prop.Name;
+                        // Include properties that are typically used for object identification/description
+                        // but don't hardcode the specific names - check if they exist
+                        if (propName.EndsWith("Name") || propName.EndsWith("Label") || propName.EndsWith("Description") ||
+                            propName.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
+                            propName.Equals("Label", StringComparison.OrdinalIgnoreCase) ||
+                            propName.Equals("Description", StringComparison.OrdinalIgnoreCase))
+                        {
+                            commonPropertyNames.Add(propName);
+                        }
+                    }
+                }
+                
+                foreach (var propName in commonPropertyNames)
                 {
                     var prop = type.GetProperty(propName);
                     if (prop != null && prop.CanRead)
@@ -1057,7 +1119,7 @@ namespace D365MetadataService.Services
                 var availableTypes = new List<Models.TypeInfo>();
                 
                 // Use the same assembly discovery approach as other working methods
-                var assembly = Assembly.GetAssembly(typeof(AxTable));
+                var assembly = GetD365MetadataAssembly();
 
                 if (assembly != null)
                 {

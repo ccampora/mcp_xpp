@@ -1,0 +1,247 @@
+🎯 **MODIFICATION CAPABILITIES FOR AXTABLE**
+
+📋 **Object Information:**
+   • Type: AxTable
+   • Full Name: undefined
+   • Namespace: undefined
+   • Assembly: undefined
+
+🔧 **Available Modification Methods (16):**
+   • AddField: Modifies object by addfield. Parameters: (AxTableField) -> Void
+     Parameters: 1 | Returns: Void
+   • AddFieldGroup: Modifies object by addfieldgroup. Parameters: (AxTableFieldGroup) -> Void
+     Parameters: 1 | Returns: Void
+   • AddIndex: Modifies object by addindex. Parameters: (AxTableIndex) -> Void
+     Parameters: 1 | Returns: Void
+   • AddFullTextIndex: Modifies object by addfulltextindex. Parameters: (AxTableFullTextIndex) -> Void
+     Parameters: 1 | Returns: Void
+   • AddRelation: Modifies object by addrelation. Parameters: (AxTableRelation) -> Void
+     Parameters: 1 | Returns: Void
+   • AddDeleteAction: Modifies object by adddeleteaction. Parameters: (AxTableDeleteAction) -> Void
+     Parameters: 1 | Returns: Void
+   • SetCompilerMetadata: Modifies object by setcompilermetadata. Parameters: (Object) -> Void
+     Parameters: 1 | Returns: Void
+   • ApplyExtensionProperties: Modifies object by applyextensionproperties. Parameters: (AxTableExtension) -> Void
+     Parameters: 1 | Returns: Void
+   • ApplyExtensionFieldModifications: Modifies object by applyextensionfieldmodifications. Parameters: (AxTableExtension) -> Void
+     Parameters: 1 | Returns: Void
+   • ApplyExtensionRelationExtension: Modifies object by applyextensionrelationextension. Parameters: (AxTable, AxTableExtension, IList`1) -> Void
+     Parameters: 3 | Returns: Void
+   • ApplyExtensionRelationModification: Modifies object by applyextensionrelationmodification. Parameters: (AxTableExtension) -> Void
+     Parameters: 1 | Returns: Void
+   • ApplyExtensionFieldGroupExtensions: Modifies object by applyextensionfieldgroupextensions. Parameters: (AxTable, AxTableExtension, IList`1) -> Void
+     Parameters: 3 | Returns: Void
+   • SetPrimaryKey: Modifies object by setprimarykey. Parameters: (String) -> Void
+     Parameters: 1 | Returns: Void
+   • AddMethod: Modifies object by addmethod. Parameters: (AxMethod) -> Void
+     Parameters: 1 | Returns: Void
+   • GetMethod: Modifies object by getmethod. Parameters: (Int32) -> AxMethod
+     Parameters: 1 | Returns: AxMethod
+   • Equals: Modifies object by equals. Parameters: (Object) -> Boolean
+     Parameters: 1 | Returns: Boolean
+
+🎯 **CONCRETE TYPES FOR execute_object_modification:**
+   • AxTableFieldContainer: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldContainer
+     Description: D365 metadata type: AxTableFieldContainer (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldDate: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldDate
+     Description: D365 metadata type: AxTableFieldDate (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldEnum: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldEnum
+     Description: D365 metadata type: AxTableFieldEnum (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldGuid: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldGuid
+     Description: D365 metadata type: AxTableFieldGuid (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldInt: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldInt
+     Description: D365 metadata type: AxTableFieldInt (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldInt64: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldInt64
+     Description: D365 metadata type: AxTableFieldInt64 (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldReal: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldReal
+     Description: D365 metadata type: AxTableFieldReal (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldString: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldString
+     Description: D365 metadata type: AxTableFieldString (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldTime: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldTime
+     Description: D365 metadata type: AxTableFieldTime (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldUtcDateTime: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldUtcDateTime
+     Description: D365 metadata type: AxTableFieldUtcDateTime (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFieldGroup: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFieldGroup
+     Description: D365 metadata type: AxTableFieldGroup (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableIndex: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableIndex
+     Description: D365 metadata type: AxTableIndex (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableFullTextIndex: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableFullTextIndex
+     Description: D365 metadata type: AxTableFullTextIndex (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableRelation: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableRelation
+     Description: D365 metadata type: AxTableRelation (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableDeleteAction: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableDeleteAction
+     Description: D365 metadata type: AxTableDeleteAction (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxTableExtension: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTableExtension
+     Description: Table Extensions
+   • AxTable: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxTable
+     Description: Tables
+   • AxMethod: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxMethod
+     Description: D365 metadata type: AxMethod (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+
+🔧 **PARAMETER REQUIREMENTS:**
+   • AddField: Requires 'AxTableField' object
+     Required Properties: SaveContents, Mandatory, AllowEditOnCreate, AllowEdit, Visible, AosAuthorization, MinReadAccess, IgnoreEDTRelation, Null, IsSystemGenerated, IsManuallyUpdated, IsObsolete, GeneralDataProtectionRegulation, SysSharingType
+   • AddFieldGroup: Requires 'AxTableFieldGroup' object
+     Required Properties: AutoPopulate, IsSystemGenerated, IsManuallyUpdated
+   • AddIndex: Requires 'AxTableIndex' object
+     Required Properties: AllowDuplicates, Enabled, AlternateKey, ValidTimeStateKey, ValidTimeStateMode, IsSystemGenerated, IsManuallyUpdated, IndexType, AllowPageLocks
+   • AddFullTextIndex: Requires 'AxTableFullTextIndex' object
+     Required Properties: ChangeTracking
+   • AddRelation: Requires 'AxTableRelation' object
+     Required Properties: Validate, RelatedTableCardinality, Cardinality, RelationshipType, UseDefaultRoleNames, CreateNavigationPropertyMethods, EDTRelation, OnDelete, IsSystemGenerated, IsManuallyUpdated
+   • AddDeleteAction: Requires 'AxTableDeleteAction' object
+     Required Properties: DeleteAction
+   • SetCompilerMetadata: Requires 'Object' object
+     Required Properties: None
+   • ApplyExtensionProperties: Requires 'AxTableExtension' object
+     Required Properties: IsObsolete, Visibility
+   • ApplyExtensionFieldModifications: Requires 'AxTableExtension' object
+     Required Properties: IsObsolete, Visibility
+   • ApplyExtensionRelationExtension: Requires 'AxTable' object
+     Required Properties: TableType, TableContents, SystemTable, AosAuthorization, CacheLookup, CreateRecIdIndex, SaveDataPerCompany, SaveDataPerPartition, ModifiedDateTime, ModifiedBy, ModifiedTransactionId, CreatedDateTime, CreatedTransactionId, OccEnabled, Abstract, SupportInheritance, ValidTimeStateFieldType, CreatedBy, IsKernelTable, StorageMode, Durability, DataSharingType, AllowOverride, AllowChangeTracking, DisableLockEscalation, AllowArchival, AllowRowVersionChangeTracking, DisableDatabaseLogging, AllowRetention, IsObsolete, Visibility, Visible, TableGroup, EntityRelationshipType, OperationalDomain, SubscriberAccessLevel
+   • ApplyExtensionRelationModification: Requires 'AxTableExtension' object
+     Required Properties: IsObsolete, Visibility
+   • ApplyExtensionFieldGroupExtensions: Requires 'AxTable' object
+     Required Properties: TableType, TableContents, SystemTable, AosAuthorization, CacheLookup, CreateRecIdIndex, SaveDataPerCompany, SaveDataPerPartition, ModifiedDateTime, ModifiedBy, ModifiedTransactionId, CreatedDateTime, CreatedTransactionId, OccEnabled, Abstract, SupportInheritance, ValidTimeStateFieldType, CreatedBy, IsKernelTable, StorageMode, Durability, DataSharingType, AllowOverride, AllowChangeTracking, DisableLockEscalation, AllowArchival, AllowRowVersionChangeTracking, DisableDatabaseLogging, AllowRetention, IsObsolete, Visibility, Visible, TableGroup, EntityRelationshipType, OperationalDomain, SubscriberAccessLevel
+   • SetPrimaryKey: Requires 'String' object
+     Required Properties: None
+   • AddMethod: Requires 'AxMethod' object
+     Required Properties: Visibility, IsAbstract, IsDelegate, IsStatic, IsFinal, IsDisplay, IsEdit, IsExtendedMethod
+   • GetMethod: Requires 'Int32' object
+     Required Properties: None
+   • Equals: Requires 'Object' object
+     Required Properties: None
+💡 **Usage:** These methods can be called via the execute_object_modification tool (when implemented).
+📊 **Type Properties:** Public: undefined, Abstract: undefined, Sealed: undefined
+
+{
+  "objectType": "AxTable",
+  "objectName": "pt2_Customer",
+  "methodName": "AddField",
+  "parameters": {
+    "Name": "EmailAddress",
+    "ExtendedDataType": "pt2_EmailAddress",
+    "Label": "Email Address",
+    "HelpText": "Customer email address for identification",
+    "Mandatory": "Yes",
+    "AllowEdit": "Yes",
+    "AllowEditOnCreate": "Yes",
+    "Visible": "Yes"
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+🎯 **MODIFICATION CAPABILITIES FOR AXFORM**
+
+📋 **Object Information:**
+   • Type: AxForm
+   • Full Name: undefined
+   • Namespace: undefined
+   • Assembly: undefined
+
+🔧 **MODIFICATION METHODS WITH CONCRETE TYPE REQUIREMENTS:**
+
+   📝 **SetPrimaryKey**
+      • Description: Modifies object by setprimarykey. Parameters: (String) -> Void
+      • Parameters: String (system type)
+
+   📝 **AddMethod**
+      • Description: Modifies object by addmethod. Parameters: (AxMethod) -> Void
+      • Parameters: AxMethod (concrete type)
+
+   📝 **GetMethod**
+      • Description: Modifies object by getmethod. Parameters: (Int32) -> AxMethod
+      • Parameters: Int32 (system type)
+
+   📝 **AddDataSource**
+      • Description: Modifies object by adddatasource. Parameters: (AxFormDataSourceConcrete) -> Void
+      • Parameters: AxFormDataSourceConcrete (system type)
+
+   📝 **GetDataSource**
+      • Description: Modifies object by getdatasource. Parameters: (Int32) -> AxFormDataSourceConcrete
+      • Parameters: Int32 (system type)
+
+   📝 **AddPartReference**
+      • Description: Modifies object by addpartreference. Parameters: (AxFormPartReference) -> Void
+      • Parameters: AxFormPartReference (concrete type)
+
+   📝 **SetCompilerMetadata**
+      • Description: Modifies object by setcompilermetadata. Parameters: (Object) -> Void
+      • Parameters: Object (system type)
+
+   📝 **Equals**
+      • Description: Modifies object by equals. Parameters: (Object) -> Boolean
+      • Parameters: Object (system type)
+
+�️ **D365 METADATA TYPE SYSTEM:**
+
+   The D365 metadata API uses inheritance hierarchies. Methods expecting abstract base types
+   (like AxTableField) must be called with concrete implementations.
+
+🎯 **AVAILABLE CONCRETE TYPES:**
+   • AxMethod: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxMethod
+     Description: D365 metadata type: AxMethod (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxFormDataSourceReferenced: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormDataSourceReferenced
+     Description: D365 metadata type: AxFormDataSourceReferenced (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxFormDataSourceRoot: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormDataSourceRoot
+     Description: D365 metadata type: AxFormDataSourceRoot (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+   • AxFormPartReference: Use as 'concreteType' parameter
+     Full Name: Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormPartReference
+     Description: D365 metadata type: AxFormPartReference (Namespace: Microsoft.Dynamics.AX.Metadata.MetaModel)
+
+💡 **USAGE EXAMPLES:**
+
+   � **Step 1: Discover capabilities**
+   discover_modification_capabilities({ objectType: "AxTable" })
+
+   🔧 **Step 2: Execute modification**
+   execute_object_modification({
+     objectType: "AxTable",
+     objectName: "MyTable",
+     methodName: "AddField",
+     parameters: {
+       concreteType: "AxTableFieldString",  // ← Key: specify concrete type
+       Name: "MyStringField",
+       ExtendedDataType: "Name",
+       Label: "My Field",
+       Mandatory: true,
+       // ... other required properties from discovery
+     }
+   })
+

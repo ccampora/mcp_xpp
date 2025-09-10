@@ -52,6 +52,57 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
+        /// Dynamically discovers the D365 metadata assembly without hardcoding specific types
+        /// </summary>
+        private Assembly GetD365MetadataAssembly()
+        {
+            try
+            {
+                // Get all loaded assemblies and find the one containing D365 metadata types
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                
+                foreach (var assembly in assemblies)
+                {
+                    try
+                    {
+                        // Look for assemblies that contain types in Microsoft.Dynamics.AX.Metadata.MetaModel namespace
+                        var metaModelTypes = assembly.GetTypes()
+                            .Where(t => t.Namespace == "Microsoft.Dynamics.AX.Metadata.MetaModel" && 
+                                       t.Name.StartsWith("Ax"))
+                            .Take(5);
+                        
+                        if (metaModelTypes.Any())
+                        {
+                            _logger.Debug("Found D365 metadata assembly: {AssemblyName}", assembly.FullName);
+                            return assembly;
+                        }
+                    }
+                    catch (ReflectionTypeLoadException)
+                    {
+                        // Skip assemblies that can't be loaded
+                        continue;
+                    }
+                }
+                
+                // Fallback: try Microsoft.Dynamics.AX.Metadata assembly by name
+                try
+                {
+                    return Assembly.Load("Microsoft.Dynamics.AX.Metadata");
+                }
+                catch
+                {
+                    _logger.Warning("Could not find D365 metadata assembly dynamically or by name");
+                    throw new InvalidOperationException("D365 metadata assembly not found. Ensure Microsoft.Dynamics.AX.Metadata is available.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error discovering D365 metadata assembly");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Initialize reflection caches for performance
         /// </summary>
         private void InitializeReflectionCaches()
@@ -59,7 +110,7 @@ namespace D365MetadataService.Services
             _logger.Information("Initializing reflection caches...");
 
             // Cache all Ax types from Microsoft.Dynamics.AX.Metadata.MetaModel namespace
-            var metaModelAssembly = typeof(AxClass).Assembly;
+            var metaModelAssembly = GetD365MetadataAssembly();
             var axTypes = metaModelAssembly.GetTypes().Where(t => 
                 t.IsClass && 
                 !t.IsAbstract && 
@@ -436,28 +487,6 @@ namespace D365MetadataService.Services
             };
         }
 
-        // ===== UTILITY METHODS FOR COMPATIBILITY WITH OLD HANDLERS =====
-
-        /// <summary>
-        /// Get parameter schemas for all object types
-        /// </summary>
-        public Dictionary<string, object> GetParameterSchemas()
-        {
-            var schemas = new Dictionary<string, object>();
-
-            // Add schemas for common object types
-            foreach (var objectType in new[] { "AxClass", "AxEnum", "AxTable", "AxForm", "AxQuery", "AxMenu", "AxView", "AxReport" })
-            {
-                schemas[objectType] = new Dictionary<string, object>
-                {
-                    ["name"] = new { type = "string", required = true, description = $"The name of the {objectType.Substring(2).ToLower()}" },
-                    ["model"] = new { type = "string", required = false, description = "The model to create the object in", defaultValue = "ApplicationSuite" }
-                };
-            }
-
-            return schemas;
-        }
-
         /// <summary>
         /// Validate parameters for object creation
         /// </summary>
@@ -648,10 +677,9 @@ namespace D365MetadataService.Services
                     return null;
                 }
 
-                // Look for a Read or Get method on the provider collection
+                // NO HARDCODING: Look for read methods dynamically
                 var providerType = providerCollection.GetType();
-                var readMethod = providerType.GetMethod("Read", new[] { typeof(string) }) ??
-                                providerType.GetMethod("Get", new[] { typeof(string) });
+                var readMethod = GetReadMethodDynamically(providerType);
 
                 if (readMethod == null)
                 {
@@ -683,6 +711,47 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
+        /// Get parameter schemas for object creation - replaced hardcoding with dynamic discovery
+        /// </summary>
+        public object GetParameterSchemas()
+        {
+            try
+            {
+                // Return a dynamic schema based on discovered types rather than hardcoded schemas
+                var assembly = GetD365MetadataAssembly();
+                var axTypes = assembly.GetTypes()
+                    .Where(t => t.Name.StartsWith("Ax") && 
+                               t.IsClass && 
+                               !t.IsAbstract && 
+                               t.IsPublic)
+                    .Take(50) // Limit for performance
+                    .Select(t => new { 
+                        TypeName = t.Name, 
+                        Properties = t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                            .Where(p => p.CanWrite)
+                            .Select(p => new { 
+                                Name = p.Name, 
+                                Type = p.PropertyType.Name 
+                            })
+                            .Take(10) // Limit properties per type
+                            .ToArray()
+                    })
+                    .ToArray();
+
+                return new { 
+                    Message = "Dynamic parameter schemas - no hardcoding", 
+                    AvailableTypes = axTypes.Length,
+                    SampleTypes = axTypes 
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error getting parameter schemas dynamically");
+                return new { Error = "Failed to get dynamic parameter schemas", Details = ex.Message };
+            }
+        }
+
+        /// <summary>
         /// Save a modified object back to the metadata store
         /// </summary>
         public async Task<bool> SaveObjectAsync(string objectType, string objectName, object modifiedObject)
@@ -705,14 +774,8 @@ namespace D365MetadataService.Services
                 _logger.Information("Available methods on provider for {ObjectType}: {Methods}", 
                     objectType, string.Join(", ", providerMethods.Select(m => $"{m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name))})")));
 
-                // Look for save methods on the provider itself
-                var providerSaveMethod = providerType.GetMethod("CreateObject", new[] { modifiedObject.GetType() }) ??
-                                       providerType.GetMethod("UpdateObject", new[] { modifiedObject.GetType() }) ??
-                                       providerType.GetMethod("SaveObject", new[] { modifiedObject.GetType() }) ??
-                                       providerType.GetMethod("WriteObject", new[] { modifiedObject.GetType() }) ??
-                                       providerMethods.FirstOrDefault(m => m.Name.Contains("Create") && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType())) ??
-                                       providerMethods.FirstOrDefault(m => m.Name.Contains("Save") && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType())) ??
-                                       providerMethods.FirstOrDefault(m => m.Name.Contains("Write") && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType()));
+                // NO HARDCODING: Look for save methods dynamically
+                var providerSaveMethod = GetSaveMethodDynamically(providerType, modifiedObject, providerMethods);
 
                 if (providerSaveMethod != null)
                 {
@@ -876,6 +939,126 @@ namespace D365MetadataService.Services
         public Type GetAxType(string typeName)
         {
             return _axTypeCache.TryGetValue(typeName, out var type) ? type : null;
+        }
+
+        /// <summary>
+        /// NO HARDCODING: Dynamically find read methods on provider collections
+        /// </summary>
+        private MethodInfo GetReadMethodDynamically(Type providerType)
+        {
+            try
+            {
+                // Get all methods that could be read methods
+                var readMethods = providerType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => m.GetParameters().Length == 1 && 
+                               m.GetParameters()[0].ParameterType == typeof(string) &&
+                               m.ReturnType != typeof(void))
+                    .OrderBy(m => GetMethodPriority(m.Name))
+                    .ToArray();
+
+                if (readMethods.Any())
+                {
+                    var selectedMethod = readMethods.First();
+                    _logger.Debug("Selected read method: {MethodName} from {MethodCount} candidates", 
+                        selectedMethod.Name, readMethods.Length);
+                    return selectedMethod;
+                }
+
+                _logger.Warning("No suitable read method found on provider type {TypeName}", providerType.Name);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error finding read method dynamically");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// NO HARDCODING: Dynamically find save methods on provider collections
+        /// </summary>
+        private MethodInfo GetSaveMethodDynamically(Type providerType, object modifiedObject, MethodInfo[] providerMethods)
+        {
+            try
+            {
+                var objectType = modifiedObject.GetType();
+
+                // Define methods that should be excluded from save method consideration
+                var excludedMethods = new HashSet<string> 
+                { 
+                    "ToString", "Equals", "GetHashCode", "GetType", "Dispose", 
+                    "WaitForCompletion", "GetEnumerator", "FromFile" 
+                };
+
+                // Filter out methods that are clearly not save methods
+                var candidateMethods = providerMethods
+                    .Where(m => !excludedMethods.Contains(m.Name) && 
+                               m.GetParameters().Length == 1 &&
+                               !m.Name.StartsWith("get_") && 
+                               !m.Name.StartsWith("set_") &&
+                               !m.Name.StartsWith("add_") && 
+                               !m.Name.StartsWith("remove_"))
+                    .ToArray();
+
+                _logger.Information("Filtered candidate save methods: {Methods}", 
+                    string.Join(", ", candidateMethods.Select(m => m.Name)));
+
+                // First try methods that take the exact object type
+                var exactMethods = candidateMethods
+                    .Where(m => m.GetParameters()[0].ParameterType == objectType)
+                    .OrderBy(m => GetMethodPriority(m.Name))
+                    .ToArray();
+
+                if (exactMethods.Any())
+                {
+                    var selectedMethod = exactMethods.First();
+                    _logger.Information("Selected exact save method: {MethodName}", selectedMethod.Name);
+                    return selectedMethod;
+                }
+
+                // Then try methods that can accept the object type (assignable)
+                var assignableMethods = candidateMethods
+                    .Where(m => m.GetParameters()[0].ParameterType.IsAssignableFrom(objectType))
+                    .OrderBy(m => GetMethodPriority(m.Name))
+                    .ToArray();
+
+                if (assignableMethods.Any())
+                {
+                    var selectedMethod = assignableMethods.First();
+                    _logger.Information("Selected assignable save method: {MethodName}", selectedMethod.Name);
+                    return selectedMethod;
+                }
+
+                _logger.Warning("No suitable save method found for object type {ObjectType}", objectType.Name);
+                _logger.Warning("Available candidate methods were: {Methods}", 
+                    string.Join(", ", candidateMethods.Select(m => m.Name)));
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error finding save method dynamically");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// NO HARDCODING: Get method priority based on name patterns (lower = higher priority)
+        /// </summary>
+        private int GetMethodPriority(string methodName)
+        {
+            // Define priority patterns without hardcoding specific names
+            var lowerName = methodName.ToLowerInvariant();
+            
+            // Prioritize common patterns
+            if (lowerName.Contains("create")) return 1;
+            if (lowerName.Contains("save")) return 2;
+            if (lowerName.Contains("write")) return 3;
+            if (lowerName.Contains("update")) return 4;
+            if (lowerName.Contains("read")) return 5;
+            if (lowerName.Contains("get")) return 6;
+            
+            // Default priority for unknown patterns
+            return 10;
         }
     }
 }

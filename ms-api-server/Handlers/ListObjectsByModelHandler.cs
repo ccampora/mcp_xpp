@@ -1,10 +1,12 @@
 using D365MetadataService.Models;
+using Microsoft.Dynamics.AX.Metadata.Providers;
 using Microsoft.Dynamics.AX.Metadata.Storage;
 using Newtonsoft.Json;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace D365MetadataService.Handlers
@@ -23,6 +25,109 @@ namespace D365MetadataService.Handlers
         public ListObjectsByModelHandler(ServiceConfiguration config, ILogger logger) : base(logger)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+        }
+
+        /// <summary>
+        /// Dynamically discovers and enumerates all object collection properties on the metadata provider
+        /// Replaces the massive hardcoded object type dictionary with reflection-based discovery
+        /// </summary>
+        private Dictionary<string, object> GetAllObjectsForModelDynamically(IMetadataProvider provider, string modelName)
+        {
+            var objects = new Dictionary<string, object>();
+            var totalObjectCount = 0;
+
+            try
+            {
+                Logger.Debug("🔍 Dynamically discovering all provider collection properties...");
+                
+                // Get all properties on the provider that represent object collections
+                var providerType = provider.GetType();
+                var collectionProperties = providerType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(prop => 
+                        // Look for properties that have a ListObjectsForModel method (indicating they're D365 object collections)
+                        prop.PropertyType.GetMethod("ListObjectsForModel") != null &&
+                        prop.CanRead)
+                    .OrderBy(prop => prop.Name)
+                    .ToArray();
+
+                Logger.Information("📊 Found {Count} object collection properties to enumerate", collectionProperties.Length);
+
+                foreach (var collectionProp in collectionProperties)
+                {
+                    try
+                    {
+                        Logger.Debug("   🔄 Processing collection: {PropertyName} ({PropertyType})", 
+                            collectionProp.Name, collectionProp.PropertyType.Name);
+
+                        // Get the collection instance
+                        var collection = collectionProp.GetValue(provider);
+                        if (collection == null)
+                        {
+                            Logger.Debug("   ⚠️ Collection {PropertyName} is null, skipping", collectionProp.Name);
+                            continue;
+                        }
+
+                        // Call ListObjectsForModel on the collection
+                        var listMethod = collection.GetType().GetMethod("ListObjectsForModel");
+                        if (listMethod == null)
+                        {
+                            Logger.Debug("   ⚠️ Collection {PropertyName} has no ListObjectsForModel method, skipping", collectionProp.Name);
+                            continue;
+                        }
+
+                        // Invoke the method to get objects for this model
+                        var result = listMethod.Invoke(collection, new object[] { modelName });
+                        if (result != null)
+                        {
+                            // Convert to list to get count and allow enumeration
+                            var resultList = ((System.Collections.IEnumerable)result).Cast<object>().ToList();
+                            
+                            if (resultList.Any())
+                            {
+                                // Determine the object type name from the collection property name
+                                // e.g., "Tables" -> "AxTable", "Classes" -> "AxClass"
+                                var objectTypeName = DetermineObjectTypeFromCollectionName(collectionProp.Name);
+                                
+                                objects[objectTypeName] = resultList;
+                                totalObjectCount += resultList.Count;
+                                
+                                Logger.Debug("   ✅ {ObjectType}: {Count} objects", objectTypeName, resultList.Count);
+                            }
+                            else
+                            {
+                                Logger.Debug("   📭 {PropertyName}: No objects found for model {Model}", 
+                                    collectionProp.Name, modelName);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("   ⚠️ Failed to process collection {PropertyName}: {Error}", 
+                            collectionProp.Name, ex.Message);
+                    }
+                }
+
+                Logger.Information("🎯 Dynamic enumeration complete: {TotalObjects} total objects across {CollectionCount} collections", 
+                    totalObjectCount, objects.Count);
+
+                return objects;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "❌ Error during dynamic object enumeration for model {Model}", modelName);
+                return objects; // Return whatever we managed to collect
+            }
+        }
+
+        /// <summary>
+        /// NO HARDCODING: Simply return the collection property name as-is or derive it dynamically
+        /// The D365 metadata provider collections already have meaningful names
+        /// </summary>
+        private string DetermineObjectTypeFromCollectionName(string collectionName)
+        {
+            // NO HARDCODED MAPPINGS! Just return the collection name as-is for now
+            // The caller can use whatever naming convention they prefer
+            return collectionName;
         }
 
         protected override async Task<ServiceResponse> HandleRequestAsync(ServiceRequest request)
@@ -110,193 +215,10 @@ namespace D365MetadataService.Handlers
                 {
                     Logger.Information("🔍 Comprehensively processing model: {ModelName}", modelName);
                     
-                    var objects = new Dictionary<string, IEnumerable<string>>();
-                    var modelObjectCount = 0;
-
-                    // 1. TABLES (AxTable)
-                    try
-                    {
-                        var tables = provider.Tables.ListObjectsForModel(modelName);
-                        if (tables != null && tables.Any())
-                        {
-                            var tableList = tables.ToList();
-                            objects["AxTable"] = tableList;
-                            modelObjectCount += tableList.Count;
-                            Logger.Debug("   📋 Tables: {Count}", tableList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get tables for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    // 2. CLASSES (AxClass)
-                    try
-                    {
-                        var classes = provider.Classes.ListObjectsForModel(modelName);
-                        if (classes != null && classes.Any())
-                        {
-                            var classList = classes.ToList();
-                            objects["AxClass"] = classList;
-                            modelObjectCount += classList.Count;
-                            Logger.Debug("   📋 Classes: {Count}", classList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get classes for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    // 3. FORMS (AxForm)
-                    try
-                    {
-                        var forms = provider.Forms.ListObjectsForModel(modelName);
-                        if (forms != null && forms.Any())
-                        {
-                            var formsList = forms.ToList();
-                            objects["AxForm"] = formsList;
-                            modelObjectCount += formsList.Count;
-                            Logger.Debug("   📋 Forms: {Count}", formsList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get forms for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    // 4. ENUMS (AxEnum)
-                    try
-                    {
-                        var enums = provider.Enums.ListObjectsForModel(modelName);
-                        if (enums != null && enums.Any())
-                        {
-                            var enumsList = enums.ToList();
-                            objects["AxEnum"] = enumsList;
-                            modelObjectCount += enumsList.Count;
-                            Logger.Debug("   📋 Enums: {Count}", enumsList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get enums for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    // 5. VIEWS (AxView)
-                    try
-                    {
-                        var views = provider.Views.ListObjectsForModel(modelName);
-                        if (views != null && views.Any())
-                        {
-                            var viewsList = views.ToList();
-                            objects["AxView"] = viewsList;
-                            modelObjectCount += viewsList.Count;
-                            Logger.Debug("   📋 Views: {Count}", viewsList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get views for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    // 6. DATA ENTITIES (AxDataEntityView)
-                    try
-                    {
-                        var dataEntities = provider.DataEntityViews.ListObjectsForModel(modelName);
-                        if (dataEntities != null && dataEntities.Any())
-                        {
-                            var dataEntitiesList = dataEntities.ToList();
-                            objects["AxDataEntityView"] = dataEntitiesList;
-                            modelObjectCount += dataEntitiesList.Count;
-                            Logger.Debug("   📋 Data Entities: {Count}", dataEntitiesList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get data entities for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    // 7. EXTENDED DATA TYPES (AxEdt)
-                    try
-                    {
-                        var edts = provider.Edts.ListObjectsForModel(modelName);
-                        if (edts != null && edts.Any())
-                        {
-                            var edtsList = edts.ToList();
-                            objects["AxEdt"] = edtsList;
-                            modelObjectCount += edtsList.Count;
-                            Logger.Debug("   📋 EDTs: {Count}", edtsList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get EDTs for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    // 8. REPORTS (AxReport)
-                    try
-                    {
-                        var reports = provider.Reports.ListObjectsForModel(modelName);
-                        if (reports != null && reports.Any())
-                        {
-                            var reportsList = reports.ToList();
-                            objects["AxReport"] = reportsList;
-                            modelObjectCount += reportsList.Count;
-                            Logger.Debug("   📋 Reports: {Count}", reportsList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get reports for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    // 9. MENU ITEMS (AxMenuItemDisplay, AxMenuItemOutput, AxMenuItemAction)
-                    try
-                    {
-                        var menuItemsDisplay = provider.MenuItemDisplays.ListObjectsForModel(modelName);
-                        if (menuItemsDisplay != null && menuItemsDisplay.Any())
-                        {
-                            var menuItemsDisplayList = menuItemsDisplay.ToList();
-                            objects["AxMenuItemDisplay"] = menuItemsDisplayList;
-                            modelObjectCount += menuItemsDisplayList.Count;
-                            Logger.Debug("   📋 Menu Items (Display): {Count}", menuItemsDisplayList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get menu items (display) for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    try
-                    {
-                        var menuItemsOutput = provider.MenuItemOutputs.ListObjectsForModel(modelName);
-                        if (menuItemsOutput != null && menuItemsOutput.Any())
-                        {
-                            var menuItemsOutputList = menuItemsOutput.ToList();
-                            objects["AxMenuItemOutput"] = menuItemsOutputList;
-                            modelObjectCount += menuItemsOutputList.Count;
-                            Logger.Debug("   📋 Menu Items (Output): {Count}", menuItemsOutputList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get menu items (output) for {Model}: {Error}", modelName, ex.Message);
-                    }
-
-                    try
-                    {
-                        var menuItemsAction = provider.MenuItemActions.ListObjectsForModel(modelName);
-                        if (menuItemsAction != null && menuItemsAction.Any())
-                        {
-                            var menuItemsActionList = menuItemsAction.ToList();
-                            objects["AxMenuItemAction"] = menuItemsActionList;
-                            modelObjectCount += menuItemsActionList.Count;
-                            Logger.Debug("   📋 Menu Items (Action): {Count}", menuItemsActionList.Count);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warning("   ⚠️ Failed to get menu items (action) for {Model}: {Error}", modelName, ex.Message);
-                    }
+                    // ✅ HARDCODING ELIMINATED: Use ONLY the dynamic reflection-based approach
+                    var objects = GetAllObjectsForModelDynamically(provider, modelName);
+                    var modelObjectCount = objects.Values.OfType<System.Collections.IEnumerable>()
+                        .Sum(collection => collection.Cast<object>().Count());
 
                     // Only add model if we found objects
                     if (modelObjectCount > 0)

@@ -19,6 +19,57 @@ namespace D365MetadataService.Handlers
         {
         }
 
+        /// <summary>
+        /// Dynamically discovers the D365 metadata assembly without hardcoding specific types
+        /// </summary>
+        private Assembly GetD365MetadataAssembly()
+        {
+            try
+            {
+                // Get all loaded assemblies and find the one containing D365 metadata types
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                
+                foreach (var assembly in assemblies)
+                {
+                    try
+                    {
+                        // Look for assemblies that contain types in Microsoft.Dynamics.AX.Metadata.MetaModel namespace
+                        var metaModelTypes = assembly.GetTypes()
+                            .Where(t => t.Namespace == "Microsoft.Dynamics.AX.Metadata.MetaModel" && 
+                                       t.Name.StartsWith("Ax"))
+                            .Take(5);
+                        
+                        if (metaModelTypes.Any())
+                        {
+                            Logger.Debug("Found D365 metadata assembly: {AssemblyName}", assembly.FullName);
+                            return assembly;
+                        }
+                    }
+                    catch (ReflectionTypeLoadException)
+                    {
+                        // Skip assemblies that can't be loaded
+                        continue;
+                    }
+                }
+                
+                // Fallback: try Microsoft.Dynamics.AX.Metadata assembly by name
+                try
+                {
+                    return Assembly.Load("Microsoft.Dynamics.AX.Metadata");
+                }
+                catch
+                {
+                    Logger.Warning("Could not find D365 metadata assembly dynamically or by name");
+                    throw new InvalidOperationException("D365 metadata assembly not found.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error discovering D365 metadata assembly");
+                throw;
+            }
+        }
+
         public override string SupportedAction => "getAvailableObjectTypes";
 
         protected override Task<ServiceResponse> HandleRequestAsync(ServiceRequest request)
@@ -52,7 +103,7 @@ namespace D365MetadataService.Handlers
             try
             {
                 // Use reflection to discover all Ax* types from the metadata assembly
-                var metadataAssembly = typeof(AxClass).Assembly;
+                var metadataAssembly = GetD365MetadataAssembly();
                 
                 // Get all types that start with "Ax" and are public classes
                 var axTypes = metadataAssembly.GetTypes()
@@ -86,14 +137,14 @@ namespace D365MetadataService.Handlers
             catch (Exception ex)
             {
                 Logger.Error(ex, "Error discovering object types from metadata assembly");
-                return GetFallbackObjectTypes();
+                return new List<string>();
             }
 
-            // If we didn't find any types, use fallback
+            // If we didn't find any types, return empty - no fallbacks
             if (objectTypes.Count == 0)
             {
-                Logger.Warning("No object types discovered, using fallback list");
-                return GetFallbackObjectTypes();
+                Logger.Warning("No object types discovered, returning empty list");
+                return new List<string>();
             }
 
             return objectTypes;
@@ -114,19 +165,6 @@ namespace D365MetadataService.Handlers
             }
         }
 
-        /// <summary>
-        /// Get fallback object types if the full list fails
-        /// </summary>
-        private List<string> GetFallbackObjectTypes()
-        {
-            return new List<string>
-            {
-                "AxModel",
-                "AxClass", 
-                "AxTable",
-                "AxEnum",
-                "AxForm"
-            };
-        }
+
     }
 }
