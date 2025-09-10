@@ -276,14 +276,14 @@ export class ToolDefinitions {
             properties: {
               objectType: {
                 type: "string",
-                description: "D365 object type name (e.g., 'AxTable', 'AxClass', 'AxForm'). Use get_current_config with objectTypeList=true to see all available types.",
+                description: "D365 object type name (e.g., 'AxTable', 'AxClass', 'AxForm'). **IMPORTANT**: This tool discovers exact concrete type names (like 'AxTableFieldString', 'AxTableFieldEnum') that must be used in the 'concreteType' parameter of execute_object_modification. Use get_current_config with objectTypeList=true to see all available types.",
                 examples: ["AxTable", "AxClass", "AxForm", "AxEnum", "AxView", "AxQuery", "AxReport"]
               }
             },
             required: ["objectType"],
             examples: [
               {
-                description: "🔍 TABLE CAPABILITIES: Discover what modifications are possible on D365 tables",
+                description: "🔍 TABLE CAPABILITIES: Discover field types and modification methods for D365 tables",
                 parameters: {
                   objectType: "AxTable"
                 }
@@ -295,7 +295,7 @@ export class ToolDefinitions {
                 }
               },
               {
-                description: "🔍 FORM CAPABILITIES: Discover what modifications are possible on D365 forms",
+                description: "🔍 FORM CAPABILITIES: Discover form datasource and control types for D365 forms",
                 parameters: {
                   objectType: "AxForm"
                 }
@@ -320,51 +320,87 @@ export class ToolDefinitions {
               },
               methodName: {
                 type: "string",
-                description: "Name of the modification method to execute (e.g., 'AddField', 'AddMethod', 'AddIndex')"
+                description: "Name of the modification method to execute (e.g., 'AddField', 'AddMethod', 'AddIndex'). Get exact method names from discover_modification_capabilities."
               },
               parameters: {
                 type: "object",
-                description: "Parameters required by the modification method. Structure depends on the specific method being called.",
-                additionalProperties: true
+                description: "Parameters required by the modification method. **CRITICAL**: Must include 'concreteType' parameter with exact type name from discovery (e.g., 'AxTableFieldString', 'AxTableFieldEnum', 'AxFormDataSourceRoot'). Use discover_modification_capabilities to get exact concrete type names and required parameters.",
+                additionalProperties: true,
+                properties: {
+                  fieldName: {
+                    type: "string",
+                    description: "Name of the field/object being added"
+                  },
+                  concreteType: {
+                    type: "string", 
+                    description: "**REQUIRED**: Exact concrete type name from discover_modification_capabilities. Examples: 'AxTableFieldString', 'AxTableFieldEnum', 'AxTableFieldInt', 'AxFormDataSourceRoot', 'AxEnumValue'. This enables pure reflection architecture without hardcoded mappings."
+                  },
+                  label: {
+                    type: "string",
+                    description: "Optional display label for the object"
+                  },
+                  helpText: {
+                    type: "string",
+                    description: "Optional help text for the object"
+                  }
+                }
               }
             },
             required: ["objectType", "objectName", "methodName"],
             examples: [
               {
-                description: "🔧 ADD FIELD: Add a new field to a D365 table",
+                description: "🔧 ADD STRING FIELD: Add a string field using exact concrete type from discovery",
                 parameters: {
                   objectType: "AxTable",
                   objectName: "CustTable", 
                   methodName: "AddField",
                   parameters: {
                     fieldName: "MyCustomField",
-                    fieldType: "String",
-                    label: "My Custom Field"
+                    concreteType: "AxTableFieldString",
+                    label: "My Custom Field",
+                    helpText: "Custom field description"
                   }
                 }
               },
               {
-                description: "🔧 ADD METHOD: Add a new method to a D365 class",
+                description: "🔧 ADD ENUM FIELD: Add an enum field with custom enum reference",
                 parameters: {
-                  objectType: "AxClass",
-                  objectName: "SalesTable",
-                  methodName: "AddMethod", 
-                  parameters: {
-                    methodName: "myCustomMethod",
-                    returnType: "void",
-                    source: "public void myCustomMethod() { }"
-                  }
-                }
-              },
-              {
-                description: "🔧 ADD INDEX: Add a new index to a D365 table",
-                parameters: {
-                  objectType: "AxTable", 
+                  objectType: "AxTable",
                   objectName: "CustTable",
-                  methodName: "AddIndex",
+                  methodName: "AddField",
                   parameters: {
-                    indexName: "MyCustomIndex",
-                    fields: ["MyCustomField"]
+                    fieldName: "CustomerStatus",
+                    concreteType: "AxTableFieldEnum",
+                    label: "Customer Status",
+                    enumType: "MyCustomEnum"
+                  }
+                }
+              },
+              {
+                description: "🔧 ADD ENUM VALUE: Add a value to a custom enum",
+                parameters: {
+                  objectType: "AxEnum",
+                  objectName: "MyCustomEnum",
+                  methodName: "AddEnumValue",
+                  parameters: {
+                    fieldName: "Active",
+                    concreteType: "AxEnumValue",
+                    label: "Active",
+                    value: 0
+                  }
+                }
+              },
+              {
+                description: "🔧 ADD FORM DATASOURCE: Add a datasource to a form",
+                parameters: {
+                  objectType: "AxForm",
+                  objectName: "MyCustomForm",
+                  methodName: "AddDataSource",
+                  parameters: {
+                    fieldName: "Customer",
+                    concreteType: "AxFormDataSourceRoot",
+                    table: "CustTable",
+                    label: "Customer Data Source"
                   }
                 }
               }

@@ -852,19 +852,140 @@ export class ToolHandlers {
         }
       };
 
+      // Use structured inheritance hierarchy from C# service (NO MORE STRING MATCHING!)
+      const concreteTypes = capabilities.RelatedTypeConstructors || [];
+      const modificationMethods = capabilities.ModificationMethods || [];
+      
+      // NEW: Use proper inheritance hierarchy mapping from C# service
+      const inheritanceHierarchy = capabilities.InheritanceHierarchy || {};
+      const reflectionInfo = capabilities.ReflectionInfo || {};
+      
+      console.log('🔍 DEBUG: InheritanceHierarchy from C# service:', JSON.stringify(inheritanceHierarchy, null, 2));
+      
+      // Build type groups using the explicit inheritance mapping from C# service
+      const typeGroups: { [key: string]: any[] } = {};
+      
+      // For each method, use the inheritance hierarchy to get concrete types
+      modificationMethods.forEach((method: any) => {
+        const requirements = method.ParameterCreationRequirements || [];
+        if (requirements.length > 0) {
+          const parameterType = requirements[0].ParameterType;
+          if (parameterType && !typeGroups[parameterType]) {
+            // Use explicit inheritance mapping from C# service
+            if (inheritanceHierarchy[parameterType]) {
+              typeGroups[parameterType] = inheritanceHierarchy[parameterType];
+            } else {
+              // Fallback: if not in hierarchy, it's likely a concrete type already
+              const concreteType = concreteTypes.find((t: any) => t.Name === parameterType);
+              if (concreteType) {
+                typeGroups[parameterType] = [concreteType];
+              }
+            }
+          }
+        }
+      });
+
+      // Create enhanced method documentation with explicit concrete type guidance
+      const methodsDocumentation = formattedResponse.availableMethods && formattedResponse.availableMethods.length > 0 ?
+        `🔧 **MODIFICATION METHODS WITH CONCRETE TYPE REQUIREMENTS:**\n` +
+        formattedResponse.availableMethods.map((method: any) => {
+          let methodDoc = `\n   📝 **${method.Name}**\n`;
+          methodDoc += `      • Description: ${method.Description || 'Modifies the object'}\n`;
+          
+          // Find the corresponding method in ModificationMethods to get parameter requirements
+          const modMethod = modificationMethods.find((m: any) => m.Name === method.Name);
+          if (modMethod && modMethod.ParameterCreationRequirements && modMethod.ParameterCreationRequirements.length > 0) {
+            const parameterType = modMethod.ParameterCreationRequirements[0].ParameterType;
+            const availableConcreteTypes = typeGroups[parameterType] || [];
+            
+            if (availableConcreteTypes.length > 1) {
+              // Multiple concrete types available - this is an abstract type
+              methodDoc += `      • Parameters: ${parameterType} (abstract - must use concrete type)\n`;
+              methodDoc += `      • 🎯 **Concrete types for ${parameterType}:** ${availableConcreteTypes.map(t => t.Name).join(', ')}\n`;
+              methodDoc += `      • ⚠️  **Usage**: "concreteType": "${availableConcreteTypes[0].Name}" (choose from above list)\n`;
+            } else if (availableConcreteTypes.length === 1) {
+              // Only one concrete type - already concrete
+              methodDoc += `      • Parameters: ${parameterType} (concrete type)\n`;
+            } else {
+              // No concrete types found, check if this type is in the concrete types list directly
+              const directConcreteType = concreteTypes.find((t: any) => t.Name === parameterType);
+              if (directConcreteType) {
+                methodDoc += `      • Parameters: ${parameterType} (concrete type)\n`;
+              } else {
+                methodDoc += `      • Parameters: ${parameterType} (system type)\n`;
+              }
+            }
+          } else {
+            // No parameter requirements found, use basic signature
+            const paramMatch = method.Description?.match(/Parameters:\s*\(([^)]+)\)/);
+            const parameterType = paramMatch ? paramMatch[1] : 'Object';
+            methodDoc += `      • Parameters: ${parameterType}\n`;
+          }
+          
+          return methodDoc;
+        }).join('') + '\n' : '';
+
+      // Create concrete types section with inheritance explanation
+      const concreteTypeInfo = concreteTypes.length > 0 ? 
+        `�️ **D365 METADATA TYPE SYSTEM:**\n\n` +
+        `   The D365 metadata API uses inheritance hierarchies. Methods expecting abstract base types\n` +
+        `   (like AxTableField) must be called with concrete implementations.\n\n` +
+        `🎯 **AVAILABLE CONCRETE TYPES:**\n` +
+        concreteTypes.map((type: any) => {
+          return `   • ${type.Name}: Use as 'concreteType' parameter\n` +
+                 `     Full Name: ${type.FullName}\n` +
+                 `     Description: ${type.Description || `D365 metadata type: ${type.Name} (Namespace: ${type.Namespace || 'Unknown'})`}`;
+        }).join('\n') + '\n\n' : '';
+
+      // Generate contextually appropriate usage examples
+      const exampleObjectName = objectType === 'AxTable' ? 'MyTable' : 
+                                objectType === 'AxForm' ? 'MyForm' :
+                                objectType === 'AxClass' ? 'MyClass' :
+                                'MyObject';
+      
+      const exampleMethodName = objectType === 'AxTable' ? 'AddField' :
+                               objectType === 'AxForm' ? 'AddDataSource' :
+                               objectType === 'AxClass' ? 'AddMethod' :
+                               'AddElement';
+      
+      // Get a relevant concrete type example from available types
+      const exampleConcreteType = concreteTypes && concreteTypes.length > 0 ? 
+                                  concreteTypes[0].Name : 
+                                  (objectType === 'AxTable' ? 'AxTableFieldString' :
+                                   objectType === 'AxForm' ? 'AxFormDataSourceRoot' :
+                                   objectType === 'AxClass' ? 'AxMethod' :
+                                   'ConcreteType');
+
+      const usageExamples = `💡 **USAGE EXAMPLES:**\n\n` +
+        `   📋 **Step 1: Discover capabilities**\n` +
+        `   discover_modification_capabilities({ objectType: "${objectType}" })\n\n` +
+        `   🔧 **Step 2: Execute modification**\n` +
+        `   execute_object_modification({\n` +
+        `     objectType: "${objectType}",\n` +
+        `     objectName: "${exampleObjectName}",\n` +
+        `     methodName: "${exampleMethodName}",\n` +
+        `     parameters: {\n` +
+        `       concreteType: "${exampleConcreteType}",  // ← Key: specify concrete type\n` +
+        `       Name: "MyElement",\n` +
+        `       // ... other required properties from discovery\n` +
+        `     }\n` +
+        `   })\n\n`;
+
+      // Debug logging
+      console.log('🔍 DEBUG methodsDocumentation length:', methodsDocumentation.length);
+      console.log('🔍 DEBUG methodsDocumentation preview:', methodsDocumentation.substring(0, 200));
+      console.log('🔍 DEBUG concreteTypeInfo length:', concreteTypeInfo.length);
+      console.log('🔍 DEBUG usageExamples length:', usageExamples.length);
+
       const summary = `🎯 **MODIFICATION CAPABILITIES FOR ${objectType.toUpperCase()}**\n\n` +
         `📋 **Object Information:**\n` +
         `   • Type: ${formattedResponse.objectType}\n` +
         `   • Full Name: ${formattedResponse.fullTypeName}\n` +
-        `   • Namespace: ${formattedResponse.reflectionInfo.namespace}\n` +
-        `   • Assembly: ${formattedResponse.reflectionInfo.assembly}\n\n` +
-        `🔧 **Available Modification Methods (${formattedResponse.methodCount}):**\n` +
-        formattedResponse.availableMethods.map((method: any) => 
-          `   • ${method.Name}: ${method.Description || 'No description available'}\n` +
-          `     Parameters: ${method.Parameters?.length || 0} | Returns: ${method.ReturnType || 'void'}`
-        ).join('\n') + '\n\n' +
-        `💡 **Usage:** These methods can be called via the execute_object_modification tool (when implemented).\n` +
-        `📊 **Type Properties:** Public: ${formattedResponse.reflectionInfo.isPublic}, Abstract: ${formattedResponse.reflectionInfo.isAbstract}, Sealed: ${formattedResponse.reflectionInfo.isSealed}`;
+        `   • Namespace: ${reflectionInfo.Namespace || 'Unknown'}\n` +
+        `   • Assembly: ${reflectionInfo.Assembly || 'Unknown'}\n\n` +
+        methodsDocumentation +
+        concreteTypeInfo +
+        usageExamples;
 
       return await createLoggedResponse(
         summary,

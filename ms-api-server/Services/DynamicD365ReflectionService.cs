@@ -74,7 +74,9 @@ namespace D365MetadataService.Services
                             DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null,
                             IsOut = p.IsOut,
                             IsRef = p.ParameterType.IsByRef
-                        }).ToList()
+                        }).ToList(),
+                        // NEW: Add detailed parameter creation requirements
+                        ParameterCreationRequirements = await AnalyzeParameterCreationRequirementsAsync(method)
                     };
 
                     capabilities.ModificationMethods.Add(methodInfo);
@@ -104,6 +106,21 @@ namespace D365MetadataService.Services
 
                 // Discover constructors for related types (field types, etc.)
                 capabilities.RelatedTypeConstructors = await DiscoverRelatedTypeConstructorsAsync(type);
+
+                // NEW: Build structured inheritance hierarchy mapping
+                capabilities.InheritanceHierarchy = await BuildInheritanceHierarchyAsync(type);
+                
+                // NEW: Add reflection information about the main type
+                capabilities.ReflectionInfo = new TypeReflectionInfo
+                {
+                    Namespace = type.Namespace,
+                    Assembly = type.Assembly.GetName().Name,
+                    IsPublic = type.IsPublic,
+                    IsAbstract = type.IsAbstract,
+                    IsSealed = type.IsSealed,
+                    BaseTypeName = type.BaseType?.Name,
+                    InterfaceNames = type.GetInterfaces().Select(i => i.Name).ToList()
+                };
 
                 return capabilities;
             }
@@ -150,8 +167,8 @@ namespace D365MetadataService.Services
                     return result;
                 }
 
-                // Prepare parameters
-                var parameters = await PrepareMethodParametersAsync(method, methodCall.Parameters);
+                // Prepare parameters using the new requirements-based approach
+                var parameters = await PrepareParametersAsync(method, methodCall.Parameters, targetObject);
                 if (parameters == null)
                 {
                     result.Success = false;
@@ -182,42 +199,7 @@ namespace D365MetadataService.Services
             }
         }
 
-        /// <summary>
-        /// Discovers available field types that can be created for tables
-        /// </summary>
-        public async Task<List<Models.TypeInfo>> DiscoverFieldTypesAsync()
-        {
-            try
-            {
-                var assembly = Assembly.GetAssembly(typeof(AxTable));
-                var fieldTypes = assembly.GetTypes()
-                    .Where(t => t.IsSubclassOf(typeof(AxTableField)) && !t.IsAbstract)
-                    .Select(t => new Models.TypeInfo
-                    {
-                        Name = t.Name,
-                        FullName = t.FullName,
-                        Description = GenerateTypeDescription(t),
-                        Constructors = t.GetConstructors().Select(c => new Models.ConstructorInfo
-                        {
-                            Parameters = c.GetParameters().Select(p => new Models.ParameterInfo
-                            {
-                                Name = p.Name,
-                                Type = p.ParameterType.Name,
-                                TypeFullName = p.ParameterType.FullName,
-                                IsOptional = p.IsOptional,
-                                DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null
-                            }).ToList()
-                        }).ToList()
-                    })
-                    .ToList();
 
-                return await Task.FromResult(fieldTypes);
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Error discovering field types: {ex.Message}", ex);
-            }
-        }
 
         /// <summary>
         /// Creates an instance of a specific type dynamically
@@ -347,26 +329,44 @@ namespace D365MetadataService.Services
 
         private bool IsModificationMethod(MethodInfo method)
         {
-            var modificationPrefixes = new[] { "Add", "Insert", "Create", "Remove", "Delete", "Update", "Modify" };
-            return modificationPrefixes.Any(prefix => method.Name.StartsWith(prefix));
+            // Use actual method metadata instead of hardcoded prefixes
+            // Check for methods that modify object state (non-readonly, void or return modified objects)
+            return method.IsPublic && 
+                   !method.IsStatic && 
+                   !method.IsSpecialName && 
+                   !method.Name.StartsWith("get_") && 
+                   !method.Name.StartsWith("set_") &&
+                   method.GetParameters().Length > 0; // Methods that take parameters are likely modification methods
         }
 
         private bool IsModifiableProperty(PropertyInfo property)
         {
-            var modifiableProperties = new[] { "Fields", "Methods", "Relations", "Indexes", "FieldGroups", "Controls", "DataSources" };
-            return modifiableProperties.Any(prop => property.Name.Contains(prop));
+            // Use actual property metadata instead of hardcoded property names
+            return property.CanWrite && 
+                   property.SetMethod != null && 
+                   property.SetMethod.IsPublic && 
+                   !property.SetMethod.IsStatic;
         }
 
         private bool IsCollectionType(Type type)
         {
-            return type.Name.Contains("Collection") || type.Name.Contains("List") || 
-                   type.GetInterfaces().Any(i => i.Name.Contains("Collection") || i.Name.Contains("Enumerable"));
+            // Use proper type hierarchy checking instead of name matching
+            return typeof(System.Collections.ICollection).IsAssignableFrom(type) ||
+                   typeof(System.Collections.IEnumerable).IsAssignableFrom(type) ||
+                   (type.IsGenericType && 
+                    (type.GetGenericTypeDefinition() == typeof(ICollection<>) ||
+                     type.GetGenericTypeDefinition() == typeof(IList<>) ||
+                     type.GetGenericTypeDefinition() == typeof(IEnumerable<>)));
         }
 
         private List<string> GetCollectionMethods(Type collectionType)
         {
+            // Use actual interface analysis instead of hardcoded method names
             return collectionType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Where(m => new[] { "Add", "Remove", "Insert", "Clear", "Contains" }.Any(op => m.Name.StartsWith(op)))
+                .Where(m => !m.IsSpecialName && // Exclude property getters/setters
+                           !m.Name.StartsWith("get_") && 
+                           !m.Name.StartsWith("set_") &&
+                           m.IsPublic)
                 .Select(m => m.Name)
                 .Distinct()
                 .ToList();
@@ -380,54 +380,437 @@ namespace D365MetadataService.Services
 
         private string GenerateTypeDescription(Type type)
         {
-            if (type.IsSubclassOf(typeof(AxTableField)))
-                return $"D365 table field type for {type.Name.Replace("AxTableField", "").ToLower()} data";
-            
-            return $"D365 metadata type: {type.Name}";
+            // Check for actual Description attributes first
+            var descriptionAttr = type.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>();
+            if (descriptionAttr != null)
+            {
+                return descriptionAttr.Description;
+            }
+
+            // Check for Display attributes
+            var displayAttr = type.GetCustomAttribute<System.ComponentModel.DisplayNameAttribute>();
+            if (displayAttr != null)
+            {
+                return displayAttr.DisplayName;
+            }
+
+            // Generic description based on actual type information
+            return $"D365 metadata type: {type.Name} (Namespace: {type.Namespace})";
         }
 
-        private async Task<List<Models.TypeInfo>> DiscoverRelatedTypeConstructorsAsync(Type mainType)
+        private Task<List<Models.TypeInfo>> DiscoverRelatedTypeConstructorsAsync(Type mainType)
         {
             var relatedTypes = new List<Models.TypeInfo>();
             
-            if (mainType == typeof(AxTable))
+            // Get all modification methods to see what parameter types they need
+            var modificationMethods = mainType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => IsModificationMethod(m))
+                .ToArray();
+
+            // For each parameter type in modification methods, find all concrete implementations
+            var parameterTypes = modificationMethods
+                .SelectMany(m => m.GetParameters())
+                .Select(p => p.ParameterType)
+                .Where(t => t.Name.StartsWith("Ax"))
+                .Distinct()
+                .ToArray();
+
+            var assembly = Assembly.GetAssembly(typeof(AxTable));
+            
+            foreach (var paramType in parameterTypes)
             {
-                // For tables, include field types
-                relatedTypes.AddRange(await DiscoverFieldTypesAsync());
+                if (paramType.IsAbstract || paramType.IsInterface)
+                {
+                    // Find all concrete implementations of this abstract type
+                    var concreteTypes = assembly.GetTypes()
+                        .Where(t => t.IsSubclassOf(paramType) && !t.IsAbstract && t.IsPublic)
+                        .ToArray();
+
+                    foreach (var concreteType in concreteTypes)
+                    {
+                        relatedTypes.Add(new Models.TypeInfo
+                        {
+                            Name = concreteType.Name,
+                            FullName = concreteType.FullName,
+                            Description = GenerateTypeDescription(concreteType),
+                            IsAbstract = false,
+                            BaseType = paramType.Name,
+                            Constructors = concreteType.GetConstructors().Select(c => new Models.ConstructorInfo
+                            {
+                                Parameters = c.GetParameters().Select(p => new Models.ParameterInfo
+                                {
+                                    Name = p.Name,
+                                    Type = p.ParameterType.Name,
+                                    TypeFullName = p.ParameterType.FullName,
+                                    IsOptional = p.IsOptional,
+                                    DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null
+                                }).ToList(),
+                                IsPublic = c.IsPublic
+                            }).ToList()
+                        });
+                    }
+                }
+                else
+                {
+                    // For concrete types, just add the type itself
+                    relatedTypes.Add(new Models.TypeInfo
+                    {
+                        Name = paramType.Name,
+                        FullName = paramType.FullName,
+                        Description = GenerateTypeDescription(paramType),
+                        IsAbstract = paramType.IsAbstract,
+                        BaseType = paramType.BaseType?.Name,
+                        Constructors = paramType.GetConstructors().Select(c => new Models.ConstructorInfo
+                        {
+                            Parameters = c.GetParameters().Select(p => new Models.ParameterInfo
+                            {
+                                Name = p.Name,
+                                Type = p.ParameterType.Name,
+                                TypeFullName = p.ParameterType.FullName,
+                                IsOptional = p.IsOptional,
+                                DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null
+                            }).ToList(),
+                            IsPublic = c.IsPublic
+                        }).ToList()
+                    });
+                }
             }
             
-            return relatedTypes;
+            return Task.FromResult(relatedTypes.Distinct().ToList());
         }
 
-        private Task<object[]> PrepareMethodParametersAsync(MethodInfo method, Dictionary<string, object> providedParams)
+        /// <summary>
+        /// NEW: Build structured inheritance hierarchy mapping for concrete type resolution
+        /// This provides explicit mapping of abstract types to their concrete implementations
+        /// </summary>
+        private Task<Dictionary<string, List<Models.TypeInfo>>> BuildInheritanceHierarchyAsync(Type mainType)
+        {
+            var hierarchy = new Dictionary<string, List<Models.TypeInfo>>();
+            
+            // Get all modification methods to see what parameter types they need
+            var modificationMethods = mainType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => IsModificationMethod(m))
+                .ToArray();
+
+            // For each parameter type in modification methods
+            var parameterTypes = modificationMethods
+                .SelectMany(m => m.GetParameters())
+                .Select(p => p.ParameterType)
+                .Where(t => t.Name.StartsWith("Ax")) // D365 types
+                .Distinct()
+                .ToArray();
+
+            var assembly = Assembly.GetAssembly(typeof(AxTable));
+            
+            foreach (var paramType in parameterTypes)
+            {
+                var concreteImplementations = new List<Models.TypeInfo>();
+                
+                if (paramType.IsAbstract || paramType.IsInterface)
+                {
+                    // Find all concrete implementations of this abstract type
+                    var concreteTypes = assembly.GetTypes()
+                        .Where(t => (t.IsSubclassOf(paramType) || paramType.IsAssignableFrom(t)) 
+                                   && !t.IsAbstract 
+                                   && t.IsPublic
+                                   && t != paramType) // Exclude the abstract type itself
+                        .ToArray();
+
+                    foreach (var concreteType in concreteTypes)
+                    {
+                        concreteImplementations.Add(new Models.TypeInfo
+                        {
+                            Name = concreteType.Name,
+                            FullName = concreteType.FullName,
+                            Description = GenerateTypeDescription(concreteType),
+                            IsAbstract = false,
+                            BaseType = GetMostRelevantBaseType(concreteType, paramType),
+                            Constructors = concreteType.GetConstructors().Select(c => new Models.ConstructorInfo
+                            {
+                                Parameters = c.GetParameters().Select(p => new Models.ParameterInfo
+                                {
+                                    Name = p.Name,
+                                    Type = p.ParameterType.Name,
+                                    TypeFullName = p.ParameterType.FullName,
+                                    IsOptional = p.IsOptional,
+                                    DefaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null
+                                }).ToList(),
+                                IsPublic = c.IsPublic
+                            }).ToList()
+                        });
+                    }
+                    
+                    // Only add to hierarchy if we found concrete implementations
+                    if (concreteImplementations.Any())
+                    {
+                        hierarchy[paramType.Name] = concreteImplementations;
+                    }
+                }
+                else
+                {
+                    // For concrete types, add them as implementations of themselves
+                    concreteImplementations.Add(new Models.TypeInfo
+                    {
+                        Name = paramType.Name,
+                        FullName = paramType.FullName,
+                        Description = GenerateTypeDescription(paramType),
+                        IsAbstract = false,
+                        BaseType = paramType.BaseType?.Name
+                    });
+                    
+                    hierarchy[paramType.Name] = concreteImplementations;
+                }
+            }
+            
+            return Task.FromResult(hierarchy);
+        }
+        
+        /// <summary>
+        /// Helper to get the most relevant base type name for inheritance display
+        /// </summary>
+        private string GetMostRelevantBaseType(Type concreteType, Type abstractType)
+        {
+            // Walk up the inheritance chain to find the direct relationship
+            var current = concreteType.BaseType;
+            while (current != null && current != typeof(object))
+            {
+                if (current == abstractType || abstractType.IsAssignableFrom(current))
+                {
+                    return current.Name;
+                }
+                current = current.BaseType;
+            }
+            
+            // If we couldn't find the relationship, return the immediate base type
+            return concreteType.BaseType?.Name ?? "object";
+        }
+
+        /// <summary>
+        /// Analyze what parameters are required to create objects for a method's parameters
+        /// This tells the user exactly what they need to provide
+        /// </summary>
+        private async Task<List<ParameterCreationRequirement>> AnalyzeParameterCreationRequirementsAsync(MethodInfo method)
+        {
+            var requirements = new List<ParameterCreationRequirement>();
+            
+            foreach (var param in method.GetParameters())
+            {
+                var requirement = new ParameterCreationRequirement
+                {
+                    ParameterName = param.Name,
+                    ParameterType = param.ParameterType.Name,
+                    ParameterTypeFullName = param.ParameterType.FullName,
+                    IsRequired = !param.IsOptional
+                };
+
+                // For D365 objects (Ax* types), analyze what properties need to be set
+                if (param.ParameterType.Name.StartsWith("Ax"))
+                {
+                    requirement.RequiredProperties = await AnalyzeD365ObjectPropertiesAsync(param.ParameterType);
+                    requirement.CreationInstructions = $"Create {param.ParameterType.Name} object with the specified properties";
+                }
+                else if (param.ParameterType.IsValueType || param.ParameterType == typeof(string))
+                {
+                    // For simple types, just specify the type
+                    requirement.CreationInstructions = $"Provide {param.ParameterType.Name} value";
+                }
+                else
+                {
+                    requirement.CreationInstructions = $"Create instance of {param.ParameterType.Name}";
+                }
+
+                requirements.Add(requirement);
+            }
+
+            return requirements;
+        }
+
+        /// <summary>
+        /// Analyze what properties of a D365 object type typically need to be set
+        /// </summary>
+        private Task<List<PropertyRequirement>> AnalyzeD365ObjectPropertiesAsync(Type d365Type)
+        {
+            var propertyRequirements = new List<PropertyRequirement>();
+            
+            try
+            {
+                var properties = d365Type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.CanWrite)
+                    .ToArray();
+
+                foreach (var property in properties)
+                {
+                    // Determine if this property is commonly required based on its name and type
+                    var isRequired = IsPropertyLikelyRequired(property);
+                    var expectedParamName = GenerateExpectedParameterName(property, d365Type);
+
+                    propertyRequirements.Add(new PropertyRequirement
+                    {
+                        PropertyName = property.Name,
+                        PropertyType = property.PropertyType.Name,
+                        IsRequired = isRequired,
+                        ExpectedParameterName = expectedParamName,
+                        Description = GeneratePropertyDescription(property)
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Failed to analyze properties for {TypeName}", d365Type.Name);
+            }
+
+            return Task.FromResult(propertyRequirements);
+        }
+
+        /// <summary>
+        /// Determine if a property is required - NO HARDCODED PATTERNS
+        /// Uses actual reflection to check if property has required attributes or constraints
+        /// </summary>
+        private bool IsPropertyLikelyRequired(PropertyInfo property)
+        {
+            // Check for Required attributes or other indicators of required properties
+            var hasRequiredAttribute = property.GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.RequiredAttribute), false).Any();
+            if (hasRequiredAttribute) return true;
+
+            // Check if it's a non-nullable value type (likely required)
+            if (property.PropertyType.IsValueType && Nullable.GetUnderlyingType(property.PropertyType) == null)
+            {
+                return true;
+            }
+
+            // For everything else, assume optional unless proven otherwise
+            return false;
+        }
+
+        /// <summary>
+        /// Generate expected parameter name from property name - NO MAPPING
+        /// Returns the exact property name as it exists on the D365 object
+        /// </summary>
+        private string GenerateExpectedParameterName(PropertyInfo property, Type objectType = null)
+        {
+            // Return the exact property name - no transformation, no mapping
+            return property.Name;
+        }
+
+        /// <summary>
+        /// Generate description for a property - NO HARDCODED PATTERNS
+        /// Uses actual property metadata and attributes to generate descriptions
+        /// </summary>
+        private string GeneratePropertyDescription(PropertyInfo property)
+        {
+            var type = property.PropertyType.Name;
+
+            // Check for actual Description attributes first
+            var descriptionAttr = property.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>();
+            if (descriptionAttr != null)
+            {
+                return $"{descriptionAttr.Description} ({type})";
+            }
+
+            // Check for Display attributes
+            var displayAttr = property.GetCustomAttribute<System.ComponentModel.DisplayNameAttribute>();
+            if (displayAttr != null)
+            {
+                return $"{displayAttr.DisplayName} ({type})";
+            }
+
+            // Generic description based on actual property name and type
+            return $"Property {property.Name} of type {type}";
+        }
+
+        /// <summary>
+        /// Determine concrete type from provided parameters using intelligent analysis
+        /// </summary>
+        private Type DetermineConcreteTypeFromParameters(Type abstractType, Dictionary<string, object> providedParams)
+        {
+            _logger.Information("Determining concrete type for abstract type {AbstractType}", abstractType.Name);
+
+            // Special logic for AxTableField - use fieldType parameter
+            if (abstractType == typeof(AxTableField) || abstractType.IsSubclassOf(typeof(AxTableField)))
+            {
+                return DetermineFieldTypeFromParameters(abstractType, providedParams);
+            }
+
+            // For other abstract types, could add more logic here
+            // For now, try to find the first concrete subclass
+            var assembly = Assembly.GetAssembly(abstractType);
+            var concreteTypes = assembly.GetTypes()
+                .Where(t => t.IsSubclassOf(abstractType) && !t.IsAbstract && t.IsPublic)
+                .ToArray();
+
+            if (concreteTypes.Length > 0)
+            {
+                _logger.Information("Found {Count} concrete types for {AbstractType}, using first: {ConcreteType}", 
+                    concreteTypes.Length, abstractType.Name, concreteTypes[0].Name);
+                return concreteTypes[0];
+            }
+
+            _logger.Warning("No concrete types found for abstract type {AbstractType}", abstractType.Name);
+            return null;
+        }
+
+        /// <summary>
+        /// Determine specific field type from parameters - uses exact type name from discovery
+        /// </summary>
+        private Type DetermineFieldTypeFromParameters(Type baseFieldType, Dictionary<string, object> providedParams)
+        {
+            var assembly = Assembly.GetAssembly(typeof(AxTableField));
+            
+            // Look for exact concrete type name provided by discovery tool
+            if (providedParams.ContainsKey("concreteType"))
+            {
+                var concreteTypeName = providedParams["concreteType"]?.ToString();
+                _logger.Information("Found concreteType parameter: {ConcreteType}", concreteTypeName);
+
+                var targetType = assembly.GetTypes()
+                    .FirstOrDefault(t => t.Name == concreteTypeName);
+                
+                if (targetType != null)
+                {
+                    _logger.Information("Using exact concrete type: {ConcreteType}", targetType.Name);
+                    return targetType;
+                }
+            }
+
+            _logger.Warning("No concrete type could be determined from provided parameters - only 'concreteType' parameter is supported");
+            _logger.Information("Available parameters: {Parameters}", string.Join(", ", providedParams.Keys));
+            return null;
+        }
+
+        /// <summary>
+        /// General-purpose parameter preparation using explicit parameter requirements
+        /// No fuzzy matching - uses exact parameter specifications from capabilities discovery
+        /// </summary>
+        private async Task<object[]> PrepareParametersAsync(MethodInfo method, Dictionary<string, object> providedParams, object targetObject = null)
         {
             var parameters = method.GetParameters();
             var parameterValues = new object[parameters.Length];
 
+            _logger.Information("Preparing parameters for method {MethodName} with {ParameterCount} parameters", method.Name, parameters.Length);
+
+            // Get the parameter requirements for this method
+            var requirements = await AnalyzeParameterCreationRequirementsAsync(method);
+
             for (int i = 0; i < parameters.Length; i++)
             {
                 var param = parameters[i];
-                if (providedParams.ContainsKey(param.Name))
+                var requirement = requirements.FirstOrDefault(r => r.ParameterName == param.Name);
+                
+                _logger.Information("Preparing parameter {Index}: {Name} of type {Type}", i, param.Name, param.ParameterType.Name);
+
+                try
                 {
-                    parameterValues[i] = ConvertParameterValue(providedParams[param.Name], param.ParameterType);
+                    parameterValues[i] = await CreateParameterUsingRequirementsAsync(param, requirement, providedParams);
+                    _logger.Information("Successfully prepared parameter {Name}: {Value}", param.Name, parameterValues[i]?.GetType().Name ?? "null");
                 }
-                else if (param.IsOptional)
+                catch (Exception ex)
                 {
-                    parameterValues[i] = param.DefaultValue;
-                }
-                else
-                {
-                    // Try to create default instance for complex types
-                    if (!param.ParameterType.IsValueType && param.ParameterType != typeof(string))
+                    _logger.Error(ex, "Failed to prepare parameter {Name} of type {Type}", param.Name, param.ParameterType.Name);
+                    
+                    // Try fallback approaches
+                    if (param.IsOptional)
                     {
-                        try
-                        {
-                            parameterValues[i] = Activator.CreateInstance(param.ParameterType);
-                        }
-                        catch
-                        {
-                            parameterValues[i] = null;
-                        }
+                        parameterValues[i] = param.DefaultValue;
                     }
                     else
                     {
@@ -436,7 +819,152 @@ namespace D365MetadataService.Services
                 }
             }
 
-            return Task.FromResult(parameterValues);
+            return parameterValues;
+        }
+
+        /// <summary>
+        /// Create a parameter object using explicit requirements - no guessing
+        /// </summary>
+        private async Task<object> CreateParameterUsingRequirementsAsync(
+            System.Reflection.ParameterInfo param, 
+            ParameterCreationRequirement requirement, 
+            Dictionary<string, object> providedParams)
+        {
+            // Handle primitive types directly
+            if (param.ParameterType.IsValueType || param.ParameterType == typeof(string))
+            {
+                // Look for direct parameter match first
+                if (providedParams.ContainsKey(param.Name))
+                {
+                    return ConvertParameterValue(providedParams[param.Name], param.ParameterType);
+                }
+                
+                return GetDefaultValue(param.ParameterType);
+            }
+
+            // Handle D365 objects using explicit property requirements
+            if (param.ParameterType.Name.StartsWith("Ax"))
+            {
+                return await CreateD365ObjectUsingRequirementsAsync(param.ParameterType, requirement, providedParams);
+            }
+
+            // Handle other complex types
+            try
+            {
+                return Activator.CreateInstance(param.ParameterType);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Create D365 objects using explicit property requirements - no fuzzy matching
+        /// </summary>
+        private Task<object> CreateD365ObjectUsingRequirementsAsync(
+            Type objectType, 
+            ParameterCreationRequirement requirement, 
+            Dictionary<string, object> providedParams)
+        {
+            _logger.Information("Creating D365 object {TypeName} using explicit requirements", objectType.Name);
+            _logger.Information("Provided parameters: {Parameters}", string.Join(", ", providedParams.Keys));
+            
+            if (requirement != null)
+            {
+                _logger.Information("Requirement specifies {PropertyCount} properties for {ParameterType}", 
+                    requirement.RequiredProperties?.Count ?? 0, requirement.ParameterType);
+            }
+
+            // If the type is abstract, try to determine concrete type from provided parameters
+            _logger.Information("Type check: {TypeName} - IsAbstract: {IsAbstract}, IsInterface: {IsInterface}, IsClass: {IsClass}", 
+                objectType.Name, objectType.IsAbstract, objectType.IsInterface, objectType.IsClass);
+                
+            if (objectType.IsAbstract)
+            {
+                _logger.Information("Type {TypeName} is abstract, determining concrete type", objectType.Name);
+                var concreteType = DetermineConcreteTypeFromParameters(objectType, providedParams);
+                if (concreteType != null)
+                {
+                    objectType = concreteType;
+                    _logger.Information("Resolved abstract type to concrete type: {ConcreteType}", objectType.Name);
+                }
+                else
+                {
+                    _logger.Warning("Cannot create abstract type {AbstractType} and no concrete type could be determined", objectType.Name);
+                    return Task.FromResult<object>(null);
+                }
+            }
+            else
+            {
+                _logger.Information("Type {TypeName} is concrete, proceeding with direct instantiation", objectType.Name);
+            }
+
+            var instance = Activator.CreateInstance(objectType);
+            
+            if (requirement?.RequiredProperties != null)
+            {
+                _logger.Information("Processing {PropertyCount} property requirements", requirement.RequiredProperties.Count);
+                
+                foreach (var propReq in requirement.RequiredProperties)
+                {
+                    _logger.Information("Checking property requirement: {PropertyName} -> {ExpectedParameter}", 
+                        propReq.PropertyName, propReq.ExpectedParameterName);
+                        
+                    var property = objectType.GetProperty(propReq.PropertyName, BindingFlags.Public | BindingFlags.Instance);
+                    if (property != null && property.CanWrite)
+                    {
+                        // Look for the expected parameter name
+                        if (providedParams.ContainsKey(propReq.ExpectedParameterName))
+                        {
+                            var value = ConvertParameterValue(providedParams[propReq.ExpectedParameterName], property.PropertyType);
+                            property.SetValue(instance, value);
+                            _logger.Information("✅ Set property {PropertyName} = {Value} from parameter {ParameterName}", 
+                                propReq.PropertyName, value, propReq.ExpectedParameterName);
+                        }
+                        else if (propReq.IsRequired)
+                        {
+                            _logger.Warning("❌ Required property {PropertyName} could not be set - parameter {ParameterName} not provided", 
+                                propReq.PropertyName, propReq.ExpectedParameterName);
+                        }
+                        else
+                        {
+                            _logger.Information("⚪ Optional property {PropertyName} skipped - parameter {ParameterName} not provided", 
+                                propReq.PropertyName, propReq.ExpectedParameterName);
+                        }
+                    }
+                    else
+                    {
+                        _logger.Warning("⚠️ Property {PropertyName} not found or not writable on {TypeName}", 
+                            propReq.PropertyName, objectType.Name);
+                    }
+                }
+            }
+            else
+            {
+                _logger.Warning("⚠️ No property requirements provided for {TypeName}", objectType.Name);
+            }
+
+            _logger.Information("✅ Created D365 object: {TypeName}", objectType.Name);
+            return Task.FromResult(instance);
+        }
+
+        // REMOVED: All fuzzy matching and guessing code
+        // Now using explicit parameter requirements from DiscoverModificationCapabilitiesAsync
+
+        /// <summary>
+        /// Create collection objects
+        /// </summary>
+        private object CreateCollectionObject(Type collectionType)
+        {
+            try
+            {
+                return Activator.CreateInstance(collectionType);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private object ConvertParameterValue(object value, Type targetType)
@@ -661,20 +1189,8 @@ namespace D365MetadataService.Services
                     return result;
                 }
 
-                // Prepare method parameters - special handling for specific operations
-                object[] methodParams;
-                switch (methodName.ToLower())
-                {
-                    case "addfield":
-                        methodParams = await PrepareAddFieldParametersAsync(method, parameters, targetObject);
-                        break;
-                    case "addmethod":
-                        methodParams = await PrepareAddMethodParametersAsync(method, parameters, targetObject);
-                        break;
-                    default:
-                        methodParams = await PrepareMethodParametersAsync(method, parameters);
-                        break;
-                }
+                // Prepare method parameters using general reflection-based approach
+                object[] methodParams = await PrepareParametersAsync(method, parameters, targetObject);
                 
                 _logger.Information("Prepared method parameters for {MethodName}: {ParameterCount} parameters", methodName, methodParams?.Length ?? 0);
                 if (methodParams != null)
@@ -735,289 +1251,11 @@ namespace D365MetadataService.Services
             }
         }
 
-        /// <summary>
-        /// Prepare parameters specifically for AddField method
-        /// </summary>
-        private async Task<object[]> PrepareAddFieldParametersAsync(MethodInfo method, Dictionary<string, object> parameters, object targetTable)
-        {
-            try
-            {
-                // Get the field name and type from parameters
-                var fieldName = parameters.ContainsKey("fieldName") ? parameters["fieldName"]?.ToString() : null;
-                var fieldType = parameters.ContainsKey("fieldType") ? parameters["fieldType"]?.ToString() : "String";
 
-                if (string.IsNullOrEmpty(fieldName))
-                {
-                    throw new ArgumentException("fieldName is required for AddField method");
-                }
 
-                _logger.Information("Creating field object: Name={FieldName}, Type={FieldType}", fieldName, fieldType);
 
-                // Create the appropriate field type based on fieldType parameter
-                object fieldObject = null;
-                switch (fieldType.ToLower())
-                {
-                    case "string":
-                        fieldObject = CreateStringField(fieldName);
-                        break;
-                    case "int":
-                    case "integer":
-                        fieldObject = CreateIntField(fieldName);
-                        break;
-                    case "real":
-                    case "decimal":
-                        fieldObject = CreateRealField(fieldName);
-                        break;
-                    default:
-                        fieldObject = CreateStringField(fieldName); // Default to string
-                        break;
-                }
 
-                if (fieldObject == null)
-                {
-                    throw new InvalidOperationException($"Failed to create field object for type '{fieldType}'");
-                }
 
-                _logger.Information("Successfully created field object: {FieldObjectType}", fieldObject.GetType().Name);
-                return new object[] { fieldObject };
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error preparing AddField parameters");
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Create a string field object
-        /// </summary>
-        private object CreateStringField(string fieldName)
-        {
-            try
-            {
-                // Use reflection to create AxTableFieldString
-                var stringFieldType = _objectFactory.GetAxType("AxTableFieldString");
-                if (stringFieldType == null)
-                {
-                    throw new InvalidOperationException("AxTableFieldString type not found");
-                }
-
-                var fieldObject = Activator.CreateInstance(stringFieldType);
-                
-                // Set the Name property
-                var nameProperty = stringFieldType.GetProperty("Name");
-                nameProperty?.SetValue(fieldObject, fieldName);
-
-                return fieldObject;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error creating string field {FieldName}", fieldName);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Create an integer field object
-        /// </summary>
-        private object CreateIntField(string fieldName)
-        {
-            try
-            {
-                var intFieldType = _objectFactory.GetAxType("AxTableFieldInt");
-                if (intFieldType == null)
-                {
-                    throw new InvalidOperationException("AxTableFieldInt type not found");
-                }
-
-                var fieldObject = Activator.CreateInstance(intFieldType);
-                
-                var nameProperty = intFieldType.GetProperty("Name");
-                nameProperty?.SetValue(fieldObject, fieldName);
-
-                return fieldObject;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error creating int field {FieldName}", fieldName);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Create a real field object
-        /// </summary>
-        private object CreateRealField(string fieldName)
-        {
-            try
-            {
-                var realFieldType = _objectFactory.GetAxType("AxTableFieldReal");
-                if (realFieldType == null)
-                {
-                    throw new InvalidOperationException("AxTableFieldReal type not found");
-                }
-
-                var fieldObject = Activator.CreateInstance(realFieldType);
-                
-                var nameProperty = realFieldType.GetProperty("Name");
-                nameProperty?.SetValue(fieldObject, fieldName);
-
-                return fieldObject;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error creating real field {FieldName}", fieldName);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Prepare parameters specifically for AddMethod method
-        /// </summary>
-        private async Task<object[]> PrepareAddMethodParametersAsync(MethodInfo method, Dictionary<string, object> parameters, object targetClass)
-        {
-            try
-            {
-                // Get method parameters
-                var methodName = parameters.ContainsKey("methodName") ? parameters["methodName"]?.ToString() : null;
-                var returnType = parameters.ContainsKey("returnType") ? parameters["returnType"]?.ToString() : "void";
-                var accessLevel = parameters.ContainsKey("accessLevel") ? parameters["accessLevel"]?.ToString() : "public";
-                var isStatic = parameters.ContainsKey("isStatic") ? Convert.ToBoolean(parameters["isStatic"]) : false;
-                var source = parameters.ContainsKey("source") ? parameters["source"]?.ToString() : "";
-
-                if (string.IsNullOrEmpty(methodName))
-                {
-                    throw new ArgumentException("methodName is required for AddMethod method");
-                }
-
-                _logger.Information("Creating method object: Name={MethodName}, ReturnType={ReturnType}, AccessLevel={AccessLevel}, IsStatic={IsStatic}", 
-                    methodName, returnType, accessLevel, isStatic);
-
-                // Create the AxMethod object
-                var methodObject = CreateMethodObject(methodName, returnType, accessLevel, isStatic, source);
-
-                if (methodObject == null)
-                {
-                    throw new InvalidOperationException($"Failed to create method object for '{methodName}'");
-                }
-
-                _logger.Information("Successfully created method object: {MethodObjectType}", methodObject.GetType().Name);
-                return new object[] { methodObject };
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error preparing AddMethod parameters");
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Create an AxMethod object
-        /// </summary>
-        private object CreateMethodObject(string methodName, string returnType, string accessLevel, bool isStatic, string source)
-        {
-            try
-            {
-                // Use reflection to create AxMethod
-                var methodType = _objectFactory.GetAxType("AxMethod");
-                if (methodType == null)
-                {
-                    throw new InvalidOperationException("AxMethod type not found");
-                }
-
-                var methodObject = Activator.CreateInstance(methodType);
-                
-                // Set basic properties
-                var nameProperty = methodType.GetProperty("Name");
-                nameProperty?.SetValue(methodObject, methodName);
-
-                // Set source code - AGENT MUST PROVIDE X++ SOURCE
-                var sourceProperty = methodType.GetProperty("Source");
-                if (sourceProperty != null)
-                {
-                    if (string.IsNullOrEmpty(source))
-                    {
-                        throw new ArgumentException("source parameter is required - agent must provide X++ method source code");
-                    }
-                    sourceProperty.SetValue(methodObject, source);
-                }
-
-                // Set access level if property exists
-                var accessProperty = methodType.GetProperty("AccessLevel");
-                if (accessProperty != null)
-                {
-                    // Try to convert string to enum
-                    var accessType = accessProperty.PropertyType;
-                    if (accessType.IsEnum)
-                    {
-                        try
-                        {
-                            var accessValue = Enum.Parse(accessType, accessLevel, true);
-                            accessProperty.SetValue(methodObject, accessValue);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Warning(ex, "Failed to set access level {AccessLevel}, using default", accessLevel);
-                        }
-                    }
-                }
-
-                // Set static flag if property exists
-                var staticProperty = methodType.GetProperty("IsStatic");
-                staticProperty?.SetValue(methodObject, isStatic);
-
-                // Set return type if property exists
-                var returnTypeProperty = methodType.GetProperty("ReturnType");
-                if (returnTypeProperty != null)
-                {
-                    // Try to create return type object
-                    var returnTypeObject = CreateReturnTypeObject(returnType);
-                    if (returnTypeObject != null)
-                    {
-                        returnTypeProperty.SetValue(methodObject, returnTypeObject);
-                    }
-                }
-
-                return methodObject;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error creating method object {MethodName}", methodName);
-                throw;
-            }
-        }
-
-        // REMOVED: GenerateDefaultMethodSource method
-        // PRINCIPLE: Agent must provide ALL X++ source code - NO hardcoding allowed
-
-        /// <summary>
-        /// Create a return type object for methods
-        /// </summary>
-        private object CreateReturnTypeObject(string returnType)
-        {
-            try
-            {
-                var returnTypeType = _objectFactory.GetAxType("AxMethodReturnType");
-                if (returnTypeType == null)
-                {
-                    _logger.Warning("AxMethodReturnType type not found, skipping return type creation");
-                    return null;
-                }
-
-                var returnTypeObject = Activator.CreateInstance(returnTypeType);
-                
-                // Set type name property
-                var typeProperty = returnTypeType.GetProperty("Type");
-                typeProperty?.SetValue(returnTypeObject, returnType);
-
-                return returnTypeObject;
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to create return type object for {ReturnType}", returnType);
-                return null;
-            }
-        }
 
         /// <summary>
         /// Save a modified object back to the metadata store

@@ -74,7 +74,7 @@ namespace D365MetadataService.Tests
             
             try
             {
-                var fieldTypes = await _reflectionService.DiscoverFieldTypesAsync();
+                var fieldTypes = await _reflectionService.DiscoverAvailableTypesAsync();
                 
                 Console.WriteLine($"Found {fieldTypes.Count} field types that can be created:");
                 foreach (var fieldType in fieldTypes)
@@ -219,7 +219,7 @@ namespace D365MetadataService.Tests
 
                 // Step 2: Agent asks "What field types can I create?"
                 Console.WriteLine("\nAgent: What field types can I create for tables?");
-                var fieldTypes = await _reflectionService.DiscoverFieldTypesAsync();
+                var fieldTypes = await _reflectionService.DiscoverAvailableTypesAsync();
                 Console.WriteLine($"System: Found {fieldTypes.Count} field types: {string.Join(", ", fieldTypes.Take(5).Select(f => f.Name))}...");
 
                 // Step 3: Agent creates a field

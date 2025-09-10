@@ -19,6 +19,18 @@ namespace D365MetadataService.Models
         
         public List<PropertyCapability> WritableProperties { get; set; } = new List<PropertyCapability>();
         public List<TypeInfo> RelatedTypeConstructors { get; set; } = new List<TypeInfo>();
+        
+        /// <summary>
+        /// NEW: Structured inheritance mapping for concrete type resolution
+        /// Key = abstract/base type name, Value = list of concrete implementations
+        /// </summary>
+        public Dictionary<string, List<TypeInfo>> InheritanceHierarchy { get; set; } = new Dictionary<string, List<TypeInfo>>();
+        
+        /// <summary>
+        /// NEW: Reflection information about the discovered type
+        /// </summary>
+        public TypeReflectionInfo ReflectionInfo { get; set; } = new TypeReflectionInfo();
+        
         public DateTime DiscoveredAt { get; set; } = DateTime.UtcNow;
     }
 
@@ -33,6 +45,11 @@ namespace D365MetadataService.Models
         public List<ParameterInfo> Parameters { get; set; } = new List<ParameterInfo>();
         public bool IsStatic { get; set; }
         public bool IsPublic { get; set; } = true;
+        
+        /// <summary>
+        /// Detailed requirements for creating the parameters this method needs
+        /// </summary>
+        public List<ParameterCreationRequirement> ParameterCreationRequirements { get; set; } = new List<ParameterCreationRequirement>();
     }
 
     /// <summary>
@@ -61,6 +78,31 @@ namespace D365MetadataService.Models
         public string DefaultValue { get; set; }
         public bool IsOut { get; set; }
         public bool IsRef { get; set; }
+        public string Description { get; set; }
+    }
+
+    /// <summary>
+    /// Detailed requirements for creating a specific parameter for a method
+    /// </summary>
+    public class ParameterCreationRequirement
+    {
+        public string ParameterName { get; set; }
+        public string ParameterType { get; set; }
+        public string ParameterTypeFullName { get; set; }
+        public bool IsRequired { get; set; }
+        public List<PropertyRequirement> RequiredProperties { get; set; } = new List<PropertyRequirement>();
+        public string CreationInstructions { get; set; }
+    }
+
+    /// <summary>
+    /// Requirements for setting properties on objects
+    /// </summary>
+    public class PropertyRequirement
+    {
+        public string PropertyName { get; set; }
+        public string PropertyType { get; set; }
+        public bool IsRequired { get; set; }
+        public string ExpectedParameterName { get; set; }
         public string Description { get; set; }
     }
 
@@ -203,6 +245,20 @@ namespace D365MetadataService.Models
         public string Description { get; set; }
         public string ExampleValue { get; set; }
         public bool IsRequired { get; set; }
+    }
+
+    /// <summary>
+    /// Reflection information about a discovered type
+    /// </summary>
+    public class TypeReflectionInfo
+    {
+        public string Namespace { get; set; }
+        public string Assembly { get; set; }
+        public bool IsPublic { get; set; }
+        public bool IsAbstract { get; set; }
+        public bool IsSealed { get; set; }
+        public string BaseTypeName { get; set; }
+        public List<string> InterfaceNames { get; set; } = new List<string>();
     }
 
     /// <summary>

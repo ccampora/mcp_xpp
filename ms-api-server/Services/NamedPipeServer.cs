@@ -257,17 +257,36 @@ namespace D365MetadataService.Services
 
             try
             {
-                _logger.Debug("Processing message from {ConnectionId}: {Message}", connectionId, message);
+                _logger.Debug("Processing message from {ConnectionId}", connectionId);
+                _logger.Debug("Raw message content: {Message}", message);
+                _logger.Debug("Message length: {Length}", message?.Length ?? 0);
 
-                var request = JsonConvert.DeserializeObject<ServiceRequest>(message);
-                if (request == null)
+                // Add additional logging for JSON parsing issues
+                if (string.IsNullOrWhiteSpace(message))
                 {
-                    response = ServiceResponse.CreateError("Invalid JSON request");
+                    _logger.Warning("Received empty or null message from {ConnectionId}", connectionId);
+                    response = ServiceResponse.CreateError("Empty message received");
                 }
                 else
                 {
-                    requestId = request.Id; // Capture the request ID
-                    response = await HandleRequestAsync(request);
+                    try
+                    {
+                        var request = JsonConvert.DeserializeObject<ServiceRequest>(message);
+                        if (request == null)
+                        {
+                            response = ServiceResponse.CreateError("Invalid JSON request - deserialized to null");
+                        }
+                        else
+                        {
+                            requestId = request.Id; // Capture the request ID
+                            response = await HandleRequestAsync(request);
+                        }
+                    }
+                    catch (JsonException jsonEx)
+                    {
+                        _logger.Error(jsonEx, "JSON deserialization failed for message: {Message}", message);
+                        response = ServiceResponse.CreateError($"JSON parsing error: {jsonEx.Message}");
+                    }
                 }
             }
             catch (JsonException ex)

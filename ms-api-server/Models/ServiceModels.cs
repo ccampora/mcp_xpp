@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace D365MetadataService.Models
 {
@@ -8,7 +10,27 @@ namespace D365MetadataService.Models
         public string Id { get; set; }
         public string Action { get; set; }
         public string ObjectType { get; set; }
-        public Dictionary<string, object> Parameters { get; set; } = new Dictionary<string, object>();
+        
+        [JsonProperty("Parameters")]
+        public JObject ParametersRaw { get; set; } = new JObject();
+        
+        // Helper property to convert JObject to Dictionary when needed
+        [JsonIgnore]
+        public Dictionary<string, object> Parameters 
+        { 
+            get 
+            {
+                var dict = new Dictionary<string, object>();
+                if (ParametersRaw != null)
+                {
+                    foreach (var property in ParametersRaw.Properties())
+                    {
+                        dict[property.Name] = property.Value.ToObject<object>();
+                    }
+                }
+                return dict;
+            }
+        }
     }
 
     public class ServiceResponse
