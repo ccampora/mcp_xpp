@@ -110,10 +110,49 @@ namespace D365MetadataService.Handlers
             
             try
             {
-                // Get metadata path from configuration
-                var metadataPath = _config.D365Config.PackagesLocalDirectory;
-                Logger.Information("Creating metadata provider for dynamic model discovery: {MetadataPath}", metadataPath);
+                // PHASE 1: Discover standard D365 models from PackagesLocalDirectory
+                var standardMetadataPath = _config.D365Config.PackagesLocalDirectory;
+                Logger.Information("Phase 1: Discovering standard models from: {MetadataPath}", standardMetadataPath);
 
+                var standardModels = DiscoverModelsFromPath(standardMetadataPath);
+                discoveredModels.AddRange(standardModels);
+                Logger.Information("Phase 1: Found {Count} standard models", standardModels.Count);
+
+                // PHASE 2: Discover custom models from CustomMetadataPath
+                var customMetadataPath = _config.D365Config.CustomMetadataPath;
+                if (!string.IsNullOrEmpty(customMetadataPath) && customMetadataPath != standardMetadataPath)
+                {
+                    Logger.Information("Phase 2: Discovering custom models from: {MetadataPath}", customMetadataPath);
+                    
+                    var customModels = DiscoverModelsFromPath(customMetadataPath);
+                    discoveredModels.AddRange(customModels);
+                    Logger.Information("Phase 2: Found {Count} custom models", customModels.Count);
+                }
+                else
+                {
+                    Logger.Information("Phase 2: Skipping custom model discovery (same path or not configured)");
+                }
+
+                Logger.Information("Total model discovery complete: {TotalCount} models", discoveredModels.Count);
+
+                return discoveredModels;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error discovering models");
+                return discoveredModels; // Return what we have so far
+            }
+        }
+
+        /// <summary>
+        /// Discover models from a specific metadata path
+        /// </summary>
+        private List<object> DiscoverModelsFromPath(string metadataPath)
+        {
+            var models = new List<object>();
+
+            try
+            {
                 // Create the metadata provider using the same pattern as D365ObjectFactory
                 var factory = new MetadataProviderFactory();
                 var provider = factory.CreateDiskProvider(metadataPath);
@@ -122,12 +161,12 @@ namespace D365MetadataService.Handlers
                 // This is the same approach used in D365ObjectFactory.cs
                 if (provider?.ModelManifest != null)
                 {
-                    Logger.Information("Getting models from MetadataProvider.ModelManifest");
+                    Logger.Debug("Getting models from MetadataProvider.ModelManifest at {Path}", metadataPath);
                     
                     try
                     {
                         var modelList = provider.ModelManifest.ListModels();
-                        Logger.Information("Found {Count} models using ListModels()", modelList?.Count ?? 0);
+                        Logger.Debug("Found {Count} models using ListModels()", modelList?.Count ?? 0);
 
                         if (modelList != null)
                         {
@@ -168,14 +207,14 @@ namespace D365MetadataService.Handlers
                                             Status = "Available"
                                         };
 
-                                        discoveredModels.Add(modelData);
+                                        models.Add(modelData);
                                         Logger.Debug("Added model: {Name} (ID: {Id}, Layer: {Layer}, Publisher: {Publisher}, Objects: {ObjectCount})", 
                                             modelInfo.Name, modelInfo.Id, modelInfo.Layer, modelInfo.Publisher, objectCount);
                                     }
                                     else
                                     {
                                         Logger.Warning("Could not read model info for: {ModelName}", modelName);
-                                        discoveredModels.Add(new
+                                        models.Add(new
                                         {
                                             Name = modelName,
                                             Type = "Unknown",
@@ -192,7 +231,7 @@ namespace D365MetadataService.Handlers
                                 catch (Exception ex)
                                 {
                                     Logger.Error(ex, "Error processing model {ModelName}: {Message}", modelName, ex.Message);
-                                    discoveredModels.Add(new
+                                    models.Add(new
                                     {
                                         Name = modelName,
                                         Type = "Unknown", 
@@ -216,18 +255,15 @@ namespace D365MetadataService.Handlers
                 }
                 else
                 {
-                    Logger.Error("MetadataProvider or ModelManifest is null");
-                    throw new InvalidOperationException("MetadataProvider or ModelManifest is null");
+                    Logger.Warning("Could not create metadata provider for path: {Path}", metadataPath);
                 }
-
-                Logger.Information("Dynamic model discovery complete: {Count} models discovered", discoveredModels.Count);
-                return discoveredModels;
             }
             catch (Exception ex)
             {
-                Logger.Error(ex, "Error in dynamic model discovery");
-                return discoveredModels; // Return partial results
+                Logger.Error(ex, "Error discovering models from {Path}", metadataPath);
             }
+
+            return models;
         }
 
 
