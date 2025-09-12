@@ -79,8 +79,26 @@ namespace D365MetadataService.Handlers
                     }
                 }
 
-                Logger.Information("Executing modification: {MethodName} on {ObjectType}:{ObjectName} with {ParameterCount} parameters", 
+                Logger.Information("Starting parameter validation for {MethodName} on {ObjectType}:{ObjectName} with {ParameterCount} parameters", 
                     methodName, objectType, objectName, methodParameters.Count);
+
+                // VALIDATION: Check if provided parameters match what the target type requires
+                // This prevents silent failures and guides agents to use discovery tool
+                var validationResult = await _reflectionService.ValidateModificationParametersAsync(
+                    objectType, objectName, methodName, methodParameters);
+                    
+                if (!validationResult.IsValid)
+                {
+                    var errorMessage = validationResult.ErrorMessage;
+                    
+                    Logger.Warning("Parameter validation failed for {MethodName} on {ObjectType}:{ObjectName}: {Error}", 
+                        methodName, objectType, objectName, validationResult.ErrorMessage);
+                    
+                    return ServiceResponse.CreateError(errorMessage);
+                }
+
+                Logger.Information("✅ Parameter validation successful. Executing modification: {MethodName} on {ObjectType}:{ObjectName}", 
+                    methodName, objectType, objectName);
 
                 // Use the dynamic reflection service to execute the modification
                 var result = await _reflectionService.ExecuteObjectModificationAsync(objectType, objectName, methodName, methodParameters);

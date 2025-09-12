@@ -892,6 +892,185 @@ namespace D365MetadataService.Services
             }
         }
 
+        /// <summary>
+        /// Validate that provided parameters match what the target method and object types require
+        /// This prevents silent parameter mapping failures and guides agents to use discovery tools
+        /// </summary>
+        public async Task<ParameterValidationResult> ValidateModificationParametersAsync(
+            string objectType, 
+            string objectName, 
+            string methodName, 
+            Dictionary<string, object> providedParameters)
+        {
+            _logger.Information("Validating parameters for {MethodName} on {ObjectType}:{ObjectName}", 
+                methodName, objectType, objectName);
+
+            try
+            {
+                // Get the target object to validate method exists
+                var targetObject = await GetD365ObjectAsync(objectType, objectName);
+                if (targetObject == null)
+                {
+                    return ParameterValidationResult.Failure(
+                        $"Object '{objectName}' of type '{objectType}' not found",
+                        methodName: methodName,
+                        targetObjectType: objectType);
+                }
+
+                // Get the method to validate it exists and analyze parameters
+                var type = targetObject.GetType();
+                var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Instance);
+                
+                if (method == null)
+                {
+                    return ParameterValidationResult.Failure(
+                        $"Method '{methodName}' not found on type '{objectType}'",
+                        methodName: methodName,
+                        targetObjectType: objectType);
+                }
+
+                // Analyze parameter requirements for the method
+                var parameterRequirements = await AnalyzeParameterCreationRequirementsAsync(method);
+                _logger.Information("Found {RequirementCount} parameter requirements for method {MethodName}", 
+                    parameterRequirements.Count, methodName);
+
+                // Validate each parameter requirement
+                foreach (var requirement in parameterRequirements)
+                {
+                    if (requirement.RequiredProperties?.Any() == true)
+                    {
+                        _logger.Information("Validating parameter {ParameterName} of type {ParameterType} with {PropertyCount} property requirements",
+                            requirement.ParameterName, requirement.ParameterType, requirement.RequiredProperties.Count);
+
+                        // This parameter requires object creation - validate property parameters
+                        var validationResult = ValidateObjectCreationParameters(requirement, providedParameters);
+                        if (!validationResult.IsValid)
+                        {
+                            // Enhance the error message with context
+                            validationResult.MethodName = methodName;
+                            validationResult.TargetObjectType = objectType;
+                            validationResult.ObjectTypeBeingCreated = requirement.ParameterType;
+                            
+                            return validationResult;
+                        }
+                    }
+                }
+
+                _logger.Information("✅ Parameter validation successful for {MethodName} on {ObjectType}:{ObjectName}", 
+                    methodName, objectType, objectName);
+
+                return ParameterValidationResult.Success();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error during parameter validation for {MethodName} on {ObjectType}:{ObjectName}", 
+                    methodName, objectType, objectName);
+                
+                return ParameterValidationResult.Failure(
+                    $"Parameter validation error: {ex.Message}",
+                    methodName: methodName,
+                    targetObjectType: objectType);
+            }
+        }
+
+        /// <summary>
+        /// Validate that provided parameters match the property requirements for object creation
+        /// </summary>
+        private ParameterValidationResult ValidateObjectCreationParameters(
+            ParameterCreationRequirement requirement, 
+            Dictionary<string, object> providedParameters)
+        {
+            var result = new ParameterValidationResult
+            {
+                ObjectTypeBeingCreated = requirement.ParameterType
+            };
+
+            // Check for required parameters
+            foreach (var propReq in requirement.RequiredProperties.Where(p => p.IsRequired))
+            {
+                if (!providedParameters.ContainsKey(propReq.ExpectedParameterName))
+                {
+                    result.MissingRequiredParameters.Add(propReq.ExpectedParameterName);
+                }
+            }
+
+            // Check for unknown parameters (parameters provided that don't match any expected parameters)
+            var expectedParameterNames = requirement.RequiredProperties.Select(p => p.ExpectedParameterName).ToHashSet();
+            foreach (var providedParam in providedParameters.Keys)
+            {
+                // Skip system parameters that are not property mappings
+                if (IsSystemParameter(providedParam))
+                    continue;
+
+                if (!expectedParameterNames.Contains(providedParam))
+                {
+                    result.UnknownParameters.Add(providedParam);
+                }
+            }
+
+            // Set suggested parameters (all expected parameters)
+            result.SuggestedParameters = requirement.RequiredProperties.Select(p => p.ExpectedParameterName).ToList();
+
+            // Determine if validation passed
+            if (result.MissingRequiredParameters.Any() || result.UnknownParameters.Any())
+            {
+                result.IsValid = false;
+                result.ErrorMessage = CreateParameterValidationErrorMessage(requirement, result);
+            }
+            else
+            {
+                result.IsValid = true;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Check if a parameter is a system parameter (not a property mapping parameter)
+        /// </summary>
+        private bool IsSystemParameter(string parameterName)
+        {
+            var systemParameters = new[] { "concreteType" };
+            return systemParameters.Contains(parameterName, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Create a detailed error message for parameter validation failures
+        /// </summary>
+        private string CreateParameterValidationErrorMessage(
+            ParameterCreationRequirement requirement, 
+            ParameterValidationResult result)
+        {
+            var message = $"Parameter validation failed: Invalid parameters for {requirement.ParameterType} creation.\n\n";
+
+            if (result.UnknownParameters.Any())
+            {
+                message += $"❌ Unknown parameters provided: {string.Join(", ", result.UnknownParameters)}\n";
+            }
+
+            if (result.MissingRequiredParameters.Any())
+            {
+                message += $"❌ Missing required parameters: {string.Join(", ", result.MissingRequiredParameters)}\n";
+            }
+
+            if (result.SuggestedParameters.Any())
+            {
+                message += $"✅ Expected parameters for {requirement.ParameterType}:\n";
+                foreach (var propReq in requirement.RequiredProperties)
+                {
+                    var requiredMarker = propReq.IsRequired ? "[REQUIRED]" : "[OPTIONAL]";
+                    message += $"   - {propReq.ExpectedParameterName} ({propReq.PropertyType}) {requiredMarker}: {propReq.PropertyName} property\n";
+                }
+            }
+
+            message += $"\n💡 Use discover_modification_capabilities tool to get exact parameter requirements:\n";
+            message += $"   mcp_mcp-xpp-serve_discover_modification_capabilities({{\n";
+            message += $"     \"objectType\": \"{requirement.ParameterType}\"\n";
+            message += $"   }})";
+
+            return message;
+        }
+
         #endregion
     }
 }
