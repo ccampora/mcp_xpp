@@ -89,8 +89,9 @@ namespace D365MetadataService
             });
 
             // Register Dynamic D365 Object Factory (supports all 575+ object types)
+            // Now managed by D365ReflectionManager for better resource sharing
             services.AddSingleton<D365ObjectFactory>(sp =>
-                new D365ObjectFactory(config.D365Config, sp.GetRequiredService<ILogger>()));
+                D365ReflectionManager.Instance.GetObjectFactory(config.D365Config));
 
             // Register D365 Reflection Service
             services.AddSingleton<D365ReflectionService>();
@@ -114,6 +115,7 @@ namespace D365MetadataService
             services.AddSingleton<IRequestHandler, DiscoverModificationCapabilitiesHandler>();
             services.AddSingleton<IRequestHandler, DiscoverAvailableTypesHandler>();
             services.AddSingleton<IRequestHandler, ExecuteObjectModificationHandler>();
+            services.AddSingleton<IRequestHandler, InspectObjectHandler>();
 
             // Register handler factory
             services.AddSingleton<RequestHandlerFactory>();

@@ -208,6 +208,226 @@ export class ToolHandlers {
     return await createLoggedResponse(content, requestId, "find_xpp_object");
   }
 
+  // Helper function to match filter patterns with wildcard support
+  static matchesPattern(text: string, pattern: string): boolean {
+    if (!pattern) return true;
+    
+    // Convert wildcard pattern to regex
+    const regexPattern = pattern
+      .toLowerCase()
+      .replace(/\*/g, '.*')  // * becomes .*
+      .replace(/\?/g, '.');  // ? becomes .
+    
+    const regex = new RegExp(`^${regexPattern}$`, 'i');
+    return regex.test(text.toLowerCase());
+  }
+
+  // Helper function to filter arrays based on pattern
+  static filterByPattern<T extends { Name?: string; PropertyName?: string }>(
+    items: T[], 
+    pattern?: string
+  ): T[] {
+    if (!pattern || !items) return items;
+    
+    return items.filter(item => {
+      const name = item.Name || item.PropertyName || '';
+      return this.matchesPattern(name, pattern);
+    });
+  }
+
+  static async inspectXppObject(args: any, requestId: string): Promise<any> {
+    const schema = z.object({
+      objectName: z.string(),
+      objectType: z.string().optional(),
+      includeProperties: z.boolean().optional().default(true),
+      includeChildren: z.boolean().optional().default(true),
+      includeTemplateInfo: z.boolean().optional().default(false),
+      filterPattern: z.string().optional(),
+    });
+    const { objectName, objectType, includeProperties, includeChildren, includeTemplateInfo, filterPattern } = schema.parse(args);
+    
+    try {
+      const client = ObjectCreators['getServiceClient'](15000); // Use longer timeout for inspection
+      await client.connect();
+      
+      const result = await client.sendRequest('inspectobject', undefined, {
+        objectName,
+        objectType,
+        includeProperties,
+        includeChildren,
+        includeTemplateInfo
+      });
+      
+      await client.disconnect();
+      
+      if (!result.Success) {
+        return await createLoggedResponse(
+          `Failed to inspect object "${objectName}": ${result.Error || 'Unknown error'}`,
+          requestId,
+          "inspect_xpp_object"
+        );
+      }
+      
+      let data = result.Data;
+      
+      // Apply filtering if pattern is specified
+      if (filterPattern && data) {
+        // Filter Properties
+        if (data.Properties) {
+          data.Properties = this.filterByPattern(data.Properties, filterPattern);
+        }
+        
+        // Filter Children
+        if (data.Children) {
+          data.Children = this.filterByPattern(data.Children, filterPattern);
+        }
+        
+        // Filter TemplateInfo properties and methods
+        if (data.TemplateInfo) {
+          if (data.TemplateInfo.AllProperties) {
+            data.TemplateInfo.AllProperties = this.filterByPattern(data.TemplateInfo.AllProperties, filterPattern);
+          }
+          if (data.TemplateInfo.AllMethods) {
+            data.TemplateInfo.AllMethods = this.filterByPattern(data.TemplateInfo.AllMethods, filterPattern);
+          }
+        }
+        
+        // Filter Metadata properties
+        if (data.Metadata && data.Metadata.AllAvailableProperties) {
+          data.Metadata.AllAvailableProperties = this.filterByPattern(data.Metadata.AllAvailableProperties, filterPattern);
+        }
+      }
+      
+      let content = `🔍 Enhanced Object Inspection for "${objectName}"`;
+      if (filterPattern) {
+        content += ` (filtered by: ${filterPattern})`;
+      }
+      content += `\n\n`;
+      
+      if (!data.Found) {
+        content += `❌ Object not found: ${data.Error || 'Object does not exist'}\n`;
+        if (data.SearchedTypes) {
+          content += `\n🔍 Searched object types: ${data.SearchedTypes.join(', ')}\n`;
+        }
+      } else {
+        content += `✅ Object found: ${data.ObjectType} "${data.ObjectName}"\n\n`;
+        
+        // Object Structure
+        if (data.Structure) {
+          content += `📋 Object Structure:\n`;
+          content += `   Type: ${data.Structure.TypeName || 'Unknown'}\n`;
+          content += `   Full Type: ${data.Structure.FullTypeName || 'Unknown'}\n`;
+          content += `   Assembly: ${data.Structure.Assembly || 'Unknown'}\n`;
+          if (data.Structure.BaseType) content += `   Base Type: ${data.Structure.BaseType}\n`;
+          content += `   Properties: ${data.Structure.PropertyCount || 0}\n`;
+          content += `   Methods: ${data.Structure.MethodCount || 0}\n\n`;
+        }
+        
+        // Metadata
+        if (data.Metadata) {
+          content += `📝 Metadata:\n`;
+          for (const [key, value] of Object.entries(data.Metadata)) {
+            if (value && value !== '<null>') {
+              content += `   ${key}: ${value}\n`;
+            }
+          }
+          content += `\n`;
+        }
+        
+        // Properties
+        if (includeProperties && data.Properties && data.Properties.length > 0) {
+          content += `🔧 Properties (${data.Properties.length}):\n`;
+          for (const prop of data.Properties.slice(0, 30)) { // Show more properties with enhanced info
+            content += `   ${prop.Name}: ${prop.Type}`;
+            
+            // Show current value if available
+            if (prop.CurrentValue && prop.CurrentValue !== '<not available>') {
+              content += ` = ${prop.CurrentValue}`;
+            }
+            
+            // Show possible enum values
+            if (prop.IsEnum && prop.PossibleValues && prop.PossibleValues.length > 0) {
+              content += ` [enum: ${prop.PossibleValues.join(', ')}]`;
+            }
+            
+            // Show property flags
+            const flags = [];
+            if (prop.IsReadOnly) flags.push('ReadOnly');
+            if (prop.IsEnum) flags.push('Enum');
+            if (prop.IsNullable) flags.push('Nullable');
+            if (prop.IsCollection) flags.push('Collection');
+            if (flags.length > 0) {
+              content += ` [${flags.join(', ')}]`;
+            }
+            
+            content += `\n`;
+            
+            // Show property description if available
+            if (prop.Description && prop.Description.trim() !== '') {
+              content += `     Description: ${prop.Description}\n`;
+            }
+            
+            // Show enum values on separate lines for better readability if there are many
+            if (prop.IsEnum && prop.PossibleValues && prop.PossibleValues.length > 5) {
+              content += `     Possible values: ${prop.PossibleValues.join(', ')}\n`;
+            }
+          }
+          if (data.Properties.length > 30) {
+            content += `   ... and ${data.Properties.length - 30} more properties\n`;
+          }
+          content += `\n`;
+        }
+        
+        // Children/Collections
+        if (includeChildren && data.Children && data.Children.length > 0) {
+          content += `👶 Child Collections (${data.Children.length}):\n`;
+          for (const child of data.Children) {
+            content += `   ${child.PropertyName}: ${child.PropertyType}`;
+            if (child.Count !== undefined) {
+              content += ` (${child.Count} items)`;
+            }
+            if (child.Error) {
+              content += ` [Error: ${child.Error}]`;
+            }
+            content += `\n`;
+            
+            // Show sample items
+            if (child.Items && child.Items.length > 0) {
+              for (const item of child.Items.slice(0, 3)) { // Show first 3 items
+                content += `     - ${item.Type}: ${item.Summary}\n`;
+              }
+              if (child.Items.length > 3) {
+                content += `     ... and ${child.Items.length - 3} more items\n`;
+              }
+            }
+          }
+          content += `\n`;
+        }
+        
+        // Template Info
+        if (includeTemplateInfo && data.TemplateInfo) {
+          content += `🎨 Template & Pattern Information:\n`;
+          for (const [key, value] of Object.entries(data.TemplateInfo)) {
+            if (value && value !== '<null>') {
+              content += `   ${key}: ${value}\n`;
+            }
+          }
+          content += `\n`;
+        }
+      }
+      
+      return await createLoggedResponse(content, requestId, "inspect_xpp_object");
+      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return await createLoggedResponse(
+        `Failed to inspect object "${objectName}": ${errorMsg}`,
+        requestId,
+        "inspect_xpp_object"
+      );
+    }
+  }
+
   static async buildCache(args: any, requestId: string): Promise<any> {
     const schema = z.object({
       objectType: z.string().optional(),
@@ -1150,4 +1370,6 @@ export class ToolHandlers {
       );
     }
   }
+
+
 }

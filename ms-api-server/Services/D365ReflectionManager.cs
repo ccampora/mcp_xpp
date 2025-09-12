@@ -3,11 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Collections.Concurrent;
+using System.IO;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
-using Microsoft.Dynamics.AX.Metadata.Service;
-using Microsoft.Dynamics.AX.Metadata.Storage;
 using Microsoft.Dynamics.AX.Metadata.Providers;
-using Microsoft.Dynamics.AX.Metadata.Core.MetaModel;
 using D365MetadataService.Models;
 using Serilog;
 
@@ -40,6 +38,14 @@ namespace D365MetadataService.Services
         private Assembly _d365MetadataAssembly;
         private readonly object _assemblyLock = new();
         private bool _isInitialized = false;
+
+        // VS2022 Property Descriptions - loaded once and cached
+        private Dictionary<string, string> _vs2022PropertyDescriptions;
+        private Dictionary<string, string> _metaModelMappings;
+        
+        // Object factory management - singleton instance shared across all operations
+        private D365ObjectFactory _objectFactory;
+        private readonly object _objectFactoryLock = new();
 
         #endregion
 
@@ -380,6 +386,9 @@ namespace D365MetadataService.Services
                     var supportedTypes = GetSupportedObjectTypes();
                     _logger.Information("✅ Pre-cached {Count} D365 object types", supportedTypes.Length);
                     
+                    // Load and cache VS2022 property descriptions once
+                    LoadAndCacheVS2022PropertyDescriptions();
+                    
                     _isInitialized = true;
                     _logger.Information("🎯 D365 Reflection Manager initialized successfully");
                 }
@@ -408,6 +417,40 @@ namespace D365MetadataService.Services
                 Timestamp = DateTime.UtcNow
             };
         }
+
+        /// <summary>
+        /// Get the shared D365ObjectFactory instance - thread-safe singleton pattern
+        /// Initializes the factory on first access using the provided configuration
+        /// </summary>
+        public D365ObjectFactory GetObjectFactory(D365Configuration config)
+        {
+            if (_objectFactory != null)
+                return _objectFactory;
+
+            lock (_objectFactoryLock)
+            {
+                if (_objectFactory != null)
+                    return _objectFactory;
+
+                try
+                {
+                    _logger.Information("🏭 Initializing shared D365ObjectFactory instance...");
+                    _objectFactory = new D365ObjectFactory(config, _logger);
+                    _logger.Information("✅ D365ObjectFactory initialized and cached in ReflectionManager");
+                    return _objectFactory;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "❌ Failed to initialize D365ObjectFactory");
+                    throw;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Check if ObjectFactory is available and initialized
+        /// </summary>
+        public bool IsObjectFactoryAvailable => _objectFactory != null;
 
         /// <summary>
         /// Discover all object collection properties on a metadata provider
@@ -965,6 +1008,292 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
+        /// COMPREHENSIVE PROPERTY DISCOVERY - Get all properties with labels and possible values
+        /// Discovers properties from BOTH Root and Concrete types like VS2022 Properties window
+        /// Returns property names, VS2022 labels, possible enum values, and current values for instances
+        /// </summary>
+        /// <param name="objectTypeName">D365 object type (e.g., "AxFormDataSourceRoot")</param>
+        /// <param name="objectInstance">Optional: specific object instance to get current values</param>
+        /// <returns>Complete property information matching VS2022 Properties window</returns>
+        public PropertyDiscoveryResult GetAllPropertiesWithLabelsAndValues(string objectTypeName, object objectInstance = null)
+        {
+            var result = new PropertyDiscoveryResult
+            {
+                ObjectType = objectTypeName,
+                Success = false,
+                Properties = new List<PropertyDetail>()
+            };
+
+            try
+            {
+                _logger.Information("🔍 Discovering ALL properties for {ObjectType} using inheritance-based approach", objectTypeName);
+                
+                // Get all properties using the enhanced inheritance-based algorithm
+                var allProperties = DiscoverAllPropertiesFromInheritanceChain(objectTypeName);
+                
+                if (!allProperties.Any())
+                {
+                    result.Error = $"No properties found for type '{objectTypeName}'";
+                    return result;
+                }
+
+                // Use cached VS2022 property descriptions (loaded once during initialization)
+                var propertyDescriptions = _vs2022PropertyDescriptions ?? new Dictionary<string, string>();
+                var metaModelMappings = _metaModelMappings ?? new Dictionary<string, string>();
+
+                // Process each property to get complete information
+                foreach (var property in allProperties)
+                {
+                    var propertyDetail = new PropertyDetail
+                    {
+                        Name = property.Name,
+                        Type = property.PropertyType.Name,
+                        TypeFullName = property.PropertyType.FullName,
+                        CanRead = property.CanRead,
+                        CanWrite = property.CanWrite,
+                        DeclaringType = property.DeclaringType?.Name
+                    };
+
+                    // Get VS2022 label/description using cached data
+                    propertyDetail.VS2022Label = GetPropertyLabelFromDescriptions(
+                        property.DeclaringType?.Name, 
+                        property.Name, 
+                        propertyDescriptions, 
+                        metaModelMappings);
+
+                    // Get possible values for enums
+                    if (property.PropertyType.IsEnum)
+                    {
+                        propertyDetail.PossibleValues = GetEnumValues(property.PropertyType);
+                    }
+
+                    // Get current value if instance provided
+                    if (objectInstance != null && property.CanRead)
+                    {
+                        try
+                        {
+                            var currentValue = property.GetValue(objectInstance);
+                            propertyDetail.CurrentValue = FormatPropertyValue(currentValue);
+                        }
+                        catch (Exception ex)
+                        {
+                            propertyDetail.CurrentValue = $"Error: {ex.Message}";
+                        }
+                    }
+
+                    result.Properties.Add(propertyDetail);
+                }
+
+                result.Success = true;
+                result.TotalProperties = result.Properties.Count;
+                
+                _logger.Information("✅ Successfully discovered {Count} properties for {ObjectType}", 
+                    result.Properties.Count, objectTypeName);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "❌ Error discovering properties for {ObjectType}", objectTypeName);
+                result.Error = $"Error discovering properties: {ex.Message}";
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Discover ALL properties using inheritance-based algorithm
+        /// Combines properties from Root, Concrete, and entire inheritance chain like VS2022
+        /// </summary>
+        private PropertyInfo[] DiscoverAllPropertiesFromInheritanceChain(string objectTypeName)
+        {
+            var allProperties = new List<PropertyInfo>();
+            var processedPropertyNames = new HashSet<string>();
+
+            try
+            {
+                // Strategy 1: Try to get the requested type directly
+                var mainType = GetD365Type(objectTypeName);
+                if (mainType != null)
+                {
+                    AddPropertiesFromType(mainType, allProperties, processedPropertyNames);
+                }
+
+                // Strategy 2: For DataSource types, also get properties from both Root and Concrete variants
+                if (objectTypeName.Contains("DataSource"))
+                {
+                    // Get both Root and Concrete types
+                    var rootTypeName = objectTypeName.Replace("Concrete", "Root").Replace("Derived", "Root");
+                    var concreteTypeName = objectTypeName.Replace("Root", "Concrete").Replace("Derived", "Concrete");
+
+                    var rootType = GetD365Type(rootTypeName);
+                    var concreteType = GetD365Type(concreteTypeName);
+
+                    if (rootType != null && rootTypeName != objectTypeName)
+                    {
+                        AddPropertiesFromType(rootType, allProperties, processedPropertyNames);
+                    }
+
+                    if (concreteType != null && concreteTypeName != objectTypeName)
+                    {
+                        AddPropertiesFromType(concreteType, allProperties, processedPropertyNames);
+                    }
+                }
+
+                _logger.Debug("🎯 Found {Count} unique properties from inheritance chain for {ObjectType}", 
+                    allProperties.Count, objectTypeName);
+
+                return allProperties.ToArray();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "❌ Error in inheritance-based property discovery for {ObjectType}", objectTypeName);
+                return Array.Empty<PropertyInfo>();
+            }
+        }
+
+        /// <summary>
+        /// Add properties from a type to the collection, avoiding duplicates
+        /// </summary>
+        private void AddPropertiesFromType(Type type, List<PropertyInfo> allProperties, HashSet<string> processedPropertyNames)
+        {
+            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            
+            foreach (var property in properties)
+            {
+                if (!processedPropertyNames.Contains(property.Name))
+                {
+                    allProperties.Add(property);
+                    processedPropertyNames.Add(property.Name);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load and cache VS2022 property descriptions from configuration file ONCE during initialization
+        /// </summary>
+        private void LoadAndCacheVS2022PropertyDescriptions()
+        {
+            try
+            {
+                var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config", "vs2022-property-descriptions.json");
+                
+                if (!File.Exists(configPath))
+                {
+                    _logger.Debug("VS2022 property descriptions file not found at: {Path}", configPath);
+                    _vs2022PropertyDescriptions = new Dictionary<string, string>();
+                    _metaModelMappings = new Dictionary<string, string>();
+                    return;
+                }
+
+                var jsonContent = File.ReadAllText(configPath);
+                _vs2022PropertyDescriptions = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent) ?? new Dictionary<string, string>();
+                
+                // Build MetaModel mappings once from the loaded descriptions
+                _metaModelMappings = BuildMetaModelMappings(_vs2022PropertyDescriptions);
+                
+                _logger.Information("📚 Loaded and cached {Count} VS2022 property descriptions with {MappingCount} MetaModel mappings", 
+                    _vs2022PropertyDescriptions.Count, _metaModelMappings.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Failed to load VS2022 property descriptions, using empty collections");
+                _vs2022PropertyDescriptions = new Dictionary<string, string>();
+                _metaModelMappings = new Dictionary<string, string>();
+            }
+        }
+
+        /// <summary>
+        /// Build MetaModel path mappings from VS2022 property descriptions
+        /// </summary>
+        private Dictionary<string, string> BuildMetaModelMappings(Dictionary<string, string> propertyDescriptions)
+        {
+            var mappings = new Dictionary<string, string>();
+
+            foreach (var key in propertyDescriptions.Keys)
+            {
+                if (key.Contains("Microsoft.Dynamics.Framework.Tools.MetaModel."))
+                {
+                    var parts = key.Split('/');
+                    if (parts.Length >= 2)
+                    {
+                        var metaModelPath = parts[0].Replace("Microsoft.Dynamics.Framework.Tools.MetaModel.", "");
+                        var pathParts = metaModelPath.Split('.');
+                        
+                        if (pathParts.Length >= 2)
+                        {
+                            var objectTypeName = $"Ax{pathParts[1]}"; // e.g., Forms.FormDataSourceRoot -> AxFormDataSourceRoot
+                            
+                            if (!mappings.ContainsKey(objectTypeName))
+                            {
+                                mappings[objectTypeName] = metaModelPath;
+                            }
+                        }
+                    }
+                }
+            }
+
+            _logger.Debug("🗺️ Built {Count} MetaModel mappings", mappings.Count);
+            return mappings;
+        }
+
+        /// <summary>
+        /// Get property label from VS2022 property descriptions
+        /// </summary>
+        private string GetPropertyLabelFromDescriptions(string declaringTypeName, string propertyName, 
+            Dictionary<string, string> propertyDescriptions, Dictionary<string, string> metaModelMappings)
+        {
+            if (string.IsNullOrEmpty(declaringTypeName) || !metaModelMappings.ContainsKey(declaringTypeName))
+            {
+                return null;
+            }
+
+            var metaModelPath = metaModelMappings[declaringTypeName];
+            var descriptionKey = $"Microsoft.Dynamics.Framework.Tools.MetaModel.{metaModelPath}/{propertyName}.Description";
+            var displayNameKey = $"Microsoft.Dynamics.Framework.Tools.MetaModel.{metaModelPath}/{propertyName}.DisplayName";
+
+            // Try description first, then display name
+            if (propertyDescriptions.TryGetValue(descriptionKey, out var description) && !string.IsNullOrEmpty(description))
+            {
+                return description;
+            }
+
+            if (propertyDescriptions.TryGetValue(displayNameKey, out var displayName) && !string.IsNullOrEmpty(displayName))
+            {
+                return displayName;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Get all possible values for an enum type
+        /// </summary>
+        private List<string> GetEnumValues(Type enumType)
+        {
+            try
+            {
+                return Enum.GetNames(enumType).ToList();
+            }
+            catch
+            {
+                return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// Format property value for display
+        /// </summary>
+        private string FormatPropertyValue(object value)
+        {
+            if (value == null) return "null";
+            if (value is string str) return $"\"{str}\"";
+            if (value is bool b) return b.ToString().ToLower();
+            if (value.GetType().IsEnum) return value.ToString();
+            
+            return value.ToString();
+        }
+
+        /// <summary>
         /// Clear all caches - useful for testing or when assemblies change
         /// </summary>
         public void ClearCaches()
@@ -973,7 +1302,9 @@ namespace D365MetadataService.Services
             _methodCache.Clear();
             _propertyCache.Clear();
             _supportedTypesCache.Clear();
-            _logger.Information("🧹 Cleared all reflection caches");
+            _vs2022PropertyDescriptions?.Clear();
+            _metaModelMappings?.Clear();
+            _logger.Information("🧹 Cleared all reflection caches including VS2022 property descriptions");
         }
 
         #endregion

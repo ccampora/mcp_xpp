@@ -76,6 +76,8 @@ export class ServerManager {
           
           case "find_xpp_object":
             return await ToolHandlers.findXppObject(args, requestId);
+          case "inspect_xpp_object":
+            return await ToolHandlers.inspectXppObject(args, requestId);
           
           case "build_object_index":
             return await ToolHandlers.buildCache(args, requestId);

@@ -102,4 +102,32 @@ namespace D365MetadataService.Models
         public string PackagesLocalDirectory { get; set; }
         public string CustomMetadataPath { get; set; }
     }
+
+    /// <summary>
+    /// Result of comprehensive property discovery with VS2022 labels and possible values
+    /// </summary>
+    public class PropertyDiscoveryResult
+    {
+        public string ObjectType { get; set; }
+        public bool Success { get; set; }
+        public string Error { get; set; }
+        public int TotalProperties { get; set; }
+        public List<PropertyDetail> Properties { get; set; } = new List<PropertyDetail>();
+    }
+
+    /// <summary>
+    /// Detailed information about a single property
+    /// </summary>
+    public class PropertyDetail
+    {
+        public string Name { get; set; }
+        public string Type { get; set; }
+        public string TypeFullName { get; set; }
+        public bool CanRead { get; set; }
+        public bool CanWrite { get; set; }
+        public string DeclaringType { get; set; }
+        public string VS2022Label { get; set; }
+        public string CurrentValue { get; set; }
+        public List<string> PossibleValues { get; set; } = new List<string>();
+    }
 }

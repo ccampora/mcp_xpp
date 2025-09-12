@@ -17,11 +17,13 @@ using Newtonsoft.Json;
 namespace D365MetadataService.Services
 {
     /// <summary>
-    /// D365 Object Factory using reflection for creating 500+ object types
+    /// D365 Object Factory using reflection for creating 500+ object types with dual provider support
     /// </summary>
     public class D365ObjectFactory
     {
-        private readonly IMetadataProvider _metadataProvider;
+        private readonly IMetadataProvider _customMetadataProvider;
+        private readonly IMetadataProvider _standardMetadataProvider;
+        private readonly IMetadataProvider _metadataProvider; // Primary provider for backward compatibility
         private readonly ILogger _logger;
         private readonly D365ReflectionManager _reflectionManager;
         private readonly Dictionary<string, Type> _axTypeCache;
@@ -38,14 +40,22 @@ namespace D365MetadataService.Services
 
             try
             {
-                // Initialize metadata provider
+                // Initialize DUAL metadata providers
                 var providerFactory = new MetadataProviderFactory();
-                _metadataProvider = providerFactory.CreateDiskProvider(config.CustomMetadataPath);
+                
+                _customMetadataProvider = providerFactory.CreateDiskProvider(config.CustomMetadataPath);
+                _logger.Information("✅ Custom metadata provider initialized: {Path}", config.CustomMetadataPath);
+                
+                _standardMetadataProvider = providerFactory.CreateDiskProvider(config.PackagesLocalDirectory);
+                _logger.Information("✅ Standard metadata provider initialized: {Path}", config.PackagesLocalDirectory);
+
+                // Set custom as primary for backward compatibility
+                _metadataProvider = _customMetadataProvider;
 
                 // Initialize reflection caches
                 InitializeReflectionCaches();
 
-                _logger.Information("Dynamic D365 Object Factory initialized with {TypeCount} cached types", _axTypeCache.Count);
+                _logger.Information("🎯 DUAL-PROVIDER D365 Object Factory initialized with {TypeCount} cached types", _axTypeCache.Count);
             }
             catch (Exception ex)
             {
@@ -592,7 +602,7 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
-        /// Retrieve an existing D365 object from the metadata provider
+        /// Retrieve an existing D365 object from metadata providers (tries custom first, then standard)
         /// </summary>
         public object GetExistingObject(string objectType, string objectName)
         {
@@ -604,7 +614,7 @@ namespace D365MetadataService.Services
                     return null;
                 }
 
-                _logger.Information("Retrieving existing object: {ObjectType}:{ObjectName}", objectType, objectName);
+                _logger.Information("🔍 DUAL-PROVIDER: Retrieving {ObjectType}:{ObjectName}", objectType, objectName);
 
                 // Get the Ax type
                 if (!_axTypeCache.TryGetValue(objectType, out var axType))
@@ -613,53 +623,82 @@ namespace D365MetadataService.Services
                     return null;
                 }
 
-                // Find the provider property for this object type using the same logic as creation
+                // DUAL-PROVIDER LOGIC: Try custom provider first, then standard provider
+                _logger.Information("🔄 Trying CUSTOM provider first for {ObjectType}:{ObjectName}", objectType, objectName);
+                var result = TryGetObjectFromProvider(_customMetadataProvider, "Custom", objectType, objectName, axType);
+                if (result != null)
+                {
+                    _logger.Information("✅ Found {ObjectType}:{ObjectName} in CUSTOM provider", objectType, objectName);
+                    return result;
+                }
+
+                _logger.Information("🔄 Custom provider failed, trying STANDARD provider for {ObjectType}:{ObjectName}", objectType, objectName);
+                result = TryGetObjectFromProvider(_standardMetadataProvider, "Standard", objectType, objectName, axType);
+                if (result != null)
+                {
+                    _logger.Information("✅ Found {ObjectType}:{ObjectName} in STANDARD provider", objectType, objectName);
+                    return result;
+                }
+
+                _logger.Warning("❌ Object {ObjectType}:{ObjectName} not found in either provider", objectType, objectName);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to retrieve existing object {ObjectType}:{ObjectName}", objectType, objectName);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Try to retrieve an object from a specific metadata provider
+        /// </summary>
+        private object TryGetObjectFromProvider(IMetadataProvider provider, string providerName, string objectType, string objectName, Type axType)
+        {
+            try
+            {
+                // Find the provider property for this object type
                 var providerProperty = FindProviderProperty(objectType);
                 if (providerProperty == null)
                 {
-                    _logger.Warning("Provider property not found for {ObjectType}", objectType);
+                    _logger.Debug("Provider property not found for {ObjectType} in {ProviderName}", objectType, providerName);
                     return null;
                 }
-
-                _logger.Information("Using provider property: {ProviderProperty} for {ObjectType}", providerProperty.Name, objectType);
 
                 // Access the provider collection (e.g., Item[AxTable])
-                var providerCollection = providerProperty.GetValue(_metadataProvider, new object[] { axType });
+                var providerCollection = providerProperty.GetValue(provider, new object[] { axType });
                 if (providerCollection == null)
                 {
-                    _logger.Warning("Provider collection is null for {ObjectType}", objectType);
+                    _logger.Debug("Provider collection is null for {ObjectType} in {ProviderName}", objectType, providerName);
                     return null;
                 }
 
-                // NO HARDCODING: Look for read methods dynamically
+                // Look for read methods dynamically
                 var providerType = providerCollection.GetType();
                 var readMethod = GetReadMethodDynamically(providerType);
-
                 if (readMethod == null)
                 {
-                    _logger.Warning("No Read or Get method found on provider collection for {ObjectType}", objectType);
+                    _logger.Debug("No Read method found for {ObjectType} in {ProviderName}", objectType, providerName);
                     return null;
                 }
-
-                _logger.Information("Using method {MethodName} to retrieve {ObjectType}:{ObjectName}", readMethod.Name, objectType, objectName);
 
                 // Invoke the Read/Get method
                 var result = readMethod.Invoke(providerCollection, new object[] { objectName });
                 
                 if (result != null)
                 {
-                    _logger.Information("Successfully retrieved {ObjectType}:{ObjectName}", objectType, objectName);
+                    _logger.Information("Successfully retrieved {ObjectType}:{ObjectName} from {ProviderName}", objectType, objectName, providerName);
                 }
                 else
                 {
-                    _logger.Information("Object {ObjectType}:{ObjectName} not found in metadata store", objectType, objectName);
+                    _logger.Debug("Object {ObjectType}:{ObjectName} not found in {ProviderName} metadata store", objectType, objectName, providerName);
                 }
 
                 return result;
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to retrieve existing object {ObjectType}:{ObjectName}", objectType, objectName);
+                _logger.Debug(ex, "Exception trying {ProviderName} provider for {ObjectType}:{ObjectName}", providerName, objectType, objectName);
                 return null;
             }
         }

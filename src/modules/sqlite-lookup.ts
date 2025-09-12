@@ -798,6 +798,8 @@ export class SQLiteObjectLookup {
             return [];
         }
     }
+
+
 }
 
 // Convenience functions for quick usage

@@ -135,6 +135,40 @@ export class ToolDefinitions {
           },
         },
         {
+          name: "inspect_xpp_object",
+          description: "Enhanced object inspection - Get detailed properties, children, and structure information for D365 objects. This provides deep insight into object composition, templates, and relationships.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              objectName: {
+                type: "string",
+                description: "Name of the X++ object to inspect",
+              },
+              objectType: {
+                type: "string",
+                description: "D365 object type to inspect. Common values: AxTable, AxClass, AxForm, AxEnum, AxQuery, AxView, AxEdt, AxMenu, AxReport, AxWorkflow, AxService, AxMap, etc. This parameter is required for object inspection.",
+              },
+              includeProperties: {
+                type: "boolean",
+                description: "Include detailed property information (default: true)",
+              },
+              includeChildren: {
+                type: "boolean", 
+                description: "Include child objects and collections (default: true)",
+              },
+              includeTemplateInfo: {
+                type: "boolean",
+                description: "Include template and pattern information (default: false)",
+              },
+              filterPattern: {
+                type: "string",
+                description: "Filter pattern to limit response size. Supports wildcards (*). Examples: '*Form*', 'Design', '*DataSource*', '*Method*'. Applied to property/method names to reduce response size.",
+              },
+            },
+            required: ["objectName", "objectType"],
+          },
+        },
+        {
           name: "build_object_index",
           description: "Build or update the object index for faster searches",
           inputSchema: {
