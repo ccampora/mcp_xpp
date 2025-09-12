@@ -126,7 +126,8 @@ namespace D365MetadataService.Models
         public bool CanRead { get; set; }
         public bool CanWrite { get; set; }
         public string DeclaringType { get; set; }
-        public string VS2022Label { get; set; }
+        public string Label { get; set; }
+        public string Description { get; set; }
         public string CurrentValue { get; set; }
         public List<string> PossibleValues { get; set; } = new List<string>();
     }

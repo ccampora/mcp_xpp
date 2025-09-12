@@ -411,18 +411,37 @@ export class ToolHandlers {
     return content;
   }
 
-  // Format properties mode result  
+  // Format properties mode result with enhanced descriptions
   static formatPropertiesResult(content: string, objectName: string, data: any): string {
     content += `✅ Object Properties: ${data.ObjectType} "${data.ObjectName}"\n\n`;
     
     if (data.Properties && data.Properties.length > 0) {
       content += `🔧 Properties (${data.Properties.length}):\n`;
       for (const prop of data.Properties) {
-        content += `   ${prop.Name}: ${prop.Type}`;
+        content += `   📋 ${prop.Name} (${prop.Type})`;
         if (prop.CurrentValue && prop.CurrentValue !== '<not available>') {
           content += ` = ${prop.CurrentValue}`;
         }
         content += `\n`;
+        
+        // Add description if available
+        if (prop.Description && prop.Description !== "") {
+          content += `      💭 ${prop.Description}\n`;
+        }
+        
+        // Add possible values for enums if available
+        if (prop.PossibleValues && prop.PossibleValues.length > 0) {
+          if (prop.PossibleValues.length <= 5) {
+            content += `      🎯 Values: [${prop.PossibleValues.join(', ')}]\n`;
+          } else {
+            content += `      🎯 Values: [${prop.PossibleValues.slice(0, 5).join(', ')}, ... (${prop.PossibleValues.length - 5} more)]\n`;
+          }
+        }
+        
+        // Add readonly indicator if applicable
+        if (prop.IsReadOnly === true) {
+          content += `      🔒 Read-only\n`;
+        }
       }
     } else {
       content += `No properties found.\n`;

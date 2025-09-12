@@ -36,12 +36,13 @@ namespace D365MetadataService.Services
         
         // Assembly management
         private Assembly _d365MetadataAssembly;
+        private Assembly _metaModelAssembly;
         private readonly object _assemblyLock = new();
         private bool _isInitialized = false;
-
-        // VS2022 Property Descriptions - loaded once and cached
-        private Dictionary<string, string> _vs2022PropertyDescriptions;
-        private Dictionary<string, string> _metaModelMappings;
+        
+        // Property descriptions loaded from Microsoft assemblies at startup
+        private readonly ConcurrentDictionary<string, string> _propertyDescriptions = new();
+        private readonly ConcurrentDictionary<string, string> _metaModelMappings = new();
         
         // Object factory management - singleton instance shared across all operations
         private D365ObjectFactory _objectFactory;
@@ -386,8 +387,8 @@ namespace D365MetadataService.Services
                     var supportedTypes = GetSupportedObjectTypes();
                     _logger.Information("✅ Pre-cached {Count} D365 object types", supportedTypes.Length);
                     
-                    // Load and cache VS2022 property descriptions once
-                    LoadAndCacheVS2022PropertyDescriptions();
+                    // Load property descriptions from Microsoft assemblies
+                    LoadPropertyDescriptions();
                     
                     _isInitialized = true;
                     _logger.Information("🎯 D365 Reflection Manager initialized successfully");
@@ -1008,13 +1009,14 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
-        /// COMPREHENSIVE PROPERTY DISCOVERY - Get all properties with labels and possible values
+        /// COMPREHENSIVE PROPERTY DISCOVERY - Get all properties with possible values
         /// Discovers properties from BOTH Root and Concrete types like VS2022 Properties window
-        /// Returns property names, VS2022 labels, possible enum values, and current values for instances
+        /// Returns property names, possible enum values, and current values for instances
+        /// NO FAKE DESCRIPTIONS - only real property information
         /// </summary>
         /// <param name="objectTypeName">D365 object type (e.g., "AxFormDataSourceRoot")</param>
         /// <param name="objectInstance">Optional: specific object instance to get current values</param>
-        /// <returns>Complete property information matching VS2022 Properties window</returns>
+        /// <returns>Complete property information</returns>
         public PropertyDiscoveryResult GetAllPropertiesWithLabelsAndValues(string objectTypeName, object objectInstance = null)
         {
             var result = new PropertyDiscoveryResult
@@ -1037,10 +1039,6 @@ namespace D365MetadataService.Services
                     return result;
                 }
 
-                // Use cached VS2022 property descriptions (loaded once during initialization)
-                var propertyDescriptions = _vs2022PropertyDescriptions ?? new Dictionary<string, string>();
-                var metaModelMappings = _metaModelMappings ?? new Dictionary<string, string>();
-
                 // Process each property to get complete information
                 foreach (var property in allProperties)
                 {
@@ -1054,12 +1052,16 @@ namespace D365MetadataService.Services
                         DeclaringType = property.DeclaringType?.Name
                     };
 
-                    // Get VS2022 label/description using cached data
-                    propertyDetail.VS2022Label = GetPropertyLabelFromDescriptions(
-                        property.DeclaringType?.Name, 
-                        property.Name, 
-                        propertyDescriptions, 
-                        metaModelMappings);
+                    // Get property descriptions from Microsoft assemblies
+                    var (label, description) = GetPropertyDescription(property.DeclaringType?.FullName, property.Name);
+                    if (!string.IsNullOrEmpty(label))
+                    {
+                        propertyDetail.Label = label;
+                    }
+                    if (!string.IsNullOrEmpty(description))
+                    {
+                        propertyDetail.Description = description;
+                    }
 
                     // Get possible values for enums
                     if (property.PropertyType.IsEnum)
@@ -1169,115 +1171,14 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
-        /// Load and cache VS2022 property descriptions from configuration file ONCE during initialization
-        /// </summary>
-        private void LoadAndCacheVS2022PropertyDescriptions()
-        {
-            try
-            {
-                var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config", "vs2022-property-descriptions.json");
-                
-                if (!File.Exists(configPath))
-                {
-                    _logger.Debug("VS2022 property descriptions file not found at: {Path}", configPath);
-                    _vs2022PropertyDescriptions = new Dictionary<string, string>();
-                    _metaModelMappings = new Dictionary<string, string>();
-                    return;
-                }
-
-                var jsonContent = File.ReadAllText(configPath);
-                _vs2022PropertyDescriptions = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent) ?? new Dictionary<string, string>();
-                
-                // Build MetaModel mappings once from the loaded descriptions
-                _metaModelMappings = BuildMetaModelMappings(_vs2022PropertyDescriptions);
-                
-                _logger.Information("📚 Loaded and cached {Count} VS2022 property descriptions with {MappingCount} MetaModel mappings", 
-                    _vs2022PropertyDescriptions.Count, _metaModelMappings.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to load VS2022 property descriptions, using empty collections");
-                _vs2022PropertyDescriptions = new Dictionary<string, string>();
-                _metaModelMappings = new Dictionary<string, string>();
-            }
-        }
-
-        /// <summary>
-        /// Build MetaModel path mappings from VS2022 property descriptions
-        /// </summary>
-        private Dictionary<string, string> BuildMetaModelMappings(Dictionary<string, string> propertyDescriptions)
-        {
-            var mappings = new Dictionary<string, string>();
-
-            foreach (var key in propertyDescriptions.Keys)
-            {
-                if (key.Contains("Microsoft.Dynamics.Framework.Tools.MetaModel."))
-                {
-                    var parts = key.Split('/');
-                    if (parts.Length >= 2)
-                    {
-                        var metaModelPath = parts[0].Replace("Microsoft.Dynamics.Framework.Tools.MetaModel.", "");
-                        var pathParts = metaModelPath.Split('.');
-                        
-                        if (pathParts.Length >= 2)
-                        {
-                            var objectTypeName = $"Ax{pathParts[1]}"; // e.g., Forms.FormDataSourceRoot -> AxFormDataSourceRoot
-                            
-                            if (!mappings.ContainsKey(objectTypeName))
-                            {
-                                mappings[objectTypeName] = metaModelPath;
-                            }
-                        }
-                    }
-                }
-            }
-
-            _logger.Debug("🗺️ Built {Count} MetaModel mappings", mappings.Count);
-            return mappings;
-        }
-
-        /// <summary>
-        /// Get property label from VS2022 property descriptions
-        /// </summary>
-        private string GetPropertyLabelFromDescriptions(string declaringTypeName, string propertyName, 
-            Dictionary<string, string> propertyDescriptions, Dictionary<string, string> metaModelMappings)
-        {
-            if (string.IsNullOrEmpty(declaringTypeName) || !metaModelMappings.ContainsKey(declaringTypeName))
-            {
-                return null;
-            }
-
-            var metaModelPath = metaModelMappings[declaringTypeName];
-            var descriptionKey = $"Microsoft.Dynamics.Framework.Tools.MetaModel.{metaModelPath}/{propertyName}.Description";
-            var displayNameKey = $"Microsoft.Dynamics.Framework.Tools.MetaModel.{metaModelPath}/{propertyName}.DisplayName";
-
-            // Try description first, then display name
-            if (propertyDescriptions.TryGetValue(descriptionKey, out var description) && !string.IsNullOrEmpty(description))
-            {
-                return description;
-            }
-
-            if (propertyDescriptions.TryGetValue(displayNameKey, out var displayName) && !string.IsNullOrEmpty(displayName))
-            {
-                return displayName;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Get all possible values for an enum type
+        /// Get enum values for enum properties
         /// </summary>
         private List<string> GetEnumValues(Type enumType)
         {
-            try
-            {
-                return Enum.GetNames(enumType).ToList();
-            }
-            catch
-            {
+            if (!enumType.IsEnum)
                 return new List<string>();
-            }
+            
+            return Enum.GetNames(enumType).ToList();
         }
 
         /// <summary>
@@ -1294,6 +1195,164 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
+        /// Load property descriptions from Microsoft.Dynamics.Framework.Tools.MetaModel assembly
+        /// </summary>
+        private void LoadPropertyDescriptions()
+        {
+            try
+            {
+                _logger.Information("Loading property descriptions from Microsoft assemblies...");
+                
+                // Get the MetaModel assembly that contains property descriptions
+                var metaModelAssembly = GetMetaModelAssembly();
+                
+                // Load all domain model resource files
+                var resourceNames = metaModelAssembly.GetManifestResourceNames()
+                    .Where(name => name.EndsWith("DomainModelResx.resources"))
+                    .ToArray();
+                
+                _logger.Information("Found {Count} domain model resource files", resourceNames.Length);
+                
+                int totalDescriptions = 0;
+                
+                foreach (var resourceName in resourceNames)
+                {
+                    try
+                    {
+                        using var stream = metaModelAssembly.GetManifestResourceStream(resourceName);
+                        using var resourceReader = new System.Resources.ResourceReader(stream);
+                        
+                        var enumerator = resourceReader.GetEnumerator();
+                        int resourceCount = 0;
+                        
+                        while (enumerator.MoveNext())
+                        {
+                            var key = enumerator.Key?.ToString();
+                            var value = enumerator.Value?.ToString();
+                            
+                            // Only collect DisplayName and Description entries
+                            if (!string.IsNullOrEmpty(key) && !string.IsNullOrEmpty(value) &&
+                                (key.EndsWith(".DisplayName") || key.EndsWith(".Description")))
+                            {
+                                _propertyDescriptions.TryAdd(key, value);
+                                resourceCount++;
+                            }
+                        }
+                        
+                        totalDescriptions += resourceCount;
+                        _logger.Debug("Loaded {Count} descriptions from {ResourceName}", resourceCount, resourceName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning(ex, "Failed to load resource {ResourceName}", resourceName);
+                    }
+                }
+                
+                // Build MetaModel mappings
+                BuildMetaModelMappings();
+                
+                _logger.Information("✅ Loaded {Count} property descriptions with {MappingCount} type mappings", 
+                    totalDescriptions, _metaModelMappings.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to load property descriptions");
+            }
+        }
+
+        /// <summary>
+        /// Get the MetaModel assembly that contains property descriptions
+        /// </summary>
+        private Assembly GetMetaModelAssembly()
+        {
+            if (_metaModelAssembly != null)
+                return _metaModelAssembly;
+                
+            lock (_assemblyLock)
+            {
+                if (_metaModelAssembly != null)
+                    return _metaModelAssembly;
+                
+                // Load from the same location as D365 metadata assembly
+                var d365Assembly = GetD365MetadataAssembly();
+                var assemblyLocation = Path.GetDirectoryName(d365Assembly.Location);
+                var metaModelPath = Path.Combine(assemblyLocation, "Microsoft.Dynamics.Framework.Tools.MetaModel.17.0.dll");
+                
+                if (!File.Exists(metaModelPath))
+                {
+                    throw new FileNotFoundException($"MetaModel assembly not found at: {metaModelPath}");
+                }
+                
+                _metaModelAssembly = Assembly.LoadFrom(metaModelPath);
+                _logger.Information("Loaded MetaModel assembly: {AssemblyName}", _metaModelAssembly.FullName);
+                
+                return _metaModelAssembly;
+            }
+        }
+
+        /// <summary>
+        /// Build mappings from D365 types to MetaModel resource paths
+        /// </summary>
+        private void BuildMetaModelMappings()
+        {
+            // Extract mappings from the loaded property description keys
+            var mappings = new Dictionary<string, string>();
+            
+            foreach (var key in _propertyDescriptions.Keys)
+            {
+                if (key.StartsWith("Microsoft.Dynamics.Framework.Tools.MetaModel."))
+                {
+                    var parts = key.Split('/');
+                    if (parts.Length >= 2)
+                    {
+                        var metaModelPath = parts[0].Replace("Microsoft.Dynamics.Framework.Tools.MetaModel.", "");
+                        var pathParts = metaModelPath.Split('.');
+                        
+                        if (pathParts.Length >= 2)
+                        {
+                            var baseTypeName = pathParts[1]; // e.g., "Table" from "Tables.Table"
+                            
+                            // Map D365 types to MetaModel paths
+                            var axTypeName = $"Ax{baseTypeName}";
+                            mappings[axTypeName] = metaModelPath;
+                            mappings[baseTypeName] = metaModelPath;
+                            
+                            // Full type names
+                            var fullAxTypeName = $"Microsoft.Dynamics.AX.Metadata.MetaModel.Ax{baseTypeName}";
+                            mappings[fullAxTypeName] = metaModelPath;
+                        }
+                    }
+                }
+            }
+            
+            foreach (var mapping in mappings)
+            {
+                _metaModelMappings.TryAdd(mapping.Key, mapping.Value);
+            }
+            
+            _logger.Information("Built {Count} MetaModel type mappings", _metaModelMappings.Count);
+        }
+
+        /// <summary>
+        /// Get property label and description from loaded property descriptions
+        /// </summary>
+        private (string Label, string Description) GetPropertyDescription(string declaringTypeName, string propertyName)
+        {
+            if (string.IsNullOrEmpty(declaringTypeName) || !_metaModelMappings.TryGetValue(declaringTypeName, out var metaModelPath))
+            {
+                return (null, null);
+            }
+
+            var displayNameKey = $"Microsoft.Dynamics.Framework.Tools.MetaModel.{metaModelPath}/{propertyName}.DisplayName";
+            var descriptionKey = $"Microsoft.Dynamics.Framework.Tools.MetaModel.{metaModelPath}/{propertyName}.Description";
+
+            _propertyDescriptions.TryGetValue(displayNameKey, out var displayName);
+            _propertyDescriptions.TryGetValue(descriptionKey, out var description);
+
+            return (displayName, description);
+        }
+
+        /// <summary>
         /// Clear all caches - useful for testing or when assemblies change
         /// </summary>
         public void ClearCaches()
@@ -1302,9 +1361,9 @@ namespace D365MetadataService.Services
             _methodCache.Clear();
             _propertyCache.Clear();
             _supportedTypesCache.Clear();
-            _vs2022PropertyDescriptions?.Clear();
-            _metaModelMappings?.Clear();
-            _logger.Information("🧹 Cleared all reflection caches including VS2022 property descriptions");
+            _propertyDescriptions.Clear();
+            _metaModelMappings.Clear();
+            _logger.Information("🧹 Cleared all reflection caches");
         }
 
         #endregion

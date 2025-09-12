@@ -149,7 +149,7 @@ namespace D365MetadataService.Handlers
                     Found = true,
                     ObjectLoaded = objectLoaded,
                     Properties = includeProperties ? InspectPropertiesWithValues(axType, actualObject, propertyDetail) : new List<object>(),
-                    Collections = includeChildren ? InspectCollectionsDynamically(axType, actualObject) : new Dictionary<string, object>(),
+                    Collections = includeChildren ? InspectCollections(axType, actualObject) : new Dictionary<string, object>(),
                     Structure = InspectTypeStructure(axType),
                     Metadata = InspectTypeMetadata(axType, objectName),
                     ReflectionInfo = new
@@ -180,7 +180,7 @@ namespace D365MetadataService.Handlers
             }
         }
 
-        private List<object> InspectPropertiesWithValues(Type type, object objectInstance, string propertyDetail = "full")
+        private List<object> InspectPropertiesWithValues(Type type, object objectInstance, string propertyDetail = "detailed")
         {
             var properties = new List<object>();
             
@@ -191,6 +191,27 @@ namespace D365MetadataService.Handlers
                     .ToArray();
 
                 Logger.Debug("Found {Count} non-collection properties for {TypeName}", propertyInfos.Length, type.Name);
+
+                // PERFORMANCE OPTIMIZATION: Get all property labels and descriptions in ONE call
+                // instead of calling GetAllPropertiesWithLabelsAndValues for each property
+                var allPropertyDetails = _reflectionManager.GetAllPropertiesWithLabelsAndValues(type.Name);
+                Dictionary<string, (string Label, string Description)> propertyLabelDescCache = new();
+                
+                if (allPropertyDetails.Success && allPropertyDetails.Properties != null)
+                {
+                    // Cache all property labels and descriptions for fast lookup
+                    foreach (var propDetail in allPropertyDetails.Properties)
+                    {
+                        propertyLabelDescCache[propDetail.Name] = (propDetail.Label, propDetail.Description);
+                    }
+                    Logger.Debug("✅ Cached labels and descriptions for {Count} properties from single VS2022 lookup", 
+                        propertyLabelDescCache.Count);
+                }
+                else
+                {
+                    Logger.Warning("❌ Failed to get property details for {TypeName}: {Error}", 
+                        type.Name, allPropertyDetails.Error ?? "Unknown error");
+                }
 
                 foreach (var prop in propertyInfos)
                 {
@@ -213,86 +234,77 @@ namespace D365MetadataService.Handlers
                         }
                     }
 
-                    // Create property info based on detail level
-                    object propInfo;
-                    if (propertyDetail == "simple")
+                    // For enum properties, discover all possible values
+                    var possibleValues = new List<string>();
+                    bool isEnum = false;
+                    
+                    if (prop.PropertyType.IsEnum)
                     {
-                        // Simple property info - only Name, Type, and CurrentValue
-                        // COMPROMISE: For enum properties, always include possible values even in simple mode
-                        var possibleValues = GetEnumPossibleValues(prop);
-                        
-                        propInfo = new
+                        isEnum = true;
+                        try
                         {
-                            Name = prop.Name,
-                            Type = prop.PropertyType.Name,
-                            CurrentValue = currentValueString,
-                            PossibleValues = possibleValues?.Any() == true ? possibleValues : null
-                        };
+                            possibleValues = Enum.GetNames(prop.PropertyType).ToList();
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warning(ex, "Failed to get enum values for property {PropertyName} of type {PropertyType}", prop.Name, prop.PropertyType.Name);
+                        }
                     }
+                    // Check if it's a nullable enum
+                    else if (prop.PropertyType.IsGenericType && 
+                             prop.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>) &&
+                             prop.PropertyType.GetGenericArguments()[0].IsEnum)
+                    {
+                        isEnum = true;
+                        try
+                        {
+                            var enumType = prop.PropertyType.GetGenericArguments()[0];
+                            possibleValues = Enum.GetNames(enumType).ToList();
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warning(ex, "Failed to get nullable enum values for property {PropertyName}", prop.Name);
+                        }
+                    }
+                    // SPECIAL CASE: For D365 enum properties, try to get the actual enum values
                     else
                     {
-                        // Full property info - includes all details for comprehensive analysis
-                        // For enum properties, discover all possible values
-                        var possibleValues = new List<string>();
-                        bool isEnum = false;
-                        
-                        if (prop.PropertyType.IsEnum)
+                        var d365EnumValues = GetEnumPossibleValues(prop);
+                        if (d365EnumValues?.Any() == true)
                         {
+                            possibleValues = d365EnumValues;
                             isEnum = true;
-                            try
-                            {
-                                possibleValues = Enum.GetNames(prop.PropertyType).ToList();
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Warning(ex, "Failed to get enum values for property {PropertyName} of type {PropertyType}", prop.Name, prop.PropertyType.Name);
-                            }
                         }
-                        // Check if it's a nullable enum
-                        else if (prop.PropertyType.IsGenericType && 
-                                 prop.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>) &&
-                                 prop.PropertyType.GetGenericArguments()[0].IsEnum)
-                        {
-                            isEnum = true;
-                            try
-                            {
-                                var enumType = prop.PropertyType.GetGenericArguments()[0];
-                                possibleValues = Enum.GetNames(enumType).ToList();
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Warning(ex, "Failed to get nullable enum values for property {PropertyName}", prop.Name);
-                            }
-                        }
-                        // SPECIAL CASE: For D365 enum properties, try to get the actual enum values
-                        else
-                        {
-                            var d365EnumValues = GetEnumPossibleValues(prop);
-                            if (d365EnumValues?.Any() == true)
-                            {
-                                possibleValues = d365EnumValues;
-                                isEnum = true;
-                            }
-                        }
-
-                        propInfo = new
-                        {
-                            Name = prop.Name,
-                            Type = prop.PropertyType.Name,
-                            FullType = prop.PropertyType.FullName,
-                            CurrentValue = currentValueString,
-                            ValueRetrieved = valueRetrieved,
-                            Description = GetPropertyDescription(prop, type.Name),
-                            IsEnum = isEnum,
-                            PossibleValues = possibleValues.Any() ? possibleValues : null,
-                            IsReadOnly = !prop.CanWrite,
-                            HasSetter = prop.CanWrite,
-                            HasGetter = prop.CanRead,
-                            IsCollection = IsCollectionType(prop.PropertyType),
-                            IsNullable = IsNullableType(prop.PropertyType),
-                            DefaultValue = GetDefaultValue(prop.PropertyType)
-                        };
                     }
+
+                    var (label, description) = GetPropertyLabelAndDescriptionFromCache(prop, propertyLabelDescCache);
+                    
+                    // DEBUG: Log description retrieval for first few properties to verify Label vs Description are different
+                    if (properties.Count < 5)
+                    {
+                        Logger.Information("🔍 Property '{PropertyName}' label: '{Label}', description: '{Description}'", 
+                            prop.Name, label ?? "(null)", description ?? "(null)");
+                    }
+
+                    var propInfo = new
+                    {
+                        Name = prop.Name,
+                        Type = prop.PropertyType.Name,
+                        FullType = prop.PropertyType.FullName,
+                        CurrentValue = currentValueString,
+                        ValueRetrieved = valueRetrieved,
+                        Label = label,
+                        Description = description,
+                        IsEnum = isEnum,
+                        PossibleValues = possibleValues.Any() ? possibleValues : null,
+                        IsReadOnly = !prop.CanWrite,
+                        HasSetter = prop.CanWrite,
+                        HasGetter = prop.CanRead,
+                        IsCollection = IsCollectionType(prop.PropertyType),
+                        IsNullable = IsNullableType(prop.PropertyType),
+                        DefaultValue = GetDefaultValue(prop.PropertyType)
+                    };
+                    
                     properties.Add(propInfo);
                 }
             }
@@ -312,14 +324,29 @@ namespace D365MetadataService.Handlers
             {
                 var propertyInfos = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
+                // PERFORMANCE OPTIMIZATION: Get all property descriptions in ONE call
+                var allPropertyDetails = _reflectionManager.GetAllPropertiesWithLabelsAndValues(type.Name);
+                Dictionary<string, (string Label, string Description)> propertyLabelDescCache = new();
+                
+                if (allPropertyDetails.Success && allPropertyDetails.Properties != null)
+                {
+                    // Cache all property labels and descriptions for fast lookup
+                    foreach (var propDetail in allPropertyDetails.Properties)
+                    {
+                        propertyLabelDescCache[propDetail.Name] = (propDetail.Label, propDetail.Description);
+                    }
+                }
+
                 foreach (var prop in propertyInfos)
                 {
+                    var (_, description) = GetPropertyLabelAndDescriptionFromCache(prop, propertyLabelDescCache);
+                    
                     var propInfo = new
                     {
                         Name = prop.Name,
                         Type = prop.PropertyType.Name,
                         FullType = prop.PropertyType.FullName,
-                        Description = GetPropertyDescription(prop, type.Name),
+                        Description = description,
                         IsReadOnly = !prop.CanWrite,
                         HasSetter = prop.CanWrite,
                         HasGetter = prop.CanRead,
@@ -373,7 +400,7 @@ namespace D365MetadataService.Handlers
             }
         }
 
-        private object InspectCollectionsDynamically(Type type, object objectInstance)
+        private object InspectCollections(Type type, object objectInstance)
         {
             var collections = new Dictionary<string, object>();
             
@@ -381,7 +408,6 @@ namespace D365MetadataService.Handlers
             {
                 Logger.Information("🔍 Dynamic collection discovery for {TypeName}", type.Name);
 
-                // Discover ALL collection properties dynamically - NO HARDCODING
                 var collectionProperties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                     .Where(p => IsCollectionType(p.PropertyType))
                     .ToArray();
@@ -466,6 +492,13 @@ namespace D365MetadataService.Handlers
             return "Unknown";
         }
 
+        /// <summary>
+        /// Helper method to get collection item names with optional limits
+        /// </summary>
+        /// <param name="collectionProp">The collection property to inspect</param>
+        /// <param name="objectInstance">The object instance containing the collection</param>
+        /// <param name="maxItems">Maximum number of items to return. If null, no limits are applied.</param>
+        /// <returns>List of collection item names</returns>
         private List<string> GetCollectionItemNames(PropertyInfo collectionProp, object objectInstance)
         {
             var itemNames = new List<string>();
@@ -489,18 +522,12 @@ namespace D365MetadataService.Handlers
                     return itemNames;
                 }
 
-                // Safely iterate through collection items with limits
+                // Iterate through collection items with optional limits
                 if (collection is System.Collections.IEnumerable enumerable)
                 {
                     var count = 0;
                     foreach (var item in enumerable)
                     {
-                        if (count >= MAX_COLLECTION_ITEMS)
-                        {
-                            itemNames.Add($"... and more items (showing first {MAX_COLLECTION_ITEMS})");
-                            break;
-                        }
-
                         try
                         {
                             // Extract the name/identifier from each collection item
@@ -572,86 +599,6 @@ namespace D365MetadataService.Handlers
                 Logger.Debug(ex, "Error extracting identifier from item");
                 return $"<error: {ex.Message.Substring(0, Math.Min(30, ex.Message.Length))}>";
             }
-        }
-
-        private List<object> GetCollectionItemsDynamically(PropertyInfo collectionProp, object objectInstance)
-        {
-            var items = new List<object>();
-            
-            try
-            {
-                if (objectInstance == null || !collectionProp.CanRead)
-                    return items;
-
-                // Check for circular reference before accessing collection
-                if (IsCircularReference(objectInstance))
-                {
-                    Logger.Warning("Circular reference detected for collection {PropertyName}, skipping", collectionProp.Name);
-                    return new List<object> { new { Summary = "Circular reference detected - collection skipped for safety" } };
-                }
-
-                var collection = collectionProp.GetValue(objectInstance);
-                if (collection == null)
-                    return items;
-
-                // Track this object to prevent circular references
-                _visitedObjects.Value.Add(objectInstance);
-                _recursionDepth.Value++;
-
-                try
-                {
-                    // Safely iterate through collection items with limits
-                    if (collection is System.Collections.IEnumerable enumerable)
-                    {
-                        var count = 0;
-                        foreach (var item in enumerable)
-                        {
-                            if (count >= MAX_COLLECTION_ITEMS)
-                            {
-                                items.Add(new { Summary = $"... and more items (showing first {MAX_COLLECTION_ITEMS} for safety)" });
-                                break;
-                            }
-
-                            try
-                            {
-                                // Extract basic info from each collection item safely
-                                var itemInfo = ExtractCollectionItemInfoSafely(item);
-                                items.Add(itemInfo);
-                                count++;
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Debug(ex, "Error extracting info from collection item {Count}", count);
-                                items.Add(new { 
-                                    Type = item?.GetType().Name ?? "null", 
-                                    Error = "Error accessing item: " + ex.Message.Substring(0, Math.Min(50, ex.Message.Length)),
-                                    Summary = "Error accessing item"
-                                });
-                            }
-
-                            // Safety check for recursion depth
-                            if (_recursionDepth.Value > MAX_RECURSION_DEPTH)
-                            {
-                                items.Add(new { Summary = "Maximum recursion depth reached - stopping for safety" });
-                                break;
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    // Always clean up tracking
-                    _visitedObjects.Value.Remove(objectInstance);
-                    _recursionDepth.Value--;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Warning(ex, "Error getting collection items for {PropertyName}", collectionProp.Name);
-                items.Add(new { Summary = "Error accessing collection: " + ex.Message.Substring(0, Math.Min(50, ex.Message.Length)) });
-            }
-
-            return items;
         }
 
         private bool IsCircularReference(object obj)
@@ -890,75 +837,136 @@ namespace D365MetadataService.Handlers
         }
 
         /// <summary>
-        /// Extract property description using reflection from attributes and VS2022 MetaModel labels
+        /// Get both property label and description from pre-fetched cache for optimal performance
+        /// Returns tuple with (Label, Description)
         /// </summary>
-        private string GetPropertyDescription(PropertyInfo prop, string objectTypeName)
+        private (string Label, string Description) GetPropertyLabelAndDescriptionFromCache(PropertyInfo prop, 
+            Dictionary<string, (string Label, string Description)> cache)
+        {
+            // Try to get from cache first
+            if (cache.TryGetValue(prop.Name, out var cachedResult))
+            {
+                return cachedResult;
+            }
+
+            // Fallback to original method if not in cache
+            return GetPropertyLabelAndDescription(prop, "Unknown");
+        }
+
+        /// <summary>
+        /// Get both property label and description with a single VS2022 lookup for efficiency
+        /// Returns tuple with (Label, Description)
+        /// </summary>
+        private (string Label, string Description) GetPropertyLabelAndDescription(PropertyInfo prop, string objectTypeName)
         {
             try
             {
-                // First try to get VS2022 MetaModel label for this property using comprehensive discovery
+                var declaringTypeName = prop.DeclaringType?.Name;
+                var declaringTypeFullName = prop.DeclaringType?.FullName;
+                
+                Logger.Debug("🔍 Getting label and description for property '{PropertyName}' declared in type '{DeclaringType}' (full: '{FullType}') for object '{ObjectType}'", 
+                    prop.Name, declaringTypeName, declaringTypeFullName, objectTypeName);
+
+                // Single VS2022 MetaModel lookup for both label and description
                 var propertyDiscovery = _reflectionManager.GetAllPropertiesWithLabelsAndValues(objectTypeName);
                 if (propertyDiscovery.Success)
                 {
                     var propertyDetail = propertyDiscovery.Properties.FirstOrDefault(p => p.Name == prop.Name);
-                    if (!string.IsNullOrEmpty(propertyDetail?.VS2022Label))
+                    if (propertyDetail != null)
                     {
-                        return propertyDetail.VS2022Label;
+                        var label = propertyDetail.Label;
+                        var description = propertyDetail.Description;
+
+                        Logger.Debug("✅ Found property data for {PropertyName}: Label='{Label}', Description='{Description}'", 
+                            prop.Name, label ?? "(null)", description ?? "(null)");
+
+                        // Return both values from single lookup
+                        return (label, description);
+                    }
+                    else
+                    {
+                        Logger.Debug("❌ No property detail found for {PropertyName} in {ObjectType} (checked {Count} properties)", 
+                            prop.Name, objectTypeName, propertyDiscovery.Properties.Count);
                     }
                 }
+                else
+                {
+                    Logger.Warning("❌ Property discovery failed for {ObjectType}: {Error}", objectTypeName, propertyDiscovery.Error);
+                }
 
-                // Fallback to reflection-based attribute scanning
+                // Fallback to reflection-based attribute scanning for both label and description
+                string fallbackLabel = null;
+                string fallbackDescription = null;
+
                 // Check for Description attribute
                 var descriptionAttribute = prop.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>();
                 if (descriptionAttribute != null && !string.IsNullOrEmpty(descriptionAttribute.Description))
                 {
-                    return descriptionAttribute.Description;
+                    fallbackDescription = descriptionAttribute.Description;
                 }
 
-                // Check for DisplayName attribute
+                // Check for DisplayName attribute  
                 var displayNameAttribute = prop.GetCustomAttribute<System.ComponentModel.DisplayNameAttribute>();
                 if (displayNameAttribute != null && !string.IsNullOrEmpty(displayNameAttribute.DisplayName))
                 {
-                    return displayNameAttribute.DisplayName;
+                    fallbackLabel = displayNameAttribute.DisplayName;
+                    // If no description found, use DisplayName as fallback description too
+                    if (string.IsNullOrEmpty(fallbackDescription))
+                    {
+                        fallbackDescription = displayNameAttribute.DisplayName;
+                    }
                 }
 
                 // Check for Display attribute (DataAnnotations)
                 var displayAttribute = prop.GetCustomAttribute<System.ComponentModel.DataAnnotations.DisplayAttribute>();
                 if (displayAttribute != null)
                 {
-                    if (!string.IsNullOrEmpty(displayAttribute.Description))
-                        return displayAttribute.Description;
-                    if (!string.IsNullOrEmpty(displayAttribute.Name))
-                        return displayAttribute.Name;
-                }
-
-                // Look through all custom attributes for any that might have description-like properties
-                var customAttributes = prop.GetCustomAttributes(false);
-                foreach (var attr in customAttributes)
-                {
-                    var attrType = attr.GetType();
-                    
-                    // Check for properties that might contain descriptions
-                    foreach (var propName in new[] { "Description", "Summary", "Help", "Tooltip", "Label" })
+                    if (string.IsNullOrEmpty(fallbackLabel) && !string.IsNullOrEmpty(displayAttribute.Name))
                     {
-                        var descProp = attrType.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
-                        if (descProp != null && descProp.PropertyType == typeof(string))
-                        {
-                            var value = descProp.GetValue(attr) as string;
-                            if (!string.IsNullOrEmpty(value))
-                            {
-                                return value;
-                            }
-                        }
+                        fallbackLabel = displayAttribute.Name;
+                    }
+                    if (string.IsNullOrEmpty(fallbackDescription) && !string.IsNullOrEmpty(displayAttribute.Description))
+                    {
+                        fallbackDescription = displayAttribute.Description;
+                    }
+                    if (string.IsNullOrEmpty(fallbackDescription) && !string.IsNullOrEmpty(displayAttribute.Name))
+                    {
+                        fallbackDescription = displayAttribute.Name;
                     }
                 }
 
-                return null; // No description found
+                // Look through all custom attributes for description-like properties as final fallback
+                if (string.IsNullOrEmpty(fallbackDescription))
+                {
+                    var customAttributes = prop.GetCustomAttributes(false);
+                    foreach (var attr in customAttributes)
+                    {
+                        var attrType = attr.GetType();
+                        
+                        // Check for properties that might contain descriptions
+                        foreach (var propName in new[] { "Description", "Summary", "Help", "Tooltip", "Label" })
+                        {
+                            var descProp = attrType.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
+                            if (descProp != null && descProp.PropertyType == typeof(string))
+                            {
+                                var value = descProp.GetValue(attr) as string;
+                                if (!string.IsNullOrEmpty(value))
+                                {
+                                    fallbackDescription = value;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!string.IsNullOrEmpty(fallbackDescription)) break;
+                    }
+                }
+
+                return (fallbackLabel, fallbackDescription);
             }
             catch (Exception ex)
             {
-                Logger.Warning(ex, "Error getting description for property {PropertyName}", prop.Name);
-                return null;
+                Logger.Warning(ex, "Error getting label and description for property {PropertyName}", prop.Name);
+                return (null, null);
             }
         }
 
@@ -1389,10 +1397,9 @@ namespace D365MetadataService.Handlers
                     });
                 }
 
-                // Get the collection with full details - NO LIMITS
                 var collection = collectionProperty.GetValue(actualObject);
                 var itemType = GetCollectionItemTypeName(collection);
-                var itemNames = GetCollectionItemNamesWithoutLimits(collectionProperty, actualObject);
+                var itemNames = GetCollectionItemNames(collectionProperty, actualObject);
 
                 return Task.FromResult<object>(new
                 {
@@ -1420,62 +1427,6 @@ namespace D365MetadataService.Handlers
                     Error = ex.Message
                 });
             }
-        }
-
-        /// <summary>
-        /// Helper method to get collection item names WITHOUT limits
-        /// </summary>
-        private List<string> GetCollectionItemNamesWithoutLimits(PropertyInfo collectionProp, object objectInstance)
-        {
-            var itemNames = new List<string>();
-            
-            try
-            {
-                if (objectInstance == null || !collectionProp.CanRead)
-                    return itemNames;
-
-                var collection = collectionProp.GetValue(objectInstance);
-                if (collection == null)
-                    return itemNames;
-
-                // Special handling for string properties
-                if (collection is string stringValue)
-                {
-                    if (!string.IsNullOrEmpty(stringValue))
-                    {
-                        itemNames.Add(stringValue);
-                    }
-                    return itemNames;
-                }
-
-                // Iterate through collection items WITHOUT limits
-                if (collection is System.Collections.IEnumerable enumerable)
-                {
-                    foreach (var item in enumerable)
-                    {
-                        try
-                        {
-                            var itemName = ExtractItemIdentifier(item);
-                            if (!string.IsNullOrEmpty(itemName))
-                            {
-                                itemNames.Add(itemName);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Debug(ex, "Error extracting name from collection item");
-                            itemNames.Add($"<error accessing item: {ex.Message}>");
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Warning(ex, "Error getting collection item names for {PropertyName}", collectionProp.Name);
-                itemNames.Add($"<error: {ex.Message}>");
-            }
-
-            return itemNames;
         }
 
         /// <summary>
