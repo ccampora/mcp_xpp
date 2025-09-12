@@ -1110,6 +1110,455 @@ namespace D365MetadataService.Handlers
             return utilityProperties.Contains(propertyName);
         }
 
+        /// <summary>
+        /// Get summary information about an object - counts only, no detailed content
+        /// This is the new default inspection mode for better performance
+        /// </summary>
+        public async Task<object> GetObjectSummaryAsync(string objectName, string objectType)
+        {
+            try
+            {
+                Logger.Information("Getting summary for {ObjectType} '{ObjectName}'", objectType, objectName);
+
+                // Get the D365 type from reflection manager
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                {
+                    return new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Found = false,
+                        Error = $"Object type '{objectType}' not found"
+                    };
+                }
+
+                // Load the object instance using existing pattern
+                object actualObject = null;
+                bool objectLoaded = false;
+                D365ObjectFactory objectFactory = null;
+                
+                try
+                {
+                    objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                    if (objectFactory != null)
+                    {
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                        objectLoaded = actualObject != null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "Failed to load object instance for summary");
+                }
+
+                if (!objectLoaded)
+                {
+                    return new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Found = false,
+                        Error = $"Object '{objectName}' of type '{objectType}' not found"
+                    };
+                }
+
+                // Get property counts - separate Properties (non-collections) from Collections
+                var allProperties = axType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.CanRead)
+                    .ToList();
+
+                var nonCollectionProperties = allProperties
+                    .Where(p => !IsCollectionType(p.PropertyType))
+                    .ToList();
+
+                var collectionProperties = allProperties
+                    .Where(p => IsCollectionType(p.PropertyType))
+                    .ToList();
+
+                // Get collection summaries with counts
+                var collectionSummaries = new Dictionary<string, object>();
+                foreach (var collectionProp in collectionProperties)
+                {
+                    try
+                    {
+                        var collection = collectionProp.GetValue(actualObject);
+                        var count = GetCollectionCount(collection);
+                        var itemType = GetCollectionItemTypeName(collection);
+
+                        collectionSummaries[collectionProp.Name] = new
+                        {
+                            ItemType = itemType,
+                            Count = count,
+                            Available = count > 0
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning(ex, "Error getting collection summary for {PropertyName}", collectionProp.Name);
+                        collectionSummaries[collectionProp.Name] = new
+                        {
+                            ItemType = "Unknown",
+                            Count = 0,
+                            Available = false,
+                            Error = ex.Message
+                        };
+                    }
+                }
+
+                return new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = true,
+                    ObjectLoaded = objectLoaded,
+                    Summary = new
+                    {
+                        PropertiesCount = nonCollectionProperties.Count,
+                        CollectionsCount = collectionProperties.Count,
+                        TotalCollectionItems = collectionSummaries.Values
+                            .Where(c => ((dynamic)c).Count is int count)
+                            .Sum(c => ((dynamic)c).Count)
+                    },
+                    Properties = new
+                    {
+                        Count = nonCollectionProperties.Count,
+                        Available = true
+                    },
+                    Collections = collectionSummaries
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error getting object summary for {ObjectType} '{ObjectName}'", objectType, objectName);
+                return new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = false,
+                    Error = ex.Message
+                };
+            }
+        }
+
+        /// <summary>
+        /// Get only the Properties section for an object - all non-collection properties
+        /// </summary>
+        public Task<object> GetObjectPropertiesAsync(string objectName, string objectType)
+        {
+            try
+            {
+                Logger.Information("Getting properties for {ObjectType} '{ObjectName}'", objectType, objectName);
+
+                // Get the D365 type from reflection manager
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Found = false,
+                        Error = $"Object type '{objectType}' not found"
+                    });
+                }
+
+                // Load the object instance using existing pattern
+                object actualObject = null;
+                bool objectLoaded = false;
+                D365ObjectFactory objectFactory = null;
+                
+                try
+                {
+                    objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                    if (objectFactory != null)
+                    {
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                        objectLoaded = actualObject != null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "Failed to load object instance for properties");
+                }
+
+                if (!objectLoaded)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Found = false,
+                        Error = $"Object '{objectName}' of type '{objectType}' not found"
+                    });
+                }
+
+                // Get properties using existing logic from InspectPropertiesWithValues
+                var properties = InspectPropertiesWithValues(axType, actualObject, "full");
+
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = true,
+                    ObjectLoaded = objectLoaded,
+                    Properties = properties
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error getting properties for {ObjectType} '{ObjectName}'", objectType, objectName);
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = false,
+                    Error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get a specific collection by name for an object - full details without limits
+        /// </summary>
+        public Task<object> GetObjectCollectionAsync(string objectName, string objectType, string collectionName)
+        {
+            try
+            {
+                Logger.Information("Getting collection '{CollectionName}' for {ObjectType} '{ObjectName}'", collectionName, objectType, objectName);
+
+                // Get the D365 type from reflection manager
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        CollectionName = collectionName,
+                        Found = false,
+                        Error = $"Object type '{objectType}' not found"
+                    });
+                }
+
+                // Load the object instance using existing pattern
+                object actualObject = null;
+                bool objectLoaded = false;
+                D365ObjectFactory objectFactory = null;
+                
+                try
+                {
+                    objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                    if (objectFactory != null)
+                    {
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                        objectLoaded = actualObject != null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "Failed to load object instance for collection");
+                }
+
+                if (!objectLoaded)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        CollectionName = collectionName,
+                        Found = false,
+                        Error = $"Object '{objectName}' of type '{objectType}' not found"
+                    });
+                }
+
+                // Find the specific collection property
+                var collectionProperty = axType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.CanRead && IsCollectionType(p.PropertyType))
+                    .FirstOrDefault(p => p.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase));
+
+                if (collectionProperty == null)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        CollectionName = collectionName,
+                        Found = false,
+                        Error = $"Collection '{collectionName}' not found on object type '{objectType}'"
+                    });
+                }
+
+                // Get the collection with full details - NO LIMITS
+                var collection = collectionProperty.GetValue(actualObject);
+                var itemType = GetCollectionItemTypeName(collection);
+                var itemNames = GetCollectionItemNamesWithoutLimits(collectionProperty, actualObject);
+
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    CollectionName = collectionProperty.Name,
+                    Found = true,
+                    Collection = new
+                    {
+                        ItemType = itemType,
+                        Count = itemNames.Count,
+                        Items = itemNames
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error getting collection '{CollectionName}' for {ObjectType} '{ObjectName}'", collectionName, objectType, objectName);
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    CollectionName = collectionName,
+                    Found = false,
+                    Error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Helper method to get collection item names WITHOUT limits
+        /// </summary>
+        private List<string> GetCollectionItemNamesWithoutLimits(PropertyInfo collectionProp, object objectInstance)
+        {
+            var itemNames = new List<string>();
+            
+            try
+            {
+                if (objectInstance == null || !collectionProp.CanRead)
+                    return itemNames;
+
+                var collection = collectionProp.GetValue(objectInstance);
+                if (collection == null)
+                    return itemNames;
+
+                // Special handling for string properties
+                if (collection is string stringValue)
+                {
+                    if (!string.IsNullOrEmpty(stringValue))
+                    {
+                        itemNames.Add(stringValue);
+                    }
+                    return itemNames;
+                }
+
+                // Iterate through collection items WITHOUT limits
+                if (collection is System.Collections.IEnumerable enumerable)
+                {
+                    foreach (var item in enumerable)
+                    {
+                        try
+                        {
+                            var itemName = ExtractItemIdentifier(item);
+                            if (!string.IsNullOrEmpty(itemName))
+                            {
+                                itemNames.Add(itemName);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Debug(ex, "Error extracting name from collection item");
+                            itemNames.Add($"<error accessing item: {ex.Message}>");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning(ex, "Error getting collection item names for {PropertyName}", collectionProp.Name);
+                itemNames.Add($"<error: {ex.Message}>");
+            }
+
+            return itemNames;
+        }
+
+        /// <summary>
+        /// Helper method to get collection count
+        /// </summary>
+        private int GetCollectionCount(object collection)
+        {
+            if (collection == null) return 0;
+
+            // Handle string specially
+            if (collection is string str)
+            {
+                return string.IsNullOrEmpty(str) ? 0 : 1;
+            }
+
+            // Handle ICollection<T>
+            if (collection is System.Collections.ICollection genericCollection)
+            {
+                return genericCollection.Count;
+            }
+
+            // Handle IEnumerable by counting
+            if (collection is System.Collections.IEnumerable enumerable)
+            {
+                var count = 0;
+                foreach (var item in enumerable)
+                {
+                    count++;
+                }
+                return count;
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// Helper method to get collection item type name from the collection instance
+        /// </summary>
+        private string GetCollectionItemTypeName(object collection)
+        {
+            if (collection == null)
+                return "Unknown";
+
+            // Handle string specially
+            if (collection is string)
+                return "String";
+
+            try
+            {
+                var collectionType = collection.GetType();
+                
+                // Check if it's a generic collection
+                if (collectionType.IsGenericType)
+                {
+                    var genericArgs = collectionType.GetGenericArguments();
+                    if (genericArgs.Length > 0)
+                    {
+                        return genericArgs[0].Name;
+                    }
+                }
+
+                // For non-generic collections, try to get type from first item
+                if (collection is System.Collections.IEnumerable enumerable)
+                {
+                    foreach (var item in enumerable)
+                    {
+                        if (item != null)
+                        {
+                            return item.GetType().Name;
+                        }
+                        break; // Only check first item
+                    }
+                }
+
+                // Fallback to collection type name
+                return collectionType.Name.Replace("Collection", "").Replace("List", "").Replace("`1", "");
+            }
+            catch
+            {
+                return "Unknown";
+            }
+        }
+
 
     }
 }

@@ -116,6 +116,11 @@ namespace D365MetadataService
             services.AddSingleton<IRequestHandler, DiscoverAvailableTypesHandler>();
             services.AddSingleton<IRequestHandler, ExecuteObjectModificationHandler>();
             services.AddSingleton<IRequestHandler, InspectObjectHandler>();
+            
+            // Register summary-first inspection handlers (new architecture)
+            services.AddSingleton<IRequestHandler, ObjectSummaryHandler>();
+            services.AddSingleton<IRequestHandler, ObjectPropertiesHandler>();
+            services.AddSingleton<IRequestHandler, ObjectCollectionHandler>();
 
             // Register handler factory
             services.AddSingleton<RequestHandlerFactory>();

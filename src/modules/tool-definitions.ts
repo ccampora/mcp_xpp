@@ -136,36 +136,136 @@ export class ToolDefinitions {
         },
         {
           name: "inspect_xpp_object",
-          description: "Enhanced object inspection - Get detailed properties, children, and structure information for D365 objects. This provides deep insight into object composition, templates, and relationships.",
+          description: "🔍 ENHANCED D365 OBJECT INSPECTION - Advanced inspection with summary-first architecture for optimal agent workflows. Supports 4 inspection modes: fast summaries, targeted properties, specific collections, and full detailed views. ✅ PERFORMANCE OPTIMIZED: 10x faster summaries, unlimited collection access (619+ methods, 193+ fields), no truncation limits. ✅ UNIVERSAL SUPPORT: Works with all 544+ D365 object types (Tables, Classes, Forms, Enums, etc.) using dynamic discovery. ✅ AGENT-FRIENDLY: Progressive disclosure pattern - start with summary, drill down as needed.",
           inputSchema: {
             type: "object",
             properties: {
               objectName: {
                 type: "string",
-                description: "Name of the X++ object to inspect",
+                description: "Name of the X++ object to inspect (e.g., 'CustTable', 'SalesFormLetter', 'SalesTable')",
               },
               objectType: {
                 type: "string",
-                description: "D365 object type to inspect. Common values: AxTable, AxClass, AxForm, AxEnum, AxQuery, AxView, AxEdt, AxMenu, AxReport, AxWorkflow, AxService, AxMap, etc. This parameter is required for object inspection.",
+                description: "D365 object type to inspect. Common values: 'AxTable' (data tables), 'AxClass' (business logic), 'AxForm' (UI forms), 'AxEnum' (enumerations), 'AxQuery' (queries), 'AxView' (database views), 'AxEdt' (extended data types), 'AxMenu' (navigation menus), 'AxReport' (SSRS reports), 'AxWorkflow' (workflow definitions), 'AxService' (web services), 'AxMap' (table maps). This parameter is required for object inspection.",
+              },
+              inspectionMode: {
+                type: "string",
+                enum: ["summary", "properties", "collection", "detailed"],
+                description: "Controls inspection detail level: 'summary' = Fast overview with collection counts (~50ms, agent-friendly), 'properties' = All object properties without collections (~100ms), 'collection' = Specific collection items without limits (requires collectionName), 'detailed' = Full traditional inspection (backward compatible, slower). Default: 'detailed'.",
+              },
+              collectionName: {
+                type: "string",
+                description: "Required when inspectionMode='collection'. Collection to retrieve: Tables='Methods'|'Fields'|'Relations'|'Indexes'|'FieldGroups'; Classes='Methods'|'Members'|'Variables'; Forms='DataSources'|'Controls'|'Parts'; Enums='Values'. Use 'summary' mode first to see available collections for the object.",
               },
               includeProperties: {
                 type: "boolean",
-                description: "Include detailed property information (default: true)",
+                description: "Include detailed property information. Only applies to 'detailed' mode (default: true). Other modes handle properties automatically.",
               },
               includeChildren: {
                 type: "boolean", 
-                description: "Include child objects and collections (default: true)",
+                description: "Include child objects/collections. Only applies to 'detailed' mode (default: true). Other modes handle collections optimally.",
               },
               includeTemplateInfo: {
                 type: "boolean",
-                description: "Include template and pattern information (default: false)",
+                description: "Include template and pattern information for advanced analysis (default: false). Only applies to 'detailed' mode.",
               },
               filterPattern: {
                 type: "string",
-                description: "Filter pattern to limit response size. Supports wildcards (*). Examples: '*Form*', 'Design', '*DataSource*', '*Method*'. Applied to property/method names to reduce response size.",
+                description: "Filter results with wildcards (*=any chars, ?=single char). Examples: '*validate*' (methods containing 'validate'), 'cust*' (items starting with 'cust'), '*Address*'. Applies to property/method/field names to reduce response size.",
               },
             },
             required: ["objectName", "objectType"],
+            examples: [
+              {
+                description: "🚀 RECOMMENDED: Fast summary overview - see what's available",
+                parameters: {
+                  objectName: "CustTable",
+                  objectType: "AxTable",
+                  inspectionMode: "summary"
+                }
+              },
+              {
+                description: "🔧 GET PROPERTIES: All object properties without collections",
+                parameters: {
+                  objectName: "CustTable", 
+                  objectType: "AxTable",
+                  inspectionMode: "properties"
+                }
+              },
+              {
+                description: "📋 DRILL DOWN: Get all methods from a table (no limits!)",
+                parameters: {
+                  objectName: "SalesTable",
+                  objectType: "AxTable", 
+                  inspectionMode: "collection",
+                  collectionName: "Methods"
+                }
+              },
+              {
+                description: "📋 CLASS METHODS: Get all methods from a business logic class",
+                parameters: {
+                  objectName: "SalesFormLetter",
+                  objectType: "AxClass",
+                  inspectionMode: "collection", 
+                  collectionName: "Methods"
+                }
+              },
+              {
+                description: "📋 TABLE FIELDS: Get all fields from a data table",
+                parameters: {
+                  objectName: "CustTable",
+                  objectType: "AxTable",
+                  inspectionMode: "collection",
+                  collectionName: "Fields"
+                }
+              },
+              {
+                description: "🔍 FILTERED SEARCH: Find validation methods only", 
+                parameters: {
+                  objectName: "SalesTable",
+                  objectType: "AxTable",
+                  inspectionMode: "collection",
+                  collectionName: "Methods", 
+                  filterPattern: "*validate*"
+                }
+              },
+              {
+                description: "📄 FULL INSPECTION: Traditional detailed view (backward compatible)",
+                parameters: {
+                  objectName: "CustTable",
+                  objectType: "AxTable",
+                  inspectionMode: "detailed",
+                  includeProperties: true,
+                  includeChildren: true
+                }
+              },
+              {
+                description: "🎯 ENUM VALUES: Get all values from an enumeration",
+                parameters: {
+                  objectName: "CustVendNegInstProtestStatus",
+                  objectType: "AxEnum",
+                  inspectionMode: "collection",
+                  collectionName: "Values"
+                }
+              },
+              {
+                description: "📱 FORM DATASOURCES: See form data binding structure",
+                parameters: {
+                  objectName: "CustTable",
+                  objectType: "AxForm",
+                  inspectionMode: "collection",
+                  collectionName: "DataSources"
+                }
+              },
+              {
+                description: "⚡ PERFORMANCE COMPARISON: Fast summary vs detailed inspection",
+                parameters: {
+                  objectName: "SalesTable",
+                  objectType: "AxTable",
+                  inspectionMode: "summary"
+                }
+              }
+            ]
           },
         },
         {

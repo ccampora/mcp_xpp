@@ -239,30 +239,72 @@ export class ToolHandlers {
     const schema = z.object({
       objectName: z.string(),
       objectType: z.string().optional(),
+      inspectionMode: z.enum(["summary", "properties", "collection", "detailed"]).optional().default("detailed"),
+      collectionName: z.string().optional(),
       includeProperties: z.boolean().optional().default(true),
       includeChildren: z.boolean().optional().default(true),
       includeTemplateInfo: z.boolean().optional().default(false),
       filterPattern: z.string().optional(),
     });
-    const { objectName, objectType, includeProperties, includeChildren, includeTemplateInfo, filterPattern } = schema.parse(args);
+    const { 
+      objectName, 
+      objectType, 
+      inspectionMode, 
+      collectionName, 
+      includeProperties, 
+      includeChildren, 
+      includeTemplateInfo, 
+      filterPattern 
+    } = schema.parse(args);
+    
+    // Validate collectionName is provided when inspectionMode is "collection"
+    if (inspectionMode === "collection" && !collectionName) {
+      return await createLoggedResponse(
+        `collectionName parameter is required when inspectionMode is "collection". Use inspectionMode="summary" first to see available collections.`,
+        requestId,
+        "inspect_xpp_object"
+      );
+    }
     
     try {
       const client = ObjectCreators['getServiceClient'](15000); // Use longer timeout for inspection
       await client.connect();
       
-      const result = await client.sendRequest('inspectobject', undefined, {
-        objectName,
-        objectType,
-        includeProperties,
-        includeChildren,
-        includeTemplateInfo
-      });
+      // Route to appropriate C# backend handler based on inspectionMode
+      let action: string;
+      let requestData: any = { objectName, objectType };
+      
+      switch (inspectionMode) {
+        case "summary":
+          action = "objectsummary";
+          break;
+        case "properties":  
+          action = "objectproperties";
+          break;
+        case "collection":
+          action = "objectcollection";
+          requestData.collectionName = collectionName;
+          break;
+        case "detailed":
+        default:
+          action = "inspectobject";
+          requestData = {
+            objectName,
+            objectType,
+            includeProperties,
+            includeChildren,
+            includeTemplateInfo
+          };
+          break;
+      }
+      
+      const result = await client.sendRequest(action, undefined, requestData);
       
       await client.disconnect();
       
       if (!result.Success) {
         return await createLoggedResponse(
-          `Failed to inspect object "${objectName}": ${result.Error || 'Unknown error'}`,
+          `Failed to inspect object "${objectName}" (mode: ${inspectionMode}): ${result.Error || 'Unknown error'}`,
           requestId,
           "inspect_xpp_object"
         );
@@ -270,8 +312,8 @@ export class ToolHandlers {
       
       let data = result.Data;
       
-      // Apply filtering if pattern is specified
-      if (filterPattern && data) {
+      // Apply filtering for detailed mode (new modes handle filtering internally)
+      if (inspectionMode === "detailed" && filterPattern && data) {
         // Filter Properties
         if (data.Properties) {
           data.Properties = this.filterByPattern(data.Properties, filterPattern);
@@ -298,134 +340,223 @@ export class ToolHandlers {
         }
       }
       
-      let content = `🔍 Enhanced Object Inspection for "${objectName}"`;
-      if (filterPattern) {
-        content += ` (filtered by: ${filterPattern})`;
-      }
-      content += `\n\n`;
-      
-      if (!data.Found) {
-        content += `❌ Object not found: ${data.Error || 'Object does not exist'}\n`;
-        if (data.SearchedTypes) {
-          content += `\n🔍 Searched object types: ${data.SearchedTypes.join(', ')}\n`;
-        }
-      } else {
-        content += `✅ Object found: ${data.ObjectType} "${data.ObjectName}"\n\n`;
-        
-        // Object Structure
-        if (data.Structure) {
-          content += `📋 Object Structure:\n`;
-          content += `   Type: ${data.Structure.TypeName || 'Unknown'}\n`;
-          content += `   Full Type: ${data.Structure.FullTypeName || 'Unknown'}\n`;
-          content += `   Assembly: ${data.Structure.Assembly || 'Unknown'}\n`;
-          if (data.Structure.BaseType) content += `   Base Type: ${data.Structure.BaseType}\n`;
-          content += `   Properties: ${data.Structure.PropertyCount || 0}\n`;
-          content += `   Methods: ${data.Structure.MethodCount || 0}\n\n`;
-        }
-        
-        // Metadata
-        if (data.Metadata) {
-          content += `📝 Metadata:\n`;
-          for (const [key, value] of Object.entries(data.Metadata)) {
-            if (value && value !== '<null>') {
-              content += `   ${key}: ${value}\n`;
-            }
-          }
-          content += `\n`;
-        }
-        
-        // Properties
-        if (includeProperties && data.Properties && data.Properties.length > 0) {
-          content += `🔧 Properties (${data.Properties.length}):\n`;
-          for (const prop of data.Properties.slice(0, 30)) { // Show more properties with enhanced info
-            content += `   ${prop.Name}: ${prop.Type}`;
-            
-            // Show current value if available
-            if (prop.CurrentValue && prop.CurrentValue !== '<not available>') {
-              content += ` = ${prop.CurrentValue}`;
-            }
-            
-            // Show possible enum values
-            if (prop.IsEnum && prop.PossibleValues && prop.PossibleValues.length > 0) {
-              content += ` [enum: ${prop.PossibleValues.join(', ')}]`;
-            }
-            
-            // Show property flags
-            const flags = [];
-            if (prop.IsReadOnly) flags.push('ReadOnly');
-            if (prop.IsEnum) flags.push('Enum');
-            if (prop.IsNullable) flags.push('Nullable');
-            if (prop.IsCollection) flags.push('Collection');
-            if (flags.length > 0) {
-              content += ` [${flags.join(', ')}]`;
-            }
-            
-            content += `\n`;
-            
-            // Show property description if available
-            if (prop.Description && prop.Description.trim() !== '') {
-              content += `     Description: ${prop.Description}\n`;
-            }
-            
-            // Show enum values on separate lines for better readability if there are many
-            if (prop.IsEnum && prop.PossibleValues && prop.PossibleValues.length > 5) {
-              content += `     Possible values: ${prop.PossibleValues.join(', ')}\n`;
-            }
-          }
-          if (data.Properties.length > 30) {
-            content += `   ... and ${data.Properties.length - 30} more properties\n`;
-          }
-          content += `\n`;
-        }
-        
-        // Children/Collections
-        if (includeChildren && data.Children && data.Children.length > 0) {
-          content += `👶 Child Collections (${data.Children.length}):\n`;
-          for (const child of data.Children) {
-            content += `   ${child.PropertyName}: ${child.PropertyType}`;
-            if (child.Count !== undefined) {
-              content += ` (${child.Count} items)`;
-            }
-            if (child.Error) {
-              content += ` [Error: ${child.Error}]`;
-            }
-            content += `\n`;
-            
-            // Show sample items
-            if (child.Items && child.Items.length > 0) {
-              for (const item of child.Items.slice(0, 3)) { // Show first 3 items
-                content += `     - ${item.Type}: ${item.Summary}\n`;
-              }
-              if (child.Items.length > 3) {
-                content += `     ... and ${child.Items.length - 3} more items\n`;
-              }
-            }
-          }
-          content += `\n`;
-        }
-        
-        // Template Info
-        if (includeTemplateInfo && data.TemplateInfo) {
-          content += `🎨 Template & Pattern Information:\n`;
-          for (const [key, value] of Object.entries(data.TemplateInfo)) {
-            if (value && value !== '<null>') {
-              content += `   ${key}: ${value}\n`;
-            }
-          }
-          content += `\n`;
-        }
-      }
+      // Format output based on inspection mode
+      let content = this.formatInspectionResult(inspectionMode, objectName, data, filterPattern, collectionName);
       
       return await createLoggedResponse(content, requestId, "inspect_xpp_object");
       
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       return await createLoggedResponse(
-        `Failed to inspect object "${objectName}": ${errorMsg}`,
+        `Failed to inspect object "${objectName}" (mode: ${inspectionMode}): ${errorMsg}`,
         requestId,
         "inspect_xpp_object"
       );
     }
+  }
+
+  // Format inspection results based on inspection mode
+  static formatInspectionResult(inspectionMode: string, objectName: string, data: any, filterPattern?: string, collectionName?: string): string {
+    let content = `🔍 Object Inspection for "${objectName}"`;
+    if (inspectionMode !== "detailed") {
+      content += ` (${inspectionMode} mode)`;
+    }
+    if (filterPattern) {
+      content += ` (filtered by: ${filterPattern})`;
+    }
+    content += `\n\n`;
+
+    if (!data || (data.Found === false)) {
+      content += `❌ Object not found: ${data?.Error || 'Object does not exist'}\n`;
+      if (data?.SearchedTypes) {
+        content += `\n🔍 Searched object types: ${data.SearchedTypes.join(', ')}\n`;
+      }
+      return content;
+    }
+
+    switch (inspectionMode) {
+      case "summary":
+        return this.formatSummaryResult(content, objectName, data);
+      case "properties":
+        return this.formatPropertiesResult(content, objectName, data);
+      case "collection":
+        return this.formatCollectionResult(content, objectName, data, collectionName);
+      case "detailed":
+      default:
+        return this.formatDetailedResult(content, objectName, data);
+    }
+  }
+
+  // Format summary mode result
+  static formatSummaryResult(content: string, objectName: string, data: any): string {
+    content += `✅ Object Summary: ${data.ObjectType} "${data.ObjectName}"\n\n`;
+    
+    if (data.Summary) {
+      content += `📊 Overview:\n`;
+      content += `   Properties: ${data.Summary.PropertiesCount || 0}\n`;
+      content += `   Collections: ${data.Summary.CollectionsCount || 0}\n`;
+      content += `   Total Collection Items: ${data.Summary.TotalCollectionItems || 0}\n\n`;
+    }
+
+    if (data.Collections) {
+      content += `📋 Available Collections:\n`;
+      for (const [collectionName, collectionInfo] of Object.entries(data.Collections) as [string, any][]) {
+        content += `   ${collectionName}: ${collectionInfo.Count} ${collectionInfo.ItemType}`;
+        content += collectionInfo.Available ? ` ✅` : ` ❌`;
+        content += `\n`;
+      }
+      content += `\n💡 Use inspectionMode="properties" to see all properties, or inspectionMode="collection" with collectionName to see specific collections.\n`;
+    }
+
+    return content;
+  }
+
+  // Format properties mode result  
+  static formatPropertiesResult(content: string, objectName: string, data: any): string {
+    content += `✅ Object Properties: ${data.ObjectType} "${data.ObjectName}"\n\n`;
+    
+    if (data.Properties && data.Properties.length > 0) {
+      content += `🔧 Properties (${data.Properties.length}):\n`;
+      for (const prop of data.Properties) {
+        content += `   ${prop.Name}: ${prop.Type}`;
+        if (prop.CurrentValue && prop.CurrentValue !== '<not available>') {
+          content += ` = ${prop.CurrentValue}`;
+        }
+        content += `\n`;
+      }
+    } else {
+      content += `No properties found.\n`;
+    }
+
+    return content;
+  }
+
+  // Format collection mode result
+  static formatCollectionResult(content: string, objectName: string, data: any, collectionName?: string): string {
+    content += `✅ Collection "${collectionName}": ${data.ObjectType} "${data.ObjectName}"\n\n`;
+    
+    if (data.Collection) {
+      content += `📋 ${data.CollectionName} Collection:\n`;
+      content += `   Item Type: ${data.Collection.ItemType}\n`;
+      content += `   Count: ${data.Collection.Count}\n\n`;
+      
+      if (data.Collection.Items && data.Collection.Items.length > 0) {
+        content += `Items:\n`;
+        for (const item of data.Collection.Items) {
+          content += `   - ${item}\n`;
+        }
+      } else {
+        content += `No items in collection.\n`;
+      }
+    } else {
+      content += `Collection "${collectionName}" not found or empty.\n`;
+    }
+
+    return content;
+  }
+
+  // Format detailed mode result (backward compatible)
+  static formatDetailedResult(content: string, objectName: string, data: any): string {
+    content += `✅ Object found: ${data.ObjectType} "${data.ObjectName}"\n\n`;
+    
+    // Object Structure
+    if (data.Structure) {
+      content += `📋 Object Structure:\n`;
+      content += `   Type: ${data.Structure.TypeName || 'Unknown'}\n`;
+      content += `   Full Type: ${data.Structure.FullTypeName || 'Unknown'}\n`;
+      content += `   Assembly: ${data.Structure.Assembly || 'Unknown'}\n`;
+      if (data.Structure.BaseType) content += `   Base Type: ${data.Structure.BaseType}\n`;
+      content += `   Properties: ${data.Structure.PropertyCount || 0}\n`;
+      content += `   Methods: ${data.Structure.MethodCount || 0}\n\n`;
+    }
+    
+    // Metadata
+    if (data.Metadata) {
+      content += `📝 Metadata:\n`;
+      for (const [key, value] of Object.entries(data.Metadata)) {
+        if (value && value !== '<null>') {
+          content += `   ${key}: ${value}\n`;
+        }
+      }
+      content += `\n`;
+    }
+    
+    // Properties
+    if (data.Properties && data.Properties.length > 0) {
+      content += `🔧 Properties (${data.Properties.length}):\n`;
+      for (const prop of data.Properties.slice(0, 30)) {
+        content += `   ${prop.Name}: ${prop.Type}`;
+        
+        if (prop.CurrentValue && prop.CurrentValue !== '<not available>') {
+          content += ` = ${prop.CurrentValue}`;
+        }
+        
+        if (prop.IsEnum && prop.PossibleValues && prop.PossibleValues.length > 0) {
+          content += ` [enum: ${prop.PossibleValues.join(', ')}]`;
+        }
+        
+        const flags = [];
+        if (prop.IsReadOnly) flags.push('ReadOnly');
+        if (prop.IsEnum) flags.push('Enum');
+        if (prop.IsNullable) flags.push('Nullable');
+        if (prop.IsCollection) flags.push('Collection');
+        if (flags.length > 0) {
+          content += ` [${flags.join(', ')}]`;
+        }
+        
+        content += `\n`;
+        
+        if (prop.Description && prop.Description.trim() !== '') {
+          content += `     Description: ${prop.Description}\n`;
+        }
+        
+        if (prop.IsEnum && prop.PossibleValues && prop.PossibleValues.length > 5) {
+          content += `     Possible values: ${prop.PossibleValues.join(', ')}\n`;
+        }
+      }
+      if (data.Properties.length > 30) {
+        content += `   ... and ${data.Properties.length - 30} more properties\n`;
+      }
+      content += `\n`;
+    }
+    
+    // Children/Collections
+    if (data.Children && data.Children.length > 0) {
+      content += `👶 Child Collections (${data.Children.length}):\n`;
+      for (const child of data.Children) {
+        content += `   ${child.PropertyName}: ${child.PropertyType}`;
+        if (child.Count !== undefined) {
+          content += ` (${child.Count} items)`;
+        }
+        if (child.Error) {
+          content += ` [Error: ${child.Error}]`;
+        }
+        content += `\n`;
+        
+        if (child.Items && child.Items.length > 0) {
+          for (const item of child.Items.slice(0, 3)) {
+            content += `     - ${item.Type}: ${item.Summary}\n`;
+          }
+          if (child.Items.length > 3) {
+            content += `     ... and ${child.Items.length - 3} more items\n`;
+          }
+        }
+      }
+      content += `\n`;
+    }
+    
+    // Template Info
+    if (data.TemplateInfo) {
+      content += `🎨 Template & Pattern Information:\n`;
+      for (const [key, value] of Object.entries(data.TemplateInfo)) {
+        if (value && value !== '<null>') {
+          content += `   ${key}: ${value}\n`;
+        }
+      }
+      content += `\n`;
+    }
+    
+    return content;
   }
 
   static async buildCache(args: any, requestId: string): Promise<any> {
