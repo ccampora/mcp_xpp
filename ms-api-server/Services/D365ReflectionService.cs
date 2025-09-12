@@ -226,16 +226,27 @@ namespace D365MetadataService.Services
         {
             // Use actual method metadata instead of hardcoded prefixes
             // Check for methods that modify object state (non-readonly, void or return modified objects)
+            
+            // INCLUDE property setters - they are modification methods!
+            if (method.IsPublic && !method.IsStatic && method.Name.StartsWith("set_") && method.GetParameters().Length == 1)
+            {
+                return true; // Property setters are modification methods
+            }
+            
+            // Other modification methods (exclude getters but include setters)
             return method.IsPublic && 
                    !method.IsStatic && 
                    !method.IsSpecialName && 
                    !method.Name.StartsWith("get_") && 
-                   !method.Name.StartsWith("set_") &&
                    method.GetParameters().Length > 0; // Methods that take parameters are likely modification methods
         }
 
         private bool IsCollectionType(Type type)
         {
+            // Exclude strings from being treated as collections (even though they implement IEnumerable<char>)
+            if (type == typeof(string))
+                return false;
+                
             // Use proper type hierarchy checking instead of name matching
             return typeof(System.Collections.ICollection).IsAssignableFrom(type) ||
                    typeof(System.Collections.IEnumerable).IsAssignableFrom(type) ||
@@ -277,8 +288,23 @@ namespace D365MetadataService.Services
                 }
                 else if (param.ParameterType.IsValueType || param.ParameterType == typeof(string))
                 {
-                    // For simple types, just specify the type
-                    requirement.CreationInstructions = $"Provide {param.ParameterType.Name} value";
+                    // For simple types, specify the type and add special note for property setters
+                    if (method.Name.StartsWith("set_") && param.Name == "value")
+                    {
+                        var propertyName = method.Name.Substring(4); // Remove "set_" prefix
+                        requirement.CreationInstructions = $"Provide {param.ParameterType.Name} value for {propertyName} property (parameter name: '{param.Name}')";
+                        
+                        // For enums, add the possible values
+                        if (param.ParameterType.IsEnum)
+                        {
+                            var enumValues = Enum.GetNames(param.ParameterType);
+                            requirement.CreationInstructions += $". Possible values: {string.Join(", ", enumValues)}";
+                        }
+                    }
+                    else
+                    {
+                        requirement.CreationInstructions = $"Provide {param.ParameterType.Name} value";
+                    }
                 }
                 else
                 {
@@ -349,12 +375,15 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
-        /// Generate expected parameter name from property name - NO MAPPING
-        /// Returns the exact property name as it exists on the D365 object
+        /// Generate expected parameter name from property name - CONTEXT AWARE
+        /// For object property setting during creation, returns the property name
+        /// For direct setter method calls, would return "value" but this is handled elsewhere
         /// </summary>
         private string GenerateExpectedParameterName(PropertyInfo property, Type objectType = null)
         {
-            // Return the exact property name - no transformation, no mapping
+            // For object creation and property setting, we use the actual property name
+            // The "value" parameter is only used when calling setter methods directly via ExecuteMethodAsync
+            // which is handled separately in method parameter processing
             return property.Name;
         }
 
@@ -456,6 +485,8 @@ namespace D365MetadataService.Services
                 var requirement = requirements.FirstOrDefault(r => r.ParameterName == param.Name);
                 
                 _logger.Information("Preparing parameter {Index}: {Name} of type {Type}", i, param.Name, param.ParameterType.Name);
+                _logger.Information("Available provided parameters: {ProvidedParams}", string.Join(", ", providedParams.Keys));
+                _logger.Information("Looking for parameter with name: {ParamName}", param.Name);
 
                 try
                 {
@@ -495,9 +526,11 @@ namespace D365MetadataService.Services
                 // Look for direct parameter match first
                 if (providedParams.ContainsKey(param.Name))
                 {
+                    _logger.Information("Found parameter {ParamName} in provided params with value: {Value}", param.Name, providedParams[param.Name]);
                     return ConvertParameterValue(providedParams[param.Name], param.ParameterType);
                 }
                 
+                _logger.Warning("Parameter {ParamName} not found in provided params, using default value", param.Name);
                 return GetDefaultValue(param.ParameterType);
             }
 
@@ -612,6 +645,50 @@ namespace D365MetadataService.Services
         {
             if (value == null) return null;
             if (targetType.IsAssignableFrom(value.GetType())) return value;
+
+            // Special handling for enums
+            if (targetType.IsEnum)
+            {
+                try
+                {
+                    // Try parsing as string first
+                    if (value is string stringValue)
+                    {
+                        _logger.Information("Converting string '{StringValue}' to enum {EnumType}", stringValue, targetType.Name);
+                        var enumValue = Enum.Parse(targetType, stringValue, true);
+                        _logger.Information("Successfully converted string to enum: {EnumValue}", enumValue);
+                        return enumValue;
+                    }
+                    
+                    // Try parsing as integer
+                    if (value is int intValue || value is long longValue)
+                    {
+                        var enumIntValue = Convert.ToInt32(value);
+                        _logger.Information("Converting integer {IntValue} to enum {EnumType}", enumIntValue, targetType.Name);
+                        
+                        if (Enum.IsDefined(targetType, enumIntValue))
+                        {
+                            var enumValue = Enum.ToObject(targetType, enumIntValue);
+                            _logger.Information("Successfully converted integer to enum: {EnumValue}", enumValue);
+                            return enumValue;
+                        }
+                        else
+                        {
+                            _logger.Warning("Integer value {IntValue} is not valid for enum {EnumType}", enumIntValue, targetType.Name);
+                        }
+                    }
+                    
+                    // Try direct conversion
+                    var convertedEnum = Enum.ToObject(targetType, value);
+                    _logger.Information("Successfully converted {Value} to enum: {EnumValue}", value, convertedEnum);
+                    return convertedEnum;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "Failed to convert {Value} to enum {EnumType}, using default", value, targetType.Name);
+                    return GetDefaultValue(targetType);
+                }
+            }
 
             try
             {
