@@ -438,7 +438,7 @@ export class AOTStructureManager {
         try {
           const { ObjectIndexManager } = await import('./object-index.js');
           await ObjectIndexManager.cacheObjectTypes(dedupedTypes);
-          console.log(`✅ Cached ${dedupedTypes.length} object types from VS2022 service`);
+          // Logging is handled by the actual caching implementation
         } catch (cacheError) {
           console.warn('Failed to cache object types:', cacheError);
         }
@@ -499,7 +499,7 @@ export class AOTStructureManager {
         try {
           const { ObjectIndexManager } = await import('./object-index.js');
           await ObjectIndexManager.cacheObjectTypes(dedupedTypes);
-          console.log(`✅ Cached ${dedupedTypes.length} object types from VS2022 service (service method)`);
+          // Logging is handled by the actual caching implementation
         } catch (cacheError) {
           console.warn('Failed to cache object types:', cacheError);
         }

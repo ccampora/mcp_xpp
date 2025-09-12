@@ -6,7 +6,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 
 export interface ObjectLocation {
@@ -96,13 +96,22 @@ export class SQLiteObjectLookup {
 
     /**
      * Initialize the database connection and prepare statements
+     * Automatically creates the database if it doesn't exist
      */
     public initialize(): boolean {
         try {
+            // Auto-create database if it doesn't exist
             if (!existsSync(this.dbPath)) {
-                console.error(`❌ SQLite database not found: ${this.dbPath}`);
-                console.log('💡 Run "node misc/migrate-to-sqlite.mjs" to create the database');
-                return false;
+                console.log(`🔧 SQLite database not found: ${this.dbPath}`);
+                console.log('🚀 Auto-initializing database...');
+                
+                if (!this.createDatabase()) {
+                    console.error('❌ Failed to auto-create database');
+                    console.error('💡 Please run the build process to initialize the database properly');
+                    return false;
+                }
+                
+                console.log('✅ Database auto-created successfully');
             }
 
             this.db = new Database(this.dbPath, { readonly: true });
@@ -138,6 +147,57 @@ export class SQLiteObjectLookup {
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize SQLite lookup:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Create a new empty database with the required schema
+     * Called automatically when database doesn't exist
+     */
+    private createDatabase(): boolean {
+        try {
+            // Create parent directory if it doesn't exist
+            const dir = path.dirname(this.dbPath);
+            if (!existsSync(dir)) {
+                mkdirSync(dir, { recursive: true });
+            }
+
+            // Create the database with write access
+            const newDb = new Database(this.dbPath, { readonly: false });
+            
+            // Create the objects table
+            newDb.exec(`
+                CREATE TABLE IF NOT EXISTS objects (
+                    name TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    lastModified INTEGER,
+                    PRIMARY KEY (name, model, type)
+                )
+            `);
+            
+            // Create the object types cache table
+            newDb.exec(`
+                CREATE TABLE IF NOT EXISTS object_types_cache (
+                    type_name TEXT PRIMARY KEY,
+                    cached_at INTEGER DEFAULT (datetime('now'))
+                )
+            `);
+            
+            // Create basic indexes
+            newDb.exec(`
+                CREATE INDEX IF NOT EXISTS idx_objects_name ON objects(name);
+                CREATE INDEX IF NOT EXISTS idx_objects_type ON objects(type);
+                CREATE INDEX IF NOT EXISTS idx_objects_model ON objects(model);
+            `);
+            
+            newDb.close();
+            console.log('✅ Created empty SQLite database with schema');
+            return true;
+        } catch (error) {
+            console.error('❌ Error creating database:', error);
             return false;
         }
     }

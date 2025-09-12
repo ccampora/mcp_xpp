@@ -1006,7 +1006,7 @@ export class ToolHandlers {
       
       if (!lookup.initialize()) {
         return await createLoggedResponse(
-          `SQLite object database not available. Run migration: node misc/migrate-to-sqlite.mjs`,
+          `SQLite object database not available. Database will be auto-created during build process.`,
           requestId,
           "search_objects_pattern"
         );

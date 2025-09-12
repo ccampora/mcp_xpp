@@ -529,9 +529,8 @@ export class ObjectIndexManager {
 
     try {
       // Store object types in a special table/format in SQLite
-      // For now, we'll use a simple approach - store as metadata
+      // The actual caching implementation will log success message
       await this.sqliteIndex.cacheObjectTypes(objectTypes);
-      console.log(`✅ Cached ${objectTypes.length} object types in SQLite`);
     } catch (error) {
       console.error('❌ Error caching object types:', error);
       throw error;

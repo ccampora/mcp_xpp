@@ -118,6 +118,30 @@ async function runServer() {
     await serverManager.initialize();
     await serverManager.start();
     
+    // Perform automatic full index build on first startup
+    if (xppPath) {
+      console.error('🔄 Performing automatic full index build on startup...');
+      try {
+        // Import ObjectIndexManager dynamically to avoid circular dependencies
+        const { ObjectIndexManager } = await import('./modules/object-index.js');
+        
+        // Check if index already exists (avoid rebuilding on every restart)
+        const { SQLiteObjectLookup } = await import('./modules/sqlite-lookup.js');
+        const existingObjectCount = SQLiteObjectLookup.safeGetTotalCount();
+        
+        if (existingObjectCount === 0) {
+          console.error('📊 No existing index found, building full object index...');
+          await ObjectIndexManager.buildFullIndex(false); // Use non-force build for efficiency
+          console.error('✅ Automatic full index build completed successfully');
+        } else {
+          console.error(`📋 Existing index found with ${existingObjectCount} objects, skipping rebuild`);
+        }
+      } catch (error) {
+        console.error('⚠️  Automatic index build failed (server will continue):', (error as Error).message);
+        await DiskLogger.logError(error, "startup-index-build");
+      }
+    }
+    
     // Log transport status
     const status = serverManager.getTransportStatus();
     console.error(`MCP X++ Server running successfully`);

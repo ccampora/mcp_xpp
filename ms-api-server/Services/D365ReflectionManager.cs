@@ -468,6 +468,19 @@ namespace D365MetadataService.Services
             {
                 _logger.Debug("🔍 Discovering collection properties for provider type: {ProviderType}", providerType.Name);
 
+                // DEBUG: First, let's see what properties exist
+                var allProperties = providerType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                _logger.Debug("🔍 Found {Count} total properties on provider", allProperties.Length);
+                
+                foreach (var prop in allProperties.Take(10)) // Log first 10 for debugging
+                {
+                    _logger.Debug("   🔍 Property: {PropertyName} ({PropertyType})", prop.Name, prop.PropertyType.Name);
+                    
+                    // Check if this property has ListObjectsForModel method
+                    var hasListMethod = prop.PropertyType.GetMethod("ListObjectsForModel") != null;
+                    _logger.Debug("      Has ListObjectsForModel: {HasMethod}, CanRead: {CanRead}", hasListMethod, prop.CanRead);
+                }
+
                 var properties = providerType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                     .Where(prop => 
                         // Look for properties that have a ListObjectsForModel method (indicating they're D365 object collections)
@@ -484,13 +497,12 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
-        /// Get all objects for a specific model using dynamic collection discovery
-        /// Replaces hardcoded object type enumeration with reflection-based approach
+        /// Get all objects for a specific model using the PROVEN working approach
+        /// This uses direct property access that we know works from ModelsHandler
         /// </summary>
         public Dictionary<string, object> GetAllObjectsForModel(IMetadataProvider provider, string modelName)
         {
             var objects = new Dictionary<string, object>();
-            var totalObjectCount = 0;
 
             if (provider == null || string.IsNullOrEmpty(modelName))
             {
@@ -501,75 +513,31 @@ namespace D365MetadataService.Services
 
             try
             {
-                _logger.Debug("🔍 Dynamically discovering all objects for model: {Model}", modelName);
+                _logger.Information("🔍 Processing model: {Model} using WORKING approach", modelName);
                 
-                var collectionProperties = GetProviderCollectionProperties(provider);
-                _logger.Information("📊 Processing {Count} object collection properties for model {Model}", 
-                    collectionProperties.Length, modelName);
-
-                foreach (var collectionProp in collectionProperties)
-                {
-                    try
-                    {
-                        _logger.Debug("   🔄 Processing collection: {PropertyName} ({PropertyType})", 
-                            collectionProp.Name, collectionProp.PropertyType.Name);
-
-                        // Get the collection instance
-                        var collection = collectionProp.GetValue(provider);
-                        if (collection == null)
-                        {
-                            _logger.Debug("   ⚠️ Collection {PropertyName} is null, skipping", collectionProp.Name);
-                            continue;
-                        }
-
-                        // Call ListObjectsForModel on the collection
-                        var listMethod = collection.GetType().GetMethod("ListObjectsForModel");
-                        if (listMethod == null)
-                        {
-                            _logger.Debug("   ⚠️ Collection {PropertyName} has no ListObjectsForModel method, skipping", collectionProp.Name);
-                            continue;
-                        }
-
-                        // Invoke the method to get objects for this model
-                        var result = listMethod.Invoke(collection, new object[] { modelName });
-                        if (result != null)
-                        {
-                            // Convert to list to get count and allow enumeration
-                            var resultList = ((System.Collections.IEnumerable)result).Cast<object>().ToList();
-                            
-                            if (resultList.Any())
-                            {
-                                // Use collection property name as object type
-                                var objectTypeName = collectionProp.Name;
-                                
-                                objects[objectTypeName] = resultList;
-                                totalObjectCount += resultList.Count;
-                                
-                                _logger.Debug("   ✅ {ObjectType}: {Count} objects", objectTypeName, resultList.Count);
-                            }
-                            else
-                            {
-                                _logger.Debug("   📭 {PropertyName}: No objects found for model {Model}", 
-                                    collectionProp.Name, modelName);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Warning("   ⚠️ Failed to process collection {PropertyName}: {Error}", 
-                            collectionProp.Name, ex.Message);
-                    }
-                }
-
-                _logger.Information("🎯 Dynamic enumeration complete for model {Model}: {TotalObjects} total objects across {CollectionCount} collections", 
-                    modelName, totalObjectCount, objects.Count);
+                // Use the WORKING approach from ModelsHandler - direct property access
+                try { var result = provider.Tables.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Tables"] = result; } catch { }
+                try { var result = provider.Classes.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Classes"] = result; } catch { }
+                try { var result = provider.Forms.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Forms"] = result; } catch { }
+                try { var result = provider.Enums.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Enums"] = result; } catch { }
+                try { var result = provider.Views.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Views"] = result; } catch { }
+                try { var result = provider.Queries.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Queries"] = result; } catch { }
+                try { var result = provider.Menus.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Menus"] = result; } catch { }
+                try { var result = provider.Maps.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Maps"] = result; } catch { }
+                try { var result = provider.Reports.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Reports"] = result; } catch { }
+                try { var result = provider.DataEntityViews.ListObjectsForModel(modelName); if (result?.Any() == true) objects["DataEntityViews"] = result; } catch { }
+                try { var result = provider.CompositeDataEntityViews.ListObjectsForModel(modelName); if (result?.Any() == true) objects["CompositeDataEntityViews"] = result; } catch { }
+                
+                var totalObjects = objects.Values.OfType<System.Collections.IEnumerable>().Sum(collection => collection.Cast<object>().Count());
+                _logger.Information("🎯 Found {TotalObjects} total objects across {Collections} collections for model {Model}", 
+                    totalObjects, objects.Count, modelName);
 
                 return objects;
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "❌ Error during dynamic object enumeration for model {Model}", modelName);
-                return objects; // Return whatever we managed to collect
+                _logger.Error(ex, "❌ Error during object enumeration for model {Model}", modelName);
+                return objects;
             }
         }
 
