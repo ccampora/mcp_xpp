@@ -1,8 +1,5 @@
-import { promises as fs } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
 import { AOTStructureCacheManager } from "./aot-structure-cache.js";
-import { AOTStructure, AOTNodeConfig, DiscoveredTypeInfo } from "./types.js";
+import { AOTStructure, DiscoveredTypeInfo } from "./types.js";
 
 /**
  * Dynamic AOT Structure Manager - Replaces static aot-structure.json config

@@ -14,8 +14,8 @@ export class D365ServiceClient extends EventEmitter {
 
     constructor(
         private pipeName: string = 'mcp-xpp-d365-service',
-        private connectionTimeout: number = 30000,
-        private requestTimeout: number = 60000
+        private connectionTimeout: number = 60000,
+        private requestTimeout: number = 90000
     ) {
         super();
     }
@@ -86,18 +86,37 @@ export class D365ServiceClient extends EventEmitter {
 
     /**
      * Send a request to the server and wait for response
+     * Supports both legacy format: sendRequest(action, objectType, parameters)
+     * And new format: sendRequest({action, parameters})
      */
-    async sendRequest(action: string, objectType?: string, parameters?: Record<string, any>): Promise<any> {
+    async sendRequest(actionOrRequest: string | { action: string; parameters?: Record<string, any> }, objectType?: string, parameters?: Record<string, any>): Promise<any> {
         if (!this.isConnected) {
             throw new Error('Not connected to Named Pipe server');
+        }
+
+        let action: string;
+        let finalObjectType: string;
+        let finalParameters: Record<string, any>;
+        
+        // Handle new format: sendRequest({action, parameters})
+        if (typeof actionOrRequest === 'object' && actionOrRequest.action) {
+            action = actionOrRequest.action;
+            finalObjectType = "";
+            finalParameters = actionOrRequest.parameters || {};
+        } 
+        // Handle legacy format: sendRequest(action, objectType, parameters)
+        else {
+            action = actionOrRequest as string;
+            finalObjectType = objectType || "";
+            finalParameters = parameters || {};
         }
 
         const requestId = randomUUID();
         const request = {
             Id: requestId,
             Action: action,
-            ObjectType: objectType || "",
-            Parameters: parameters || {}
+            ObjectType: finalObjectType,
+            Parameters: finalParameters
         };
 
         return new Promise((resolve, reject) => {

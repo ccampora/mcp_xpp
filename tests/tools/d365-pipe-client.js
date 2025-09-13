@@ -147,18 +147,35 @@ export class D365PipeClient extends EventEmitter {
 
   /**
    * Send request to VS2022 service
+   * Supports both legacy format: sendRequest(action, objectType, parameters)
+   * And new format: sendRequest({action, parameters})
    */
-  async sendRequest(action, objectType = '', parameters = {}) {
+  async sendRequest(actionOrRequest, objectType = '', parameters = {}) {
     if (!this.isConnected) {
       throw new Error('Not connected to VS2022 service');
+    }
+
+    let action, finalObjectType, finalParameters;
+    
+    // Handle new format: sendRequest({action, parameters})
+    if (typeof actionOrRequest === 'object' && actionOrRequest.action) {
+      action = actionOrRequest.action;
+      finalObjectType = actionOrRequest.objectType || '';
+      finalParameters = actionOrRequest.parameters || {};
+    } 
+    // Handle legacy format: sendRequest(action, objectType, parameters)
+    else {
+      action = actionOrRequest;
+      finalObjectType = objectType;
+      finalParameters = parameters;
     }
 
     const requestId = this._generateRequestId();
     const request = {
       Id: requestId,
       Action: action,
-      ObjectType: objectType,
-      Parameters: parameters,
+      ObjectType: finalObjectType,
+      Parameters: finalParameters,
       Timestamp: new Date().toISOString()
     };
 

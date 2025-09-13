@@ -53,12 +53,26 @@ namespace D365MetadataService.Handlers
                 // Extract parameters
                 var objectName = request.Parameters?.ContainsKey("objectName") == true ? request.Parameters["objectName"]?.ToString() : null;
                 var objectType = request.Parameters?.ContainsKey("objectType") == true ? request.Parameters["objectType"]?.ToString() : null;
+                
+                // New inspection mode parameters
+                var inspectionMode = request.Parameters?.ContainsKey("inspectionMode") == true ? 
+                    request.Parameters["inspectionMode"]?.ToString() ?? "detailed" : "detailed";
+                var collectionName = request.Parameters?.ContainsKey("collectionName") == true ? 
+                    request.Parameters["collectionName"]?.ToString() : null;
+                var filterPattern = request.Parameters?.ContainsKey("filterPattern") == true ? 
+                    request.Parameters["filterPattern"]?.ToString() : null;
+                var codeTarget = request.Parameters?.ContainsKey("codeTarget") == true ? 
+                    request.Parameters["codeTarget"]?.ToString() : null;
+                var methodName = request.Parameters?.ContainsKey("methodName") == true ? 
+                    request.Parameters["methodName"]?.ToString() : null;
+                
+                // Legacy parameters for backward compatibility
                 var includeProperties = request.Parameters?.ContainsKey("includeProperties") == true ? 
                     bool.Parse(request.Parameters["includeProperties"]?.ToString() ?? "true") : true;
                 var includeChildren = request.Parameters?.ContainsKey("includeChildren") == true ? 
                     bool.Parse(request.Parameters["includeChildren"]?.ToString() ?? "true") : true;
-                var propertyDetail = request.Parameters?.ContainsKey("propertyDetail") == true ? 
-                    request.Parameters["propertyDetail"]?.ToString() ?? "simple" : "simple";
+                var includeTemplateInfo = request.Parameters?.ContainsKey("includeTemplateInfo") == true ? 
+                    bool.Parse(request.Parameters["includeTemplateInfo"]?.ToString() ?? "false") : false;
 
                 if (string.IsNullOrEmpty(objectName))
                 {
@@ -70,8 +84,36 @@ namespace D365MetadataService.Handlers
                     return ServiceResponse.CreateError("ObjectType parameter is required");
                 }
 
-                // Use ReflectionManager to inspect D365 objects - direct approach
-                var inspectionResult = await InspectSpecificObjectTypeUsingReflection(objectName, objectType, includeProperties, includeChildren, propertyDetail);
+                // Route to appropriate inspection method based on inspectionMode
+                object inspectionResult = null;
+                switch (inspectionMode.ToLower())
+                {
+                    case "summary":
+                        inspectionResult = await InspectSummaryMode(objectName, objectType);
+                        break;
+                    case "properties":
+                        inspectionResult = await InspectPropertiesMode(objectName, objectType);
+                        break;
+                    case "collection":
+                        if (string.IsNullOrEmpty(collectionName))
+                        {
+                            return ServiceResponse.CreateError("collectionName parameter is required when inspectionMode='collection'");
+                        }
+                        inspectionResult = await InspectCollectionModeAsync(objectName, objectType, collectionName, filterPattern);
+                        break;
+                    case "code":
+                        if (string.IsNullOrEmpty(codeTarget))
+                        {
+                            return ServiceResponse.CreateError("codeTarget parameter is required when inspectionMode='code'");
+                        }
+                        inspectionResult = await InspectCodeMode(objectName, objectType, codeTarget, methodName);
+                        break;
+                    case "detailed":
+                    default:
+                        // Legacy detailed mode for backward compatibility
+                        inspectionResult = await InspectSpecificObjectTypeUsingReflection(objectName, objectType, includeProperties, includeChildren, includeTemplateInfo);
+                        break;
+                }
 
                 return ServiceResponse.CreateSuccess(inspectionResult);
             }
@@ -1509,6 +1551,943 @@ namespace D365MetadataService.Handlers
                 return "Unknown";
             }
         }
+
+        /// <summary>
+        /// Get code content from D365 object methods
+        /// Supports extracting X++ source code from methods
+        /// </summary>
+        public async Task<object> GetObjectCodeAsync(string objectName, string objectType, string codeTarget, string methodName = null, int? maxCodeLines = null)
+        {
+            try
+            {
+                Logger.Information("Getting code for {ObjectType} '{ObjectName}' - Target: {CodeTarget}", objectType, objectName, codeTarget);
+
+                // Get the D365 type from reflection manager  
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                {
+                    return new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Found = false,
+                        Error = $"Object type '{objectType}' not found"
+                    };
+                }
+
+                // Try to create instance - prefer actual object loading
+                object actualObject = null;
+                bool objectLoaded = false;
+                D365ObjectFactory objectFactory = null;
+                
+                try
+                {
+                    objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "Failed to get ObjectFactory from ReflectionManager, will fallback to type-only inspection");
+                }
+                
+                if (objectFactory != null)
+                {
+                    try
+                    {
+                        // Attempt to load actual object instance using GetExistingObject
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                        objectLoaded = actualObject != null;
+                        Logger.Debug("Object instance loaded: {IsLoaded} for {ObjectType}.{ObjectName}", objectLoaded, objectType, objectName);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Debug("Could not load object instance for {ObjectType}.{ObjectName}: {Error}", objectType, objectName, ex.Message);
+                    }
+                }
+                
+                if (actualObject == null)
+                {
+                    try
+                    {
+                        // Create empty instance for type inspection
+                        actualObject = Activator.CreateInstance(axType);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Debug("Could not create instance for type inspection: {Error}", ex.Message);
+                        return new
+                        {
+                            ObjectName = objectName,
+                            ObjectType = objectType,
+                            Found = false,
+                            Error = $"Could not create instance for code inspection: {ex.Message}"
+                        };
+                    }
+                }
+
+                // Extract method code based on target
+                var codeResult = codeTarget.ToLower() switch
+                {
+                    "methods" => ExtractAllMethodsCode(axType, actualObject, maxCodeLines),
+                    "specific-method" => ExtractSpecificMethodCode(axType, actualObject, methodName, maxCodeLines),
+                    "event-handlers" => ExtractEventHandlersCode(axType, actualObject, maxCodeLines),
+                    _ => throw new ArgumentException($"Unsupported code target: {codeTarget}")
+                };
+
+                return new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = true,
+                    ObjectLoaded = objectLoaded,
+                    CodeContent = codeResult,
+                    InspectionMode = "Code Extraction",
+                    ExtractedAt = DateTime.UtcNow,
+                    CodeTarget = codeTarget,
+                    MethodName = methodName
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error getting code for {ObjectType} '{ObjectName}'", objectType, objectName);
+                return new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = false,
+                    Error = ex.Message,
+                    CodeTarget = codeTarget
+                };
+            }
+        }
+
+        /// <summary>
+        /// Extract source code from all methods in the object
+        /// </summary>
+        private object ExtractAllMethodsCode(Type axType, object actualObject, int? maxCodeLines)
+        {
+            var methods = new List<object>();
+            int totalLinesOfCode = 0;
+            int totalMethods = 0;
+
+            try
+            {
+                // Look for Methods collection property
+                var methodsProperty = axType.GetProperty("Methods");
+                if (methodsProperty != null)
+                {
+                    var methodsCollection = methodsProperty.GetValue(actualObject);
+                    if (methodsCollection != null)
+                    {
+                        // Iterate through methods collection
+                        var enumerableType = typeof(System.Collections.IEnumerable);
+                        if (enumerableType.IsAssignableFrom(methodsCollection.GetType()))
+                        {
+                            foreach (var method in (System.Collections.IEnumerable)methodsCollection)
+                            {
+                                var methodData = ExtractMethodCodeData(method, maxCodeLines);
+                                if (methodData != null)
+                                {
+                                    methods.Add(methodData);
+                                    totalMethods++;
+                                    
+                                    // Add to total line count if available
+                                    if (methodData.GetType().GetProperty("LineCount")?.GetValue(methodData) is int lineCount)
+                                    {
+                                        totalLinesOfCode += lineCount;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return new
+                {
+                    Methods = methods,
+                    TotalMethods = totalMethods,
+                    TotalLinesOfCode = totalLinesOfCode,
+                    Language = "X++"
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error extracting all methods code from {ObjectType}", axType.Name);
+                return new
+                {
+                    Methods = methods,
+                    TotalMethods = totalMethods,
+                    Error = ex.Message
+                };
+            }
+        }
+
+        /// <summary>
+        /// Extract source code from a specific method by name
+        /// </summary>
+        private object ExtractSpecificMethodCode(Type axType, object actualObject, string methodName, int? maxCodeLines)
+        {
+            if (string.IsNullOrEmpty(methodName))
+            {
+                return new { Error = "Method name is required for specific-method target" };
+            }
+
+            try
+            {
+                // Look for Methods collection property
+                var methodsProperty = axType.GetProperty("Methods");
+                if (methodsProperty != null)
+                {
+                    var methodsCollection = methodsProperty.GetValue(actualObject);
+                    if (methodsCollection != null)
+                    {
+                        var enumerableType = typeof(System.Collections.IEnumerable);
+                        if (enumerableType.IsAssignableFrom(methodsCollection.GetType()))
+                        {
+                            foreach (var method in (System.Collections.IEnumerable)methodsCollection)
+                            {
+                                // Check if this is the method we're looking for
+                                var nameProperty = method.GetType().GetProperty("Name");
+                                if (nameProperty != null)
+                                {
+                                    var currentMethodName = nameProperty.GetValue(method)?.ToString();
+                                    if (string.Equals(currentMethodName, methodName, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var methodData = ExtractMethodCodeData(method, maxCodeLines);
+                                        return new { Method = methodData };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return new { Error = $"Method '{methodName}' not found" };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error extracting specific method code for '{MethodName}' from {ObjectType}", methodName, axType.Name);
+                return new { Error = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// Extract source code from event handler methods
+        /// </summary>
+        private object ExtractEventHandlersCode(Type axType, object actualObject, int? maxCodeLines)
+        {
+            // For now, treat this the same as all methods
+            // Could be enhanced to filter for event-specific methods
+            return ExtractAllMethodsCode(axType, actualObject, maxCodeLines);
+        }
+
+        /// <summary>
+        /// Extract code data from a single method object
+        /// </summary>
+        private object ExtractMethodCodeData(object method, int? maxCodeLines)
+        {
+            try
+            {
+                var methodType = method.GetType();
+
+                // Extract basic method information
+                var name = methodType.GetProperty("Name")?.GetValue(method)?.ToString();
+                var sourceProperty = methodType.GetProperty("Source");
+                
+                if (sourceProperty == null)
+                {
+                    return new
+                    {
+                        Name = name ?? "Unknown",
+                        Error = "No Source property found on method",
+                        HasSourceCode = false
+                    };
+                }
+
+                var sourceCode = sourceProperty.GetValue(method)?.ToString();
+                
+                // Apply line limits if specified
+                if (maxCodeLines.HasValue && !string.IsNullOrEmpty(sourceCode))
+                {
+                    var lines = sourceCode.Split('\n');
+                    if (lines.Length > maxCodeLines.Value)
+                    {
+                        sourceCode = string.Join("\n", lines.Take(maxCodeLines.Value)) + 
+                                   $"\n... (truncated - showing {maxCodeLines.Value} of {lines.Length} lines)";
+                    }
+                }
+
+                // Extract method signature and other metadata
+                var signature = ExtractMethodSignature(method);
+                var parameters = ExtractMethodParameters(method);
+                var returnType = ExtractMethodReturnType(method);
+                var visibility = ExtractMethodVisibility(method);
+
+                return new
+                {
+                    Name = name ?? "Unknown",
+                    Signature = signature,
+                    SourceCode = sourceCode ?? "",
+                    LineCount = string.IsNullOrEmpty(sourceCode) ? 0 : sourceCode.Split('\n').Length,
+                    CharacterCount = sourceCode?.Length ?? 0,
+                    Parameters = parameters,
+                    ReturnType = returnType,
+                    Visibility = visibility,
+                    IsOverride = ExtractMethodFlag(method, "IsOverride"),
+                    IsStatic = ExtractMethodFlag(method, "IsStatic"),
+                    IsAbstract = ExtractMethodFlag(method, "IsAbstract"),
+                    HasSuperCall = sourceCode?.Contains("super(") ?? false,
+                    HasTryCatch = sourceCode?.Contains("try") ?? false,
+                    HasSourceCode = !string.IsNullOrEmpty(sourceCode)
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error extracting method code data");
+                return new
+                {
+                    Name = "Unknown",
+                    Error = ex.Message,
+                    HasSourceCode = false
+                };
+            }
+        }
+
+        /// <summary>
+        /// Extract method signature
+        /// </summary>
+        private string ExtractMethodSignature(object method)
+        {
+            try
+            {
+                var declarationProperty = method.GetType().GetProperty("Declaration");
+                if (declarationProperty != null)
+                {
+                    return declarationProperty.GetValue(method)?.ToString() ?? "";
+                }
+                
+                // Fallback: build basic signature from name
+                var nameProperty = method.GetType().GetProperty("Name");
+                var name = nameProperty?.GetValue(method)?.ToString() ?? "Unknown";
+                return $"public void {name}()"; // Basic fallback
+            }
+            catch
+            {
+                return "Unknown signature";
+            }
+        }
+
+        /// <summary>
+        /// Extract method parameters
+        /// </summary>
+        private List<object> ExtractMethodParameters(object method)
+        {
+            var parameters = new List<object>();
+            
+            try
+            {
+                var parametersProperty = method.GetType().GetProperty("Parameters");
+                if (parametersProperty != null)
+                {
+                    var parametersCollection = parametersProperty.GetValue(method);
+                    if (parametersCollection != null)
+                    {
+                        var enumerableType = typeof(System.Collections.IEnumerable);
+                        if (enumerableType.IsAssignableFrom(parametersCollection.GetType()))
+                        {
+                            foreach (var param in (System.Collections.IEnumerable)parametersCollection)
+                            {
+                                var paramType = param.GetType();
+                                parameters.Add(new
+                                {
+                                    Name = paramType.GetProperty("Name")?.GetValue(param)?.ToString() ?? "Unknown",
+                                    Type = paramType.GetProperty("DataType")?.GetValue(param)?.ToString() ?? "Unknown",
+                                    DefaultValue = paramType.GetProperty("DefaultValue")?.GetValue(param)?.ToString(),
+                                    Optional = ExtractParameterFlag(param, "Optional")
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("Could not extract parameters: {Error}", ex.Message);
+            }
+            
+            return parameters;
+        }
+
+        /// <summary>
+        /// Extract method return type
+        /// </summary>
+        private string ExtractMethodReturnType(object method)
+        {
+            try
+            {
+                var returnTypeProperty = method.GetType().GetProperty("ReturnType");
+                if (returnTypeProperty != null)
+                {
+                    var returnType = returnTypeProperty.GetValue(method);
+                    if (returnType != null)
+                    {
+                        var nameProperty = returnType.GetType().GetProperty("Name");
+                        return nameProperty?.GetValue(returnType)?.ToString() ?? "void";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("Could not extract return type: {Error}", ex.Message);
+            }
+            
+            return "void";
+        }
+
+        /// <summary>
+        /// Extract method visibility
+        /// </summary>
+        private string ExtractMethodVisibility(object method)
+        {
+            try
+            {
+                var visibilityProperty = method.GetType().GetProperty("Visibility");
+                if (visibilityProperty != null)
+                {
+                    return visibilityProperty.GetValue(method)?.ToString() ?? "public";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("Could not extract visibility: {Error}", ex.Message);
+            }
+            
+            return "public";
+        }
+
+        /// <summary>
+        /// Extract boolean flag from method (IsOverride, IsStatic, etc.)
+        /// </summary>
+        private bool ExtractMethodFlag(object method, string flagName)
+        {
+            try
+            {
+                var flagProperty = method.GetType().GetProperty(flagName);
+                if (flagProperty != null && flagProperty.PropertyType == typeof(bool))
+                {
+                    return (bool)(flagProperty.GetValue(method) ?? false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("Could not extract flag {FlagName}: {Error}", flagName, ex.Message);
+            }
+            
+            return false;
+        }
+
+        /// <summary>
+        /// Extract boolean flag from parameter (Optional, etc.)
+        /// </summary>
+        private bool ExtractParameterFlag(object parameter, string flagName)
+        {
+            try
+            {
+                var flagProperty = parameter.GetType().GetProperty(flagName);
+                if (flagProperty != null && flagProperty.PropertyType == typeof(bool))
+                {
+                    return (bool)(flagProperty.GetValue(parameter) ?? false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("Could not extract parameter flag {FlagName}: {Error}", flagName, ex.Message);
+            }
+            
+            return false;
+        }
+
+        #region New Inspection Modes
+
+        /// <summary>
+        /// Fast summary inspection mode - shows collection counts and basic info
+        /// </summary>
+        private Task<object> InspectSummaryMode(string objectName, string objectType)
+        {
+            try
+            {
+                Logger.Information("🏃‍♂️ Fast summary inspection for {ObjectType}:{ObjectName}", objectType, objectName);
+
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Found = false,
+                        Error = $"Unknown object type: {objectType}"
+                    });
+                }
+
+                // Try to load object for more accurate collection counts
+                object actualObject = null;
+                bool objectLoaded = false;
+                
+                try
+                {
+                    var objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                    if (objectFactory != null)
+                    {
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                        objectLoaded = actualObject != null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Debug(ex, "Could not load object for summary, will use type inspection");
+                }
+
+                // Get collection counts quickly
+                var collectionCounts = new Dictionary<string, int>();
+                var collectionProperties = axType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => IsCollectionType(p.PropertyType))
+                    .ToArray();
+
+                foreach (var collectionProp in collectionProperties)
+                {
+                    try
+                    {
+                        var count = objectLoaded ? GetCollectionCount(collectionProp, actualObject) : 0;
+                        collectionCounts[collectionProp.Name] = count;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Debug(ex, "Could not get count for collection {CollectionName}", collectionProp.Name);
+                        collectionCounts[collectionProp.Name] = 0;
+                    }
+                }
+
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = true,
+                    ObjectLoaded = objectLoaded,
+                    InspectionMode = "summary",
+                    CollectionCounts = collectionCounts,
+                    TotalCollections = collectionCounts.Count,
+                    AvailableCollections = collectionCounts.Keys.ToArray(),
+                    TypeName = axType.Name,
+                    Description = "Fast overview with collection counts. Use inspectionMode='collection' with specific collectionName to drill down."
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error in summary mode inspection for {ObjectType}:{ObjectName}", objectType, objectName);
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = false,
+                    Error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Properties-only inspection mode - shows all properties without collections
+        /// </summary>
+        private Task<object> InspectPropertiesMode(string objectName, string objectType)
+        {
+            try
+            {
+                Logger.Information("🔧 Properties-only inspection for {ObjectType}:{ObjectName}", objectType, objectName);
+
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Found = false,
+                        Error = $"Unknown object type: {objectType}"
+                    });
+                }
+
+                // Get non-collection properties only
+                var propertyInfos = axType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => !IsCollectionType(p.PropertyType))
+                    .Take(MAX_PROPERTY_COUNT)
+                    .ToArray();
+
+                var properties = propertyInfos.Select(prop => new
+                {
+                    Name = prop.Name,
+                    Type = prop.PropertyType.Name,
+                    IsReadOnly = !prop.CanWrite,
+                    IsCollection = false,
+                    Description = prop.Name // Simple description for now
+                }).ToArray();
+
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = true,
+                    InspectionMode = "properties",
+                    Properties = properties,
+                    PropertyCount = properties.Length,
+                    TypeName = axType.Name,
+                    Description = "All object properties without collections. Use inspectionMode='collection' to access collections."
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error in properties mode inspection for {ObjectType}:{ObjectName}", objectType, objectName);
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = false,
+                    Error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Collection-specific inspection mode with filtering support
+        /// </summary>
+        public Task<object> InspectCollectionModeAsync(string objectName, string objectType, string collectionName, string filterPattern)
+        {
+            try
+            {
+                Logger.Information("📋 Collection inspection for {ObjectType}:{ObjectName} collection '{CollectionName}' with filter '{FilterPattern}'", 
+                    objectType, objectName, collectionName, filterPattern ?? "none");
+
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        CollectionName = collectionName,
+                        Found = false,
+                        Error = $"Unknown object type: {objectType}"
+                    });
+                }
+
+                // Find the specific collection
+                var collectionProperty = axType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(p => p.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase) && IsCollectionType(p.PropertyType));
+
+                if (collectionProperty == null)
+                {
+                    var availableCollections = axType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                        .Where(p => IsCollectionType(p.PropertyType))
+                        .Select(p => p.Name)
+                        .ToArray();
+
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        CollectionName = collectionName,
+                        Found = false,
+                        Error = $"Collection '{collectionName}' not found",
+                        AvailableCollections = availableCollections
+                    });
+                }
+
+                // Try to load the actual object
+                object actualObject = null;
+                bool objectLoaded = false;
+                
+                try
+                {
+                    var objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                    if (objectFactory != null)
+                    {
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                        objectLoaded = actualObject != null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Debug(ex, "Could not load object, will return empty collection");
+                }
+
+                // Get collection items
+                var itemNames = objectLoaded ? GetCollectionItemNames(collectionProperty, actualObject) : new List<string>();
+                var elementType = GetCollectionElementType(collectionProperty.PropertyType);
+                var totalCount = itemNames.Count;
+
+                // Apply wildcard filtering
+                if (!string.IsNullOrEmpty(filterPattern))
+                {
+                    var filteredItems = ApplyWildcardFilter(itemNames, filterPattern, item => item);
+                    Logger.Information("🔍 Filtered {TotalCount} items to {FilteredCount} using pattern '{FilterPattern}'", 
+                        totalCount, filteredItems.Count, filterPattern);
+                    itemNames = filteredItems;
+                }
+
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    CollectionName = collectionName,
+                    Found = true,
+                    ObjectLoaded = objectLoaded,
+                    InspectionMode = "collection",
+                    FilterPattern = filterPattern,
+                    Collection = new
+                    {
+                        ItemType = elementType,
+                        TotalCount = totalCount,
+                        FilteredCount = itemNames.Count,
+                        Items = itemNames
+                    },
+                    Description = objectLoaded ? 
+                        $"Collection '{collectionName}' with {itemNames.Count} items" + (string.IsNullOrEmpty(filterPattern) ? "" : $" (filtered from {totalCount})") :
+                        "Object not loaded, collection appears empty"
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error in collection mode inspection for {ObjectType}:{ObjectName} collection '{CollectionName}'", objectType, objectName, collectionName);
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    CollectionName = collectionName,
+                    Found = false,
+                    Error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Code extraction inspection mode
+        /// </summary>
+        private Task<object> InspectCodeMode(string objectName, string objectType, string codeTarget, string methodName)
+        {
+            try
+            {
+                Logger.Information("💻 Code inspection for {ObjectType}:{ObjectName} target '{CodeTarget}' method '{MethodName}'", 
+                    objectType, objectName, codeTarget, methodName ?? "all");
+
+                // Delegate to the existing code inspection handler
+                return GetObjectCodeAsync(objectName, objectType, codeTarget, methodName);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error in code mode inspection for {ObjectType}:{ObjectName}", objectType, objectName);
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    CodeTarget = codeTarget,
+                    MethodName = methodName,
+                    Found = false,
+                    Error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Legacy detailed inspection mode for backward compatibility
+        /// </summary>
+        private async Task<object> InspectSpecificObjectTypeUsingReflection(string objectName, string objectType, bool includeProperties, bool includeChildren, bool includeTemplateInfo)
+        {
+            // This method now wraps the original logic for backward compatibility
+            return await InspectDetailedMode(objectName, objectType, includeProperties, includeChildren, includeTemplateInfo);
+        }
+
+        /// <summary>
+        /// Detailed inspection mode - full traditional inspection
+        /// </summary>
+        private Task<object> InspectDetailedMode(string objectName, string objectType, bool includeProperties, bool includeChildren, bool includeTemplateInfo)
+        {
+            try
+            {
+                Logger.Information("Inspecting {ObjectType} '{ObjectName}' using detailed reflection with object instance loading", objectType, objectName);
+
+                // Get the D365 type from reflection manager
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                {
+                    return Task.FromResult<object>(new
+                    {
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Found = false,
+                        Error = $"Unknown object type: {objectType}",
+                        Properties = new List<object>(),
+                        Collections = new Dictionary<string, object>()
+                    });
+                }
+
+                // Try to load the actual object instance to get current property values
+                object actualObject = null;
+                bool objectLoaded = false;
+                D365ObjectFactory objectFactory = null;
+                
+                try
+                {
+                    objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "Failed to get ObjectFactory from ReflectionManager, will fallback to type-only inspection");
+                }
+                
+                if (objectFactory != null)
+                {
+                    try
+                    {
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                        objectLoaded = actualObject != null;
+                        if (objectLoaded)
+                        {
+                            Logger.Information("✅ Successfully loaded actual object instance for {ObjectType}:{ObjectName}", objectType, objectName);
+                        }
+                        else
+                        {
+                            Logger.Information("⚠️ Object instance not found, will inspect type definition only for {ObjectType}:{ObjectName}", objectType, objectName);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning(ex, "Failed to load object instance for {ObjectType}:{ObjectName}, falling back to type inspection", objectType, objectName);
+                    }
+                }
+
+                // Enhanced inspection with properties and collections separated like VS 2022
+                var inspection = new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = true,
+                    ObjectLoaded = objectLoaded,
+                    Properties = includeProperties ? InspectPropertiesWithValues(axType, actualObject, "detailed") : new List<object>(),
+                    Collections = includeChildren ? InspectCollections(axType, actualObject) : new Dictionary<string, object>(),
+                    Structure = InspectTypeStructure(axType),
+                    Metadata = InspectTypeMetadata(axType, objectName),
+                    ReflectionInfo = new
+                    {
+                        InspectionMode = "detailed",
+                        Note = objectLoaded ? 
+                            "Full detailed inspection with properties and collections" : 
+                            "Object instance not available, using type discovery only",
+                        ObjectFactoryAvailable = objectFactory != null,
+                        CollectionSeparationEnabled = true
+                    }
+                };
+
+                return Task.FromResult<object>(inspection);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error in detailed mode inspection for {ObjectType}:{ObjectName}", objectType, objectName);
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = false,
+                    Error = ex.Message,
+                    Properties = new List<object>(),
+                    Collections = new Dictionary<string, object>()
+                });
+            }
+        }
+
+        #endregion
+
+        #region Wildcard Filtering Support
+
+        /// <summary>
+        /// Check if a string matches a wildcard pattern
+        /// Supports * (any characters) and ? (single character) wildcards
+        /// </summary>
+        private bool MatchesWildcardPattern(string text, string pattern)
+        {
+            if (string.IsNullOrEmpty(pattern))
+                return true; // No filter means match all
+                
+            if (string.IsNullOrEmpty(text))
+                return false;
+                
+            // If pattern has no wildcards, do simple case-insensitive contains match
+            if (!pattern.Contains('*') && !pattern.Contains('?'))
+            {
+                return text.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+                
+            return IsWildcardMatch(text, pattern, 0, 0);
+        }
+
+        /// <summary>
+        /// Recursive wildcard matching implementation
+        /// </summary>
+        private bool IsWildcardMatch(string text, string pattern, int textIndex, int patternIndex)
+        {
+            // End of pattern reached
+            if (patternIndex >= pattern.Length)
+                return textIndex >= text.Length;
+                
+            // End of text but more pattern characters
+            if (textIndex >= text.Length)
+            {
+                // Only valid if remaining pattern is all '*'
+                for (int i = patternIndex; i < pattern.Length; i++)
+                {
+                    if (pattern[i] != '*')
+                        return false;
+                }
+                return true;
+            }
+
+            char patternChar = pattern[patternIndex];
+            char textChar = text[textIndex];
+
+            switch (patternChar)
+            {
+                case '*':
+                    // Try matching zero characters (skip *)
+                    if (IsWildcardMatch(text, pattern, textIndex, patternIndex + 1))
+                        return true;
+                    // Try matching one or more characters
+                    return IsWildcardMatch(text, pattern, textIndex + 1, patternIndex);
+                    
+                case '?':
+                    // Match single character
+                    return IsWildcardMatch(text, pattern, textIndex + 1, patternIndex + 1);
+                    
+                default:
+                    // Exact character match (case-insensitive)
+                    if (char.ToLowerInvariant(textChar) == char.ToLowerInvariant(patternChar))
+                        return IsWildcardMatch(text, pattern, textIndex + 1, patternIndex + 1);
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Apply wildcard filtering to a collection of items
+        /// </summary>
+        private List<T> ApplyWildcardFilter<T>(IEnumerable<T> items, string filterPattern, Func<T, string> nameExtractor)
+        {
+            if (string.IsNullOrEmpty(filterPattern) || items == null)
+                return items?.ToList() ?? new List<T>();
+                
+            return items.Where(item => 
+            {
+                var itemName = nameExtractor(item);
+                return MatchesWildcardPattern(itemName, filterPattern);
+            }).ToList();
+        }
+
+        #endregion
 
 
     }
