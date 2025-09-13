@@ -237,6 +237,9 @@ try {
         }
         
         if ($Target -in @("csharp", "both")) {
+            Write-Status "Killing any existing D365 services"
+            taskkill /f /im D365MetadataService.exe; 
+        
             Write-Step "Building C# Metadata Service"
             Set-Location "ms-api-server"
             
