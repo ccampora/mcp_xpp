@@ -11,6 +11,7 @@
 
 ✅ **Object Creation**: Create D365 classes, tables, forms, enums, and 553+ other object types  
 ✅ **Object Modification**: Add methods, fields, and other modifications to existing objects  
+✅ **Object Inspection**: Advanced object analysis with X++ source code extraction  
 ✅ **Discovery Tools**: Browse and search through D365 codebase with pattern matching  
 ✅ **MCP Integration**: Works with Claude Desktop, VS Code, and any MCP-compatible client  
 ✅ **Performance**: Fast object operations (300-500ms) using direct VS2022 APIs
@@ -95,10 +96,10 @@ This system demonstrates enterprise-grade Microsoft API integration through mode
 
 ## 🎯 **Tool Optimization & Performance**
 
-**Streamlined Architecture**: The MCP X++ Server has been optimized from **15 original tools** down to **5 core tools** (67% reduction) while maintaining full functionality and improving usability.
+**Streamlined Architecture**: The MCP X++ Server has been optimized from **15 original tools** down to **8 core tools** (47% reduction) while maintaining full functionality and improving usability.
 
 **Key Achievements**:
-- **📉 53% Tool Reduction**: Eliminated redundancy from 15 to 7 tools while maintaining full functionality
+- **📉 47% Tool Reduction**: Eliminated redundancy from 15 to 8 tools while maintaining full functionality
 - **🚀 Enhanced Performance**: DLL-based indexing processes 70K+ objects in ~30 seconds
 - **🔄 Unified Search**: Single `search_objects_pattern` tool handles multiple use cases
 - **📊 Structured Output**: JSON format perfect for AOT tree building and VS Code plugins
@@ -106,7 +107,7 @@ This system demonstrates enterprise-grade Microsoft API integration through mode
 
 **Complete Tool Set**:
 ```
-MCP X++ Server Tools (7 total):
+MCP X++ Server Tools (8 total):
 ├── create_xpp_object (Create D365 objects - classes, tables, forms, etc.)
 ├── execute_object_modification (Modify existing objects - add methods, fields)
 ├── discover_modification_capabilities (Explore available modification methods)
@@ -239,7 +240,7 @@ Comprehensive documentation is available in the `docs/` folder:
 
 ## Available Tools
 
-The MCP X++ Server provides **7 optimized tools** for D365 F&O codebase analysis and object management. The tool set has been consolidated from the original 15 tools to eliminate redundancy while maintaining full functionality.
+The MCP X++ Server provides **8 optimized tools** for D365 F&O codebase analysis and object management. The tool set has been consolidated from the original 15 tools to eliminate redundancy while maintaining full functionality.
 
 ### 🏗️ Object Creation
 #### `create_xpp_object`
@@ -332,6 +333,71 @@ search_objects_pattern("*", "", "ApplicationSuite", 500, "json")
 search_objects_pattern("Cust*", "", "", 50, "text")
 ```
 
+#### `inspect_xpp_object` 
+**🌟 New Enhanced Tool**: Advanced D365 object inspection with multiple modes for comprehensive object analysis and X++ source code extraction.
+- **Parameters**: 
+  - `objectName` (string, required) - Name of the X++ object to inspect (e.g., 'SalesLine', 'CustTable')
+  - `objectType` (string, optional) - D365 object type (AxTable, AxClass, AxForm, AxEnum, etc.)
+  - `inspectionMode` (string, optional) - Inspection detail level (default: 'summary'):
+    - **`summary`** - Fast overview with collection counts (~50ms, agent-friendly)
+    - **`properties`** - All object properties with descriptions and possible values
+    - **`collection`** - Specific collection items (requires `collectionName`)
+    - **`xppcode`** - Extract X++ source code from methods (requires `codeTarget`)
+  - `collectionName` (string, optional) - Required when `inspectionMode='collection'`. Examples: 'Methods', 'Fields', 'Relations', 'Indexes'
+  - `codeTarget` (string, optional) - Required when `inspectionMode='xppcode'`:
+    - **`methods`** - Extract all method source code
+    - **`specific-method`** - Single method by name (requires `methodName`)  
+    - **`event-handlers`** - Event handler methods only
+  - `methodName` (string, optional) - Required when `codeTarget='specific-method'`
+  - `maxCodeLines` (number, optional) - Limit lines of source code per method
+  - `filterPattern` (string, optional) - Wildcard filter for results (e.g., '*validate*', 'cust*')
+- **Returns**: 
+  - **Summary mode**: Object overview with property/collection counts and available collections
+  - **Properties mode**: Complete property list with descriptions, types, and possible values
+  - **Collection mode**: Items from specific collections (Methods, Fields, Relations, etc.)
+  - **XppCode mode**: Full X++ source code with method signatures, parameters, and metadata
+- **Performance**: 
+  - Summary mode: ~50ms (optimized for agent workflows)
+  - Properties mode: ~100ms (comprehensive property analysis)
+  - Collection mode: Unlimited items without truncation
+  - XppCode mode: Real-time source extraction with rich metadata
+- **Use Cases**: 
+  - Object exploration and documentation
+  - Code analysis and reverse engineering  
+  - Method signature discovery
+  - Table structure analysis
+  - Form control inspection
+
+**XppCode Mode Examples:**
+```javascript
+// Extract specific method source code
+inspect_xpp_object("SalesLine", "AxTable", "xppcode", "", "specific-method", "validateWrite")
+
+// Get all methods from a class
+inspect_xpp_object("CustTable", "AxTable", "xppcode", "", "methods")
+
+// Extract event handlers only
+inspect_xpp_object("MyForm", "AxForm", "xppcode", "", "event-handlers")
+```
+
+**XppCode Response Format:**
+```json
+{
+  "objectType": "AxTable",
+  "objectName": "SalesLine", 
+  "codeTarget": "specific-method",
+  "methodName": "validateWrite",
+  "extractedCode": {
+    "signature": "public boolean validateWrite(boolean _skipCreditLimitCheck = false)",
+    "returnType": "boolean",
+    "parameters": [{"name": "_skipCreditLimitCheck", "type": "boolean", "defaultValue": "false"}],
+    "metrics": {"lines": 11, "characters": 243},
+    "features": ["calls super()"],
+    "sourceCode": "    public boolean validateWrite(boolean _skipCreditLimitCheck = false)\n    {\n        boolean ok = true;\n        ok = super();\n        ok = ok && this.validateWrite_server(_skipCreditLimitCheck);\n        return ok;\n    }"
+  }
+}
+```
+
 ### ⚙️ Configuration & Management
 #### `get_current_config`
 Get comprehensive server configuration including paths, index statistics, VS2022 service status, and models grouped by type.
@@ -375,7 +441,7 @@ Discover available modification methods for any D365 object type using real-time
 
 ## 🔄 Tool Consolidation History
 
-The tool set has been systematically optimized from **15 original tools** down to **7 core tools** (53% reduction) while maintaining full functionality:
+The tool set has been systematically optimized from **15 original tools** down to **8 core tools** (47% reduction) while maintaining full functionality:
 
 **Removed Redundant Tools:**
 - `browse_directory` - Functionality merged into enhanced search capabilities

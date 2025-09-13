@@ -1,13 +1,6 @@
 import { promises as fs } from "fs";
 import { join, relative, basename, extname, dirname } from "path";
-import { ObjectIndex } from "./types.js";
-import { AOTStructureManager } from "./aot-structure.js";
-import { AOTStructureCacheManager } from "./aot-structure-cache.js";
-import { isXppRelatedFile, getPackagePriority } from "./utils.js";
-import { MAX_FILE_SIZE } from "./config.js";
-import { AppConfig } from "./app-config.js";
 import { fileURLToPath } from "url";
-import { readFileSync } from "fs";
 import { D365ServiceClient } from "./d365-service-client.js";
 import { SQLiteObjectLookup, ObjectLocation } from "./sqlite-lookup.js";
 
@@ -248,8 +241,20 @@ export class ObjectIndexManager {
         console.log(`📊 Processing ${TARGET_MODELS.length} models via parallel workers...`);
         
         // Process models in parallel using worker threads
-        const results = await this.processModelsInParallel(TARGET_MODELS);
+        // Process 20 models each time
+
+        const results = [];
         
+        const chunkSize = 20;
+        for (let i = 0; i < TARGET_MODELS.length; i += chunkSize) {
+          const chunk = TARGET_MODELS.slice(i, i + chunkSize);
+          const chunkResults = await this.processModelsInParallel(chunk);
+          results.push(...chunkResults);
+        }
+
+        //const results = await this.processModelsInParallel(modelChunks);
+
+
         // Aggregate results and bulk insert all objects
         let totalObjects = 0;
         const allObjects: ObjectLocation[] = [];

@@ -136,7 +136,7 @@ export class ToolDefinitions {
         },
         {
           name: "inspect_xpp_object",
-          description: "🔍 ENHANCED D365 OBJECT INSPECTION - Advanced inspection with summary-first architecture for optimal agent workflows. Supports 4 inspection modes: fast summaries, targeted properties, specific collections, and full detailed views. ✅ PERFORMANCE OPTIMIZED: 10x faster summaries, unlimited collection access (619+ methods, 193+ fields), no truncation limits. ✅ UNIVERSAL SUPPORT: Works with all 544+ D365 object types (Tables, Classes, Forms, Enums, etc.) using dynamic discovery. ✅ AGENT-FRIENDLY: Progressive disclosure pattern - start with summary, drill down as needed.",
+          description: "🔍 ENHANCED D365 OBJECT INSPECTION v2.0 - Advanced inspection with summary-first architecture for optimal agent workflows. Supports 4 inspection modes: fast summaries, targeted properties, specific collections, and X++ source code extraction. ✅ PERFORMANCE OPTIMIZED: 10x faster summaries, unlimited collection access (619+ methods, 193+ fields), no truncation limits. ✅ UNIVERSAL SUPPORT: Works with all 544+ D365 object types (Tables, Classes, Forms, Enums, etc.) using dynamic discovery. ✅ AGENT-FRIENDLY: Progressive disclosure pattern - start with summary, drill down as needed.",
           inputSchema: {
             type: "object",
             properties: {
@@ -150,24 +150,25 @@ export class ToolDefinitions {
               },
               inspectionMode: {
                 type: "string",
-                enum: ["summary", "properties", "collection", "detailed"],
-                description: "Controls inspection detail level: 'summary' = Fast overview with collection counts (~50ms, agent-friendly), 'properties' = All object properties without collections (~100ms), 'collection' = Specific collection items without limits (requires collectionName), 'detailed' = Full traditional inspection (backward compatible, slower). Default: 'detailed'.",
+                enum: ["summary", "properties", "collection", "xppcode"],
+                description: "Controls inspection detail level: 'summary' = Fast overview with collection counts (~50ms, agent-friendly), 'properties' = All object properties without collections (~100ms), 'collection' = Specific collection items without limits (requires collectionName), 'xppcode' = Extract X++ source code from methods (requires codeTarget). Default: 'summary'.",
               },
               collectionName: {
                 type: "string",
                 description: "Required when inspectionMode='collection'. Collection to retrieve: Tables='Methods'|'Fields'|'Relations'|'Indexes'|'FieldGroups'; Classes='Methods'|'Members'|'Variables'; Forms='DataSources'|'Controls'|'Parts'; Enums='Values'. Use 'summary' mode first to see available collections for the object.",
               },
-              includeProperties: {
-                type: "boolean",
-                description: "Include detailed property information. Only applies to 'detailed' mode (default: true). Other modes handle properties automatically.",
+              codeTarget: {
+                type: "string",
+                enum: ["methods", "specific-method", "event-handlers"],
+                description: "Required when inspectionMode='xppcode'. Target for code extraction: 'methods' = All method source code, 'specific-method' = Single method by name (requires methodName), 'event-handlers' = Event handler methods.",
               },
-              includeChildren: {
-                type: "boolean", 
-                description: "Include child objects/collections. Only applies to 'detailed' mode (default: true). Other modes handle collections optimally.",
+              methodName: {
+                type: "string",
+                description: "Required when codeTarget='specific-method'. Name of the specific method to extract source code from.",
               },
-              includeTemplateInfo: {
-                type: "boolean",
-                description: "Include template and pattern information for advanced analysis (default: false). Only applies to 'detailed' mode.",
+              maxCodeLines: {
+                type: "number",
+                description: "Optional limit on lines of source code returned per method. Useful for large methods to prevent overwhelming output.",
               },
               filterPattern: {
                 type: "string",
@@ -220,6 +221,35 @@ export class ToolDefinitions {
                 }
               },
               {
+                description: "💻 CODE EXTRACTION: Get source code from all methods",
+                parameters: {
+                  objectName: "SalesFormLetter",
+                  objectType: "AxClass",
+                  inspectionMode: "code",
+                  codeTarget: "methods"
+                }
+              },
+              {
+                description: "💻 SPECIFIC METHOD: Get source code for one method",
+                parameters: {
+                  objectName: "CustTable",
+                  objectType: "AxTable",
+                  inspectionMode: "code",
+                  codeTarget: "specific-method",
+                  methodName: "validateWrite"
+                }
+              },
+              {
+                description: "💻 LIMITED CODE: Get method code with line limits",
+                parameters: {
+                  objectName: "SalesTable",
+                  objectType: "AxTable",
+                  inspectionMode: "code",
+                  codeTarget: "methods",
+                  maxCodeLines: 50
+                }
+              },
+              {
                 description: "🔍 FILTERED SEARCH: Find validation methods only", 
                 parameters: {
                   objectName: "SalesTable",
@@ -230,13 +260,11 @@ export class ToolDefinitions {
                 }
               },
               {
-                description: "📄 FULL INSPECTION: Traditional detailed view (backward compatible)",
+                description: "� PROPERTIES INSPECTION: Get all object properties with descriptions",
                 parameters: {
                   objectName: "CustTable",
                   objectType: "AxTable",
-                  inspectionMode: "detailed",
-                  includeProperties: true,
-                  includeChildren: true
+                  inspectionMode: "properties"
                 }
               },
               {
@@ -258,7 +286,7 @@ export class ToolDefinitions {
                 }
               },
               {
-                description: "⚡ PERFORMANCE COMPARISON: Fast summary vs detailed inspection",
+                description: "⚡ PERFORMANCE COMPARISON: Fast summary vs properties inspection",
                 parameters: {
                   objectName: "SalesTable",
                   objectType: "AxTable",

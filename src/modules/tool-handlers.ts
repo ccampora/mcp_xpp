@@ -239,21 +239,21 @@ export class ToolHandlers {
     const schema = z.object({
       objectName: z.string(),
       objectType: z.string().optional(),
-      inspectionMode: z.enum(["summary", "properties", "collection", "detailed"]).optional().default("detailed"),
+      inspectionMode: z.enum(["summary", "properties", "collection", "xppcode"]).optional().default("summary"),
       collectionName: z.string().optional(),
-      includeProperties: z.boolean().optional().default(true),
-      includeChildren: z.boolean().optional().default(true),
-      includeTemplateInfo: z.boolean().optional().default(false),
+      codeTarget: z.enum(["methods", "specific-method", "event-handlers"]).optional(),
+      methodName: z.string().optional(),
+      maxCodeLines: z.number().optional(),
       filterPattern: z.string().optional(),
     });
     const { 
       objectName, 
       objectType, 
       inspectionMode, 
-      collectionName, 
-      includeProperties, 
-      includeChildren, 
-      includeTemplateInfo, 
+      collectionName,
+      codeTarget,
+      methodName,
+      maxCodeLines,
       filterPattern 
     } = schema.parse(args);
     
@@ -261,6 +261,24 @@ export class ToolHandlers {
     if (inspectionMode === "collection" && !collectionName) {
       return await createLoggedResponse(
         `collectionName parameter is required when inspectionMode is "collection". Use inspectionMode="summary" first to see available collections.`,
+        requestId,
+        "inspect_xpp_object"
+      );
+    }
+    
+    // Validate codeTarget is provided when inspectionMode is "xppcode"
+    if (inspectionMode === "xppcode" && !codeTarget) {
+      return await createLoggedResponse(
+        `codeTarget parameter is required when inspectionMode is "xppcode". Valid values: "methods", "specific-method", "event-handlers"`,
+        requestId,
+        "inspect_xpp_object"
+      );
+    }
+    
+    // Validate methodName is provided when codeTarget is "specific-method"
+    if (codeTarget === "specific-method" && !methodName) {
+      return await createLoggedResponse(
+        `methodName parameter is required when codeTarget is "specific-method".`,
         requestId,
         "inspect_xpp_object"
       );
@@ -285,20 +303,22 @@ export class ToolHandlers {
           action = "objectcollection";
           requestData.collectionName = collectionName;
           break;
-        case "detailed":
+        case "xppcode":
+          action = "objectcode";
+          requestData.codeTarget = codeTarget;
+          if (methodName) requestData.methodName = methodName;
+          if (maxCodeLines) requestData.maxCodeLines = maxCodeLines;
+          break;
         default:
-          action = "inspectobject";
-          requestData = {
-            objectName,
-            objectType,
-            includeProperties,
-            includeChildren,
-            includeTemplateInfo
-          };
+          // Default to summary mode for backward compatibility
+          action = "objectsummary";
           break;
       }
       
-      const result = await client.sendRequest(action, undefined, requestData);
+      const result = await client.sendRequest({
+        action: action,
+        parameters: requestData
+      });
       
       await client.disconnect();
       
@@ -312,35 +332,7 @@ export class ToolHandlers {
       
       let data = result.Data;
       
-      // Apply filtering for detailed mode (new modes handle filtering internally)
-      if (inspectionMode === "detailed" && filterPattern && data) {
-        // Filter Properties
-        if (data.Properties) {
-          data.Properties = this.filterByPattern(data.Properties, filterPattern);
-        }
-        
-        // Filter Children
-        if (data.Children) {
-          data.Children = this.filterByPattern(data.Children, filterPattern);
-        }
-        
-        // Filter TemplateInfo properties and methods
-        if (data.TemplateInfo) {
-          if (data.TemplateInfo.AllProperties) {
-            data.TemplateInfo.AllProperties = this.filterByPattern(data.TemplateInfo.AllProperties, filterPattern);
-          }
-          if (data.TemplateInfo.AllMethods) {
-            data.TemplateInfo.AllMethods = this.filterByPattern(data.TemplateInfo.AllMethods, filterPattern);
-          }
-        }
-        
-        // Filter Metadata properties
-        if (data.Metadata && data.Metadata.AllAvailableProperties) {
-          data.Metadata.AllAvailableProperties = this.filterByPattern(data.Metadata.AllAvailableProperties, filterPattern);
-        }
-      }
-      
-      // Format output based on inspection mode
+      // Format output based on inspection mode (filtering handled internally by C# service)
       let content = this.formatInspectionResult(inspectionMode, objectName, data, filterPattern, collectionName);
       
       return await createLoggedResponse(content, requestId, "inspect_xpp_object");
@@ -357,10 +349,7 @@ export class ToolHandlers {
 
   // Format inspection results based on inspection mode
   static formatInspectionResult(inspectionMode: string, objectName: string, data: any, filterPattern?: string, collectionName?: string): string {
-    let content = `🔍 Object Inspection for "${objectName}"`;
-    if (inspectionMode !== "detailed") {
-      content += ` (${inspectionMode} mode)`;
-    }
+    let content = `🔍 Object Inspection for "${objectName}" (${inspectionMode} mode)`;
     if (filterPattern) {
       content += ` (filtered by: ${filterPattern})`;
     }
@@ -381,9 +370,10 @@ export class ToolHandlers {
         return this.formatPropertiesResult(content, objectName, data);
       case "collection":
         return this.formatCollectionResult(content, objectName, data, collectionName);
-      case "detailed":
+      case "xppcode":
+        return this.formatCodeResult(content, objectName, data);
       default:
-        return this.formatDetailedResult(content, objectName, data);
+        return this.formatSummaryResult(content, objectName, data);
     }
   }
 
@@ -457,7 +447,13 @@ export class ToolHandlers {
     if (data.Collection) {
       content += `📋 ${data.CollectionName} Collection:\n`;
       content += `   Item Type: ${data.Collection.ItemType}\n`;
-      content += `   Count: ${data.Collection.Count}\n\n`;
+      content += `   Count: ${data.Collection.FilteredCount || data.Collection.Count}\n`;
+      
+      // Show filtering info if pattern was applied
+      if (data.FilterPattern && data.Collection.TotalCount > (data.Collection.FilteredCount || data.Collection.Count)) {
+        content += `   (${data.Collection.FilteredCount || data.Collection.Count} of ${data.Collection.TotalCount} items matching "${data.FilterPattern}")\n`;
+      }
+      content += `\n`;
       
       if (data.Collection.Items && data.Collection.Items.length > 0) {
         content += `Items:\n`;
@@ -471,110 +467,6 @@ export class ToolHandlers {
       content += `Collection "${collectionName}" not found or empty.\n`;
     }
 
-    return content;
-  }
-
-  // Format detailed mode result (backward compatible)
-  static formatDetailedResult(content: string, objectName: string, data: any): string {
-    content += `✅ Object found: ${data.ObjectType} "${data.ObjectName}"\n\n`;
-    
-    // Object Structure
-    if (data.Structure) {
-      content += `📋 Object Structure:\n`;
-      content += `   Type: ${data.Structure.TypeName || 'Unknown'}\n`;
-      content += `   Full Type: ${data.Structure.FullTypeName || 'Unknown'}\n`;
-      content += `   Assembly: ${data.Structure.Assembly || 'Unknown'}\n`;
-      if (data.Structure.BaseType) content += `   Base Type: ${data.Structure.BaseType}\n`;
-      content += `   Properties: ${data.Structure.PropertyCount || 0}\n`;
-      content += `   Methods: ${data.Structure.MethodCount || 0}\n\n`;
-    }
-    
-    // Metadata
-    if (data.Metadata) {
-      content += `📝 Metadata:\n`;
-      for (const [key, value] of Object.entries(data.Metadata)) {
-        if (value && value !== '<null>') {
-          content += `   ${key}: ${value}\n`;
-        }
-      }
-      content += `\n`;
-    }
-    
-    // Properties
-    if (data.Properties && data.Properties.length > 0) {
-      content += `🔧 Properties (${data.Properties.length}):\n`;
-      for (const prop of data.Properties.slice(0, 30)) {
-        content += `   ${prop.Name}: ${prop.Type}`;
-        
-        if (prop.CurrentValue && prop.CurrentValue !== '<not available>') {
-          content += ` = ${prop.CurrentValue}`;
-        }
-        
-        if (prop.IsEnum && prop.PossibleValues && prop.PossibleValues.length > 0) {
-          content += ` [enum: ${prop.PossibleValues.join(', ')}]`;
-        }
-        
-        const flags = [];
-        if (prop.IsReadOnly) flags.push('ReadOnly');
-        if (prop.IsEnum) flags.push('Enum');
-        if (prop.IsNullable) flags.push('Nullable');
-        if (prop.IsCollection) flags.push('Collection');
-        if (flags.length > 0) {
-          content += ` [${flags.join(', ')}]`;
-        }
-        
-        content += `\n`;
-        
-        if (prop.Description && prop.Description.trim() !== '') {
-          content += `     Description: ${prop.Description}\n`;
-        }
-        
-        if (prop.IsEnum && prop.PossibleValues && prop.PossibleValues.length > 5) {
-          content += `     Possible values: ${prop.PossibleValues.join(', ')}\n`;
-        }
-      }
-      if (data.Properties.length > 30) {
-        content += `   ... and ${data.Properties.length - 30} more properties\n`;
-      }
-      content += `\n`;
-    }
-    
-    // Children/Collections
-    if (data.Children && data.Children.length > 0) {
-      content += `👶 Child Collections (${data.Children.length}):\n`;
-      for (const child of data.Children) {
-        content += `   ${child.PropertyName}: ${child.PropertyType}`;
-        if (child.Count !== undefined) {
-          content += ` (${child.Count} items)`;
-        }
-        if (child.Error) {
-          content += ` [Error: ${child.Error}]`;
-        }
-        content += `\n`;
-        
-        if (child.Items && child.Items.length > 0) {
-          for (const item of child.Items.slice(0, 3)) {
-            content += `     - ${item.Type}: ${item.Summary}\n`;
-          }
-          if (child.Items.length > 3) {
-            content += `     ... and ${child.Items.length - 3} more items\n`;
-          }
-        }
-      }
-      content += `\n`;
-    }
-    
-    // Template Info
-    if (data.TemplateInfo) {
-      content += `🎨 Template & Pattern Information:\n`;
-      for (const [key, value] of Object.entries(data.TemplateInfo)) {
-        if (value && value !== '<null>') {
-          content += `   ${key}: ${value}\n`;
-        }
-      }
-      content += `\n`;
-    }
-    
     return content;
   }
 
@@ -1519,6 +1411,123 @@ export class ToolHandlers {
         "execute_object_modification"
       );
     }
+  }
+
+  // Format code inspection result
+  static formatCodeResult(content: string, objectName: string, data: any): string {
+    if (!data.CodeContent) {
+      content += `❌ No code content available\n`;
+      return content;
+    }
+
+    const codeData = data.CodeContent;
+    
+    // Add header with extraction info
+    content += `📄 Object Type: ${data.ObjectType}\n`;
+    content += `🔧 Code Target: ${data.CodeTarget}\n`;
+    content += `📅 Extracted: ${data.ExtractedAt}\n`;
+    if (data.MethodName) {
+      content += `🎯 Method: ${data.MethodName}\n`;
+    }
+    content += `\n`;
+
+    if (codeData.Error) {
+      content += `❌ Error: ${codeData.Error}\n`;
+      return content;
+    }
+
+    // Handle different code extraction results
+    if (codeData.Method) {
+      // Single method result
+      content += this.formatSingleMethod(codeData.Method);
+    } else if (codeData.Methods && Array.isArray(codeData.Methods)) {
+      // Multiple methods result
+      content += `📊 **Summary:**\n`;
+      content += `   • Total Methods: ${codeData.TotalMethods || codeData.Methods.length}\n`;
+      content += `   • Total Lines: ${codeData.TotalLinesOfCode || 'Unknown'}\n`;
+      content += `   • Language: ${codeData.Language || 'X++'}\n\n`;
+      
+      content += `💻 **Method Source Code:**\n\n`;
+      
+      codeData.Methods.forEach((method: any, index: number) => {
+        content += `--- Method ${index + 1}: ${method.Name || 'Unknown'} ---\n`;
+        content += this.formatSingleMethod(method);
+        content += `\n`;
+      });
+    } else {
+      content += `⚠️ Unexpected code result format\n`;
+    }
+
+    return content;
+  }
+
+  // Format a single method's code data
+  static formatSingleMethod(method: any): string {
+    let content = '';
+    
+    if (method.Error) {
+      content += `❌ Error: ${method.Error}\n`;
+      return content;
+    }
+
+    // Method signature and metadata
+    content += `🏷️  **Method:** ${method.Name || 'Unknown'}\n`;
+    if (method.Signature) {
+      content += `📝 **Signature:** \`${method.Signature}\`\n`;
+    }
+    
+    // Method characteristics
+    const characteristics = [];
+    if (method.Visibility) characteristics.push(`${method.Visibility}`);
+    if (method.ReturnType) characteristics.push(`returns ${method.ReturnType}`);
+    if (method.IsStatic) characteristics.push('static');
+    if (method.IsAbstract) characteristics.push('abstract');
+    if (method.IsOverride) characteristics.push('override');
+    
+    if (characteristics.length > 0) {
+      content += `🔧 **Type:** ${characteristics.join(', ')}\n`;
+    }
+    
+    // Code metrics
+    const metrics = [];
+    if (method.LineCount) metrics.push(`${method.LineCount} lines`);
+    if (method.CharacterCount) metrics.push(`${method.CharacterCount} chars`);
+    if (method.Parameters && method.Parameters.length > 0) {
+      metrics.push(`${method.Parameters.length} parameters`);
+    }
+    
+    if (metrics.length > 0) {
+      content += `📊 **Metrics:** ${metrics.join(', ')}\n`;
+    }
+
+    // Parameters
+    if (method.Parameters && method.Parameters.length > 0) {
+      content += `📋 **Parameters:**\n`;
+      method.Parameters.forEach((param: any) => {
+        content += `   • ${param.Name}: ${param.Type || 'unknown'}`;
+        if (param.DefaultValue) content += ` = ${param.DefaultValue}`;
+        if (param.Optional) content += ' (optional)';
+        content += `\n`;
+      });
+    }
+
+    // Code flags
+    const flags = [];
+    if (method.HasSuperCall) flags.push('calls super()');
+    if (method.HasTryCatch) flags.push('has try/catch');
+    
+    if (flags.length > 0) {
+      content += `🏷️  **Features:** ${flags.join(', ')}\n`;
+    }
+
+    // Source code
+    if (method.HasSourceCode && method.SourceCode) {
+      content += `\n💻 **Source Code:**\n\`\`\`xpp\n${method.SourceCode}\n\`\`\`\n`;
+    } else {
+      content += `\n❌ **No source code available**\n`;
+    }
+
+    return content;
   }
 
 

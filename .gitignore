@@ -133,4 +133,5 @@ ms-api-server/D365MetadataService.csproj
 ms-api-server/appsettings.json
 
 docs/internal
+docs/xpp_guidelines
 .github/copilot-instructions.md
