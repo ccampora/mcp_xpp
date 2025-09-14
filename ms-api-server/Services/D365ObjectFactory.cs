@@ -14,6 +14,8 @@ using D365MetadataService.Models;
 using D365MetadataService.Services;
 using Newtonsoft.Json;
 
+#nullable enable
+
 namespace D365MetadataService.Services
 {
     /// <summary>
@@ -1052,6 +1054,30 @@ namespace D365MetadataService.Services
             
             // Default priority for unknown patterns
             return 10;
+        }
+
+        /// <summary>
+        /// Discover available object types using existing reflection cache
+        /// </summary>
+        public Dictionary<string, Type> GetAvailableObjectTypes()
+        {
+            return new Dictionary<string, Type>(_axTypeCache);
+        }
+
+        /// <summary>
+        /// Check if an object type is supported
+        /// </summary>
+        public bool IsObjectTypeSupported(string objectType)
+        {
+            return _axTypeCache.ContainsKey(objectType);
+        }
+
+        /// <summary>
+        /// Get type information for an object type
+        /// </summary>
+        public Type? GetObjectType(string objectType)
+        {
+            return _axTypeCache.TryGetValue(objectType, out var type) ? type : null;
         }
     }
 }

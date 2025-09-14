@@ -107,17 +107,150 @@ export class ToolHandlers {
     
     // Regular object creation flow with parameters
     const schema = z.object({
-      objectName: z.string(),
-      objectType: z.string(),
+      objectName: z.string().optional(),
+      objectType: z.string().optional(),
       layer: z.string().optional(),
       publisher: z.string().default("YourCompany"),
       version: z.string().default("1.0.0.0"),
       dependencies: z.array(z.string()).default(["ApplicationPlatform", "ApplicationFoundation"]),
       outputPath: z.string().default("Models"),
       properties: z.record(z.any()).optional(),
+      discoverParameters: z.boolean().default(false),
     });
     
     const params = schema.parse(actualArgs);
+    
+    // Handle parameter discovery mode
+    if (params.discoverParameters) {
+      if (!params.objectType) {
+        return await createLoggedResponse(
+          "❌ Parameter discovery requires objectType to be specified.\n\n" +
+          "Example: { \"objectType\": \"AxTable\", \"discoverParameters\": true }",
+          requestId,
+          "create_xpp_object"
+        );
+      }
+      
+      console.log(`🔍 Discovering parameters for object type: ${params.objectType}`);
+      
+      try {
+        const discoveryResult = await ObjectCreators.discoverParameters(params.objectType);
+        
+        if (!discoveryResult.success) {
+          return await createLoggedResponse(
+            `❌ Parameter discovery failed: ${discoveryResult.errorMessage}`,
+            requestId,
+            "create_xpp_object"
+          );
+        }
+        
+        const schema = discoveryResult.schema.ParameterSchema;
+        let content = `🔍 Parameter Discovery for ${params.objectType}\n`;
+        content += `Found ${schema.ParameterCount} creation-relevant parameters\n`;
+        content += `Discovery time: ${discoveryResult.discoveryTime}ms\n\n`;
+        
+        // Show required parameters
+        if (schema.Required && schema.Required.length > 0) {
+          content += `✅ Required Parameters (${schema.Required.length}):\n`;
+          schema.Required.forEach((paramName: string) => {
+            const param = schema.Parameters[paramName];
+            content += `  • ${paramName}: ${param.Type}\n`;
+            if (param.Description) {
+              content += `    ${param.Description}\n`;
+            }
+          });
+          content += '\n';
+        }
+        
+        // Show recommended parameters
+        if (schema.Recommended && schema.Recommended.length > 0) {
+          content += `⭐ Recommended Parameters (${schema.Recommended.length}):\n`;
+          schema.Recommended.forEach((paramName: string) => {
+            const param = schema.Parameters[paramName];
+            content += `  • ${paramName}: ${param.Type}\n`;
+            if (param.Description) {
+              content += `    ${param.Description}\n`;
+            }
+            if (param.IsEnum && param.EnumValues.length > 0) {
+              content += `    Values: ${param.EnumValues.slice(0, 5).join(', ')}`;
+              if (param.EnumValues.length > 5) content += ` (and ${param.EnumValues.length - 5} more)`;
+              content += '\n';
+            }
+            if (param.DefaultValue) {
+              content += `    Default: ${param.DefaultValue}\n`;
+            }
+          });
+          content += '\n';
+        }
+        
+        // Show all other parameters (summarized)
+        const allParamNames = Object.keys(schema.Parameters);
+        const requiredNames = schema.Required || [];
+        const recommendedNames = schema.Recommended || [];
+        const otherParams = allParamNames.filter(
+          name => !requiredNames.includes(name) && !recommendedNames.includes(name)
+        );
+        
+        if (otherParams.length > 0) {
+          content += `📋 Other Available Parameters (${otherParams.length}):\n`;
+          otherParams.slice(0, 10).forEach(paramName => {
+            const param = schema.Parameters[paramName];
+            content += `  • ${paramName}: ${param.Type}`;
+            if (param.IsEnum) content += ` (enum)`;
+            content += '\n';
+          });
+          if (otherParams.length > 10) {
+            content += `  ... and ${otherParams.length - 10} more parameters\n`;
+          }
+          content += '\n';
+        }
+        
+        // Show usage patterns if available
+        if (schema.UsagePatterns && Object.keys(schema.UsagePatterns).length > 0) {
+          content += `🎯 Usage Patterns:\n`;
+          Object.entries(schema.UsagePatterns).forEach(([patternName, patternData]) => {
+            const pattern = patternData as any; // Type assertion for unknown pattern structure
+            content += `  📐 ${patternName}: ${pattern.description || 'Usage pattern'}\n`;
+            if (pattern.scenarios && pattern.scenarios.length > 0) {
+              content += `    Scenarios: ${pattern.scenarios.slice(0, 3).join(', ')}\n`;
+            }
+          });
+          content += '\n';
+        }
+        
+        content += `💡 To create an object with parameters:\n`;
+        content += `{\n`;
+        content += `  "objectType": "${params.objectType}",\n`;
+        content += `  "objectName": "MyCustomObject",\n`;
+        // Show example with first enum parameter
+        const firstEnumParam = allParamNames.find(name => schema.Parameters[name].IsEnum);
+        if (firstEnumParam) {
+          const param = schema.Parameters[firstEnumParam];
+          content += `  "${firstEnumParam}": "${param.EnumValues[0]}"\n`;
+        }
+        content += `}\n`;
+        
+        return await createLoggedResponse(content, requestId, "create_xpp_object");
+        
+      } catch (error) {
+        return await createLoggedResponse(
+          `❌ Parameter discovery error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          requestId,
+          "create_xpp_object"
+        );
+      }
+    }
+    
+    // Regular object creation flow - require objectName and objectType
+    if (!params.objectName || !params.objectType) {
+      return await createLoggedResponse(
+        "❌ Object creation requires both objectName and objectType parameters.\n\n" +
+        "For parameter discovery, use: { \"objectType\": \"AxTable\", \"discoverParameters\": true }\n" +
+        "For object creation, use: { \"objectName\": \"MyTable\", \"objectType\": \"AxTable\" }",
+        requestId,
+        "create_xpp_object"
+      );
+    }
     
     // Note: xppPath no longer required - VS2022 service handles all operations
     console.log(`Creating ${params.objectType} '${params.objectName}' using direct VS2022 service integration...`);

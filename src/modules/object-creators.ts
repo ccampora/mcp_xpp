@@ -207,4 +207,44 @@ export class ObjectCreators {
       return `ERROR: Form creation for ${formName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
+
+  /**
+   * Discover available parameters for a specific D365 object type
+   */
+  static async discoverParameters(objectType: string): Promise<{
+    success: boolean;
+    schema?: any;
+    errorMessage?: string;
+    discoveryTime?: string;
+  }> {
+    try {
+      const client = this.getServiceClient(15000); // Longer timeout for discovery
+      await client.connect();
+      
+      const result = await client.createObject(objectType, {
+        discoverParameters: true
+      });
+      
+      await client.disconnect();
+      
+      if (result.Success) {
+        return {
+          success: true,
+          schema: result.Data,
+          discoveryTime: result.ExecutionTime || '0ms'
+        };
+      } else {
+        return {
+          success: false,
+          errorMessage: result.Message || 'Parameter discovery failed'
+        };
+      }
+    } catch (error) {
+      await DiskLogger.logError(error, `Parameter discovery failed for ${objectType}`);
+      return {
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
 }

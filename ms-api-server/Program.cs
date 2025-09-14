@@ -96,6 +96,9 @@ namespace D365MetadataService
             // Register D365 Reflection Service
             services.AddSingleton<D365ReflectionService>();
 
+            // Register Parameter Discovery Service
+            services.AddSingleton<ParameterDiscoveryService>();
+
             // Register all request handlers
             services.AddSingleton<IRequestHandler, CreateObjectHandler>();
             services.AddSingleton<IRequestHandler, HealthCheckHandler>();

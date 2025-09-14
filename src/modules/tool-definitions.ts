@@ -58,6 +58,11 @@ export class ToolDefinitions {
               properties: {
                 type: "object",
                 description: "Advanced object-specific properties for specialized configuration. Use for complex scenarios like custom table relations, form data sources, report parameters, workflow configurations, etc. Structure varies by object type."
+              },
+              discoverParameters: {
+                type: "boolean",
+                description: "Set to true to discover available parameters for the specified object type instead of creating an object. Returns a detailed parameter schema with descriptions, types, and usage patterns.",
+                default: false
               }
             },
             required: [], // No required fields - allows calling without parameters to list object types
@@ -65,6 +70,20 @@ export class ToolDefinitions {
               {
                 description: "🔍 DISCOVER: Browse all 544+ available object types organized by category (CALL THIS FIRST)",
                 parameters: {}
+              },
+              {
+                description: "🔍 DISCOVER: Find available parameters for AxTable objects",
+                parameters: {
+                  objectType: "AxTable",
+                  discoverParameters: true
+                }
+              },
+              {
+                description: "🔍 DISCOVER: Find available parameters for AxClass objects",
+                parameters: {
+                  objectType: "AxClass", 
+                  discoverParameters: true
+                }
               },
               {
                 description: "🏗️ CREATE: Custom business logic class",
