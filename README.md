@@ -3,14 +3,24 @@
 
 A Model Context Protocol (MCP) server for Microsoft Dynamics 365 Finance & Operations development. This tool enables D365 object creation, modification, and analysis through the MCP standard, allowing integration with various development environments.
 
-**Date:** September 13, 2025  
-**Status:** Functional with VS2022 service integration
+**Date:** September 18, 2025  
+**Status:** Functional with VS2022 service integration and enhanced form creation
+
+## Recent Updates ✨
+
+**September 18, 2025 - Form Creation Enhancements:**
+- 🎯 **NEW create_form Tool**: Specialized form creation with pattern support and datasource integration
+- 🔧 **DetailsMaster Pattern Fixed**: Resolved validation issues through intelligent field control creation  
+- 🗄️ **Enhanced DataSource Support**: Flexible datasource handling (arrays, strings, comma-separated)
+- 📋 **Pattern Discovery**: 36 filtered form patterns with descriptions and requirements
+- ✅ **Pattern Validation**: Automatic field control creation for patterns requiring them
 
 ## Overview
 
 This MCP server provides D365 F&O development capabilities including:
 
 - **Object Creation**: Support for D365 classes, tables, forms, enums, and 544+ other object types
+- **Form Creation**: ✨ **Enhanced** - Specialized form creation with pattern validation and datasource integration
 - **Object Modification**: Add methods, fields, and other components to existing objects
 - **Object Inspection**: Analyze D365 objects and extract X++ source code
 - **Codebase Search**: Browse and search through D365 codebases with pattern matching
@@ -36,16 +46,17 @@ The architecture enables D365 development from various MCP-compatible clients wh
 
 ## Available Tools
 
-The server provides 8 tools for D365 development:
+The server provides 9 specialized tools for D365 development:
 
-1. **create_xpp_object** - Create D365 objects (classes, tables, forms, etc.)
-2. **execute_object_modification** - Modify existing objects (add methods, fields)
-3. **discover_modification_capabilities** - Explore available modification methods
-4. **find_xpp_object** - Find specific objects by name/type
-5. **search_objects_pattern** - Pattern search with wildcard support
-6. **inspect_xpp_object** - Object analysis with X++ source code extraction
-7. **get_current_config** - System configuration and status
-8. **build_object_index** - Index management for search performance
+1. **create_xpp_object** - Create D365 objects (classes, tables, enums, etc.) - *Note: Use create_form for forms*
+2. **create_form** - ✨ **NEW** - Specialized form creation with pattern support and datasource integration
+3. **execute_object_modification** - Modify existing objects (add methods, fields)
+4. **discover_modification_capabilities** - Explore available modification methods
+5. **find_xpp_object** - Find specific objects by name/type
+6. **search_objects_pattern** - Pattern search with wildcard support
+7. **inspect_xpp_object** - Object analysis with X++ source code extraction
+8. **get_current_config** - System configuration and status
+9. **build_object_index** - Index management for search performance
 
 ## Prerequisites
 
@@ -110,11 +121,13 @@ Add to Claude Desktop configuration file:
 ### Object Creation
 
 #### `create_xpp_object`
-Creates D365 F&O objects using VS2022 service integration.
+Creates D365 F&O objects using VS2022 service integration. 
+
+⚠️ **Important:** For creating forms, use the dedicated `create_form` tool instead as it provides specialized pattern support and datasource integration.
 
 **Parameters:**
 - `objectName` (string) - Name of the D365 object
-- `objectType` (string) - Object type (AxClass, AxTable, AxForm, AxEnum, etc.)
+- `objectType` (string) - Object type (AxClass, AxTable, AxEnum, etc.) - *Excludes AxForm*
 - `layer` (string, optional) - Application layer (usr, cus, var)
 - `outputPath` (string, optional) - Output directory (default: "Models")
 - `publisher` (string, optional) - Company name (default: "YourCompany")
@@ -130,6 +143,62 @@ create_xpp_object({
   "layer": "usr"
 })
 ```
+
+#### `create_form` ✨ **NEW**
+Specialized tool for creating D365 forms with advanced pattern support and datasource integration. This tool combines form creation and pattern discovery in one interface.
+
+**Parameters:**
+- `mode` (string, required) - Operation mode:
+  - `"create"` - Create a new form with patterns and datasources
+  - `"list_patterns"` - Discover available D365 form patterns
+- `formName` (string, optional) - Form name (required when mode='create')
+- `patternName` (string, optional) - D365 form pattern to apply (e.g., 'SimpleListDetails', 'DetailsMaster', 'Dialog')
+- `patternVersion` (string, optional) - Pattern version (default: 'UX7 1.0')
+- `dataSources` (array|string, optional) - Table names for form datasources
+- `modelName` (string, optional) - D365 model/package name (default: 'ApplicationSuite')
+
+**Key Features:**
+- 🎯 **Pattern-Aware**: Automatically adds field controls when patterns require them (e.g., DetailsMaster)
+- 🗄️ **Flexible DataSources**: Supports arrays, single strings, or comma-separated strings
+- 🔍 **Pattern Discovery**: Lists all 36+ available D365 form patterns with descriptions
+- ✅ **Enhanced Validation**: Resolves pattern validation issues through intelligent field control creation
+
+**Examples:**
+
+```javascript
+// Discover available patterns
+create_form({"mode": "list_patterns"})
+
+// Create simple list form with datasource
+create_form({
+  "mode": "create",
+  "formName": "MyCustomerListForm", 
+  "patternName": "SimpleListDetails",
+  "dataSources": ["CustTable"]
+})
+
+// Create DetailsMaster form with multiple datasources
+create_form({
+  "mode": "create",
+  "formName": "MySalesOrderForm",
+  "patternName": "DetailsMaster",
+  "patternVersion": "UX7 1.0", 
+  "dataSources": ["SalesTable", "SalesLine", "CustTable"],
+  "modelName": "MyCustomModel"
+})
+
+// Create dialog form without datasources
+create_form({
+  "mode": "create",
+  "formName": "MyConfirmationDialog",
+  "patternName": "Dialog"
+})
+```
+
+**Technical Notes:**
+- Patterns like DetailsMaster, SimpleListDetails, and ListPage automatically get enhanced with field controls (RecId, Name, Description, Code) when datasources are provided
+- Pattern validation has been fixed - forms can be created with or without datasources depending on pattern requirements
+- The tool uses direct VS2022 service integration for optimal D365 compatibility
 
 ### Object Discovery
 
@@ -342,6 +411,16 @@ inspect_xpp_object {
 - Build the object index: `build_object_index`
 - Verify D365 codebase path configuration
 - Check that the object exists in the specified model
+
+**"Pattern validation failed" for forms**
+- ✅ **RESOLVED**: This issue has been fixed in the latest version
+- Forms with patterns like DetailsMaster now automatically include required field controls
+- Use the `create_form` tool instead of `create_xpp_object` for better form creation
+
+**"Form creation without datasources fails"**
+- Most patterns work fine without datasources (e.g., DetailsMaster, Dialog patterns)
+- Use `create_form` with `"mode": "list_patterns"` to see pattern requirements
+- DataSources are optional for most patterns but enhance functionality when provided
 
 ### Getting Help
 - Check the `logs/` folder for detailed error information

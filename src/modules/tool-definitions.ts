@@ -16,7 +16,7 @@ export class ToolDefinitions {
       tools: [
         {
           name: "create_xpp_object",
-          description: "🔍 BROWSE OBJECT TYPES: Call without parameters to see all 544+ available D365 F&O object types organized by category. 🏗️ CREATE OBJECTS: Provide parameters to create D365 F&O objects using VS2022 service integration. Supports classes, tables, forms, enums, data entities, reports, workflows, services, and more.",
+          description: "🔍 BROWSE OBJECT TYPES: Call without parameters to see all 544+ available D365 F&O object types organized by category. 🏗️ CREATE OBJECTS: Provide parameters to create D365 F&O objects using VS2022 service integration. Supports classes, tables, enums, data entities, reports, workflows, services, and more. ⚠️ IMPORTANT: For creating FORMS, use the dedicated 'create_form' tool instead as it provides specialized pattern support and datasource integration.",
           inputSchema: {
             type: "object",
             properties: {
@@ -130,6 +130,86 @@ export class ToolDefinitions {
               }
             ]
           },
+        },
+        {
+          name: "create_form",
+          description: "🎯 SPECIALIZED FORM CREATION TOOL: Create D365 forms with advanced pattern support and datasource integration. This tool combines form creation and pattern discovery in one interface. 🔧 MODE 1 (create): Create forms with patterns, datasources, and proper D365 integration. 🔍 MODE 2 (list_patterns): Discover available D365 form patterns with descriptions. Use this tool instead of 'create_xpp_object' for all form-related operations as it provides specialized form capabilities.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              mode: {
+                type: "string",
+                enum: ["create", "list_patterns"],
+                description: "Operation mode: 'create' to create a new form with patterns and datasources, 'list_patterns' to discover available D365 form patterns with descriptions and requirements."
+              },
+              formName: {
+                type: "string",
+                description: "Name of the D365 form to create (e.g., 'MyCustomForm', 'SalesOrderDetailsForm'). Required when mode='create'. Must follow D365 naming conventions."
+              },
+              patternName: {
+                type: "string",
+                description: "D365 form pattern to apply (e.g., 'SimpleListDetails', 'Details Master', 'Dialog - Basic'). Optional - if not specified, defaults to 'SimpleListDetails'. Use mode='list_patterns' first to see all available patterns."
+              },
+              patternVersion: {
+                type: "string",
+                description: "Version of the form pattern (e.g., 'UX7 1.0', 'UX7 2.0'). Optional - defaults to 'UX7 1.0' if not specified."
+              },
+              dataSources: {
+                type: "array",
+                items: { type: "string" },
+                description: "Optional array of D365 table names to add as form datasources (e.g., ['CustTable', 'VendTable', 'InventTable']). Can also be a single string or comma-separated string. Datasources are created independently without pattern mapping."
+              },
+              modelName: {
+                type: "string", 
+                description: "D365 model/package name to create the form in (e.g., 'ApplicationSuite', 'MyCustomModel'). Optional - defaults to 'ApplicationSuite'."
+              }
+            },
+            required: ["mode"],
+          },
+          examples: [
+            {
+              description: "🔍 LIST PATTERNS: Discover all available D365 form patterns",
+              parameters: {
+                mode: "list_patterns"
+              }
+            },
+            {
+              description: "🏗️ CREATE SIMPLE FORM: Create a basic list form with single datasource",
+              parameters: {
+                mode: "create",
+                formName: "MyCustomerListForm",
+                patternName: "SimpleListDetails",
+                dataSources: ["CustTable"]
+              }
+            },
+            {
+              description: "🏗️ CREATE COMPLEX FORM: Create a form with multiple datasources and specific pattern",
+              parameters: {
+                mode: "create",
+                formName: "MySalesOrderForm",
+                patternName: "Details Master",
+                patternVersion: "UX7 1.0",
+                dataSources: ["SalesTable", "SalesLine", "CustTable"],
+                modelName: "MyCustomModel"
+              }
+            },
+            {
+              description: "🏗️ CREATE DIALOG FORM: Create a dialog form without datasources",
+              parameters: {
+                mode: "create",
+                formName: "MyConfirmationDialog",
+                patternName: "Dialog - Basic"
+              }
+            },
+            {
+              description: "🏗️ CREATE WITH CSV DATASOURCES: Using comma-separated datasource string",
+              parameters: {
+                mode: "create", 
+                formName: "MyInventoryForm",
+                dataSources: ["InventTable,InventDim,InventSum"]
+              }
+            }
+          ]
         },
         {
           name: "find_xpp_object",

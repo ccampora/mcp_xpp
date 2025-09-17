@@ -252,6 +252,33 @@ export class ToolHandlers {
       );
     }
     
+    // Check if this is a form creation request - redirect to specialized form tool
+    if (params.objectType === 'AxForm' || params.objectType?.toLowerCase().includes('form')) {
+      return await createLoggedResponse(
+        `🎯 Form creation detected! For enhanced form creation with datasource and pattern support, use the specialized 'create_form' tool instead.\n\n` +
+        `Examples:\n` +
+        `📝 Create form with datasources:\n` +
+        `{\n` +
+        `  "mode": "create",\n` +
+        `  "name": "${params.objectName}",\n` +
+        `  "datasources": ["Table1", "Table2"],\n` +
+        `  "pattern": "SimpleList"\n` +
+        `}\n\n` +
+        `📋 Discover available patterns:\n` +
+        `{\n` +
+        `  "mode": "list_patterns"\n` +
+        `}\n\n` +
+        `This tool provides:\n` +
+        `• Automatic datasource integration\n` +
+        `• Pattern discovery and application\n` +
+        `• Enhanced form structure\n` +
+        `• Better D365 integration\n\n` +
+        `Use 'create_form' for better results!`,
+        requestId,
+        "create_xpp_object"
+      );
+    }
+
     // Note: xppPath no longer required - VS2022 service handles all operations
     console.log(`Creating ${params.objectType} '${params.objectName}' using direct VS2022 service integration...`);
     
@@ -306,6 +333,150 @@ export class ToolHandlers {
       content += `Ensure VS2022 service is running and object type is supported\n`;
       
       return await createLoggedResponse(content, requestId, "create_xpp_object");
+    }
+  }
+
+  static async createForm(args: any, requestId: string): Promise<any> {
+    console.log('🎯 Starting createForm with args:', JSON.stringify(args, null, 2));
+    
+    const actualArgs = args?.arguments || args;
+    
+    const schema = z.object({
+      mode: z.enum(["create", "list_patterns"]),
+      formName: z.string().optional(),
+      patternName: z.string().optional(),
+      patternVersion: z.string().optional(),
+      dataSources: z.union([
+        z.array(z.string()),
+        z.string()
+      ]).optional(),
+      modelName: z.string().optional()
+    });
+
+    const validationResult = schema.safeParse(actualArgs);
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+      return await createLoggedResponse(
+        `❌ Invalid parameters: ${errors}`,
+        requestId,
+        "create_form"
+      );
+    }
+
+    const params = validationResult.data;
+
+    try {
+      // Import D365ServiceClient dynamically
+      const { D365ServiceClient } = await import('./d365-service-client.js');
+      const client = new D365ServiceClient('mcp-xpp-d365-service', 10000, 60000);
+      
+      console.log('🔗 Connecting to D365 service...');
+      await client.connect();
+      console.log('✅ Connected to D365 service');
+
+      let response;
+
+      if (params.mode === "list_patterns") {
+        // Handle pattern discovery
+        console.log('🔍 Discovering available patterns...');
+        response = await client.sendRequest('discover_patterns', undefined, {});
+      } else if (params.mode === "create") {
+        // Handle form creation
+        if (!params.formName) {
+          return await createLoggedResponse(
+            "❌ formName is required when mode='create'",
+            requestId,
+            "create_form"
+          );
+        }
+        
+        console.log(`🏗️ Creating form: ${params.formName}`);
+        
+        const formParams = {
+          formName: params.formName,
+          patternName: params.patternName || 'SimpleListDetails',
+          patternVersion: params.patternVersion || 'UX7 1.0',
+          modelName: params.modelName || 'ApplicationSuite',
+          ...(params.dataSources && { dataSources: params.dataSources })
+        };
+        
+        response = await client.sendRequest('create_form', undefined, formParams);
+      }
+
+      // Always disconnect
+      await client.disconnect();
+      console.log('🔌 Disconnected from D365 service');
+
+      if (params.mode === "list_patterns") {
+        return await ToolHandlers.formatPatternListResponse(response, requestId);
+      } else {
+        return await ToolHandlers.formatFormCreationResponse(response, requestId);
+      }
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return await createLoggedResponse(
+        `❌ Failed to ${params.mode === 'list_patterns' ? 'discover patterns' : 'create form'}: ${errorMsg}`,
+        requestId,
+        "create_form"
+      );
+    }
+  }
+
+  private static async formatPatternListResponse(response: any, requestId: string): Promise<any> {
+    if (response?.Success && response?.Data) {
+      let content = "🎯 **Available D365 Form Patterns**\n\n";
+      
+      if (response.Data.Patterns && response.Data.Patterns.length > 0) {
+        content += `Found ${response.Data.Patterns.length} available patterns:\n\n`;
+        
+        response.Data.Patterns.forEach((pattern: any, index: number) => {
+          content += `**${index + 1}. ${pattern.Name}**\n`;
+          if (pattern.Version) content += `   📋 Version: ${pattern.Version}\n`;
+          if (pattern.Description) content += `   📝 ${pattern.Description}\n`;
+          content += `\n`;
+        });
+        
+        content += "\n💡 **Usage Example:**\n";
+        content += "```json\n";
+        content += '{\n  "mode": "create",\n  "formName": "MyCustomForm",\n  "patternName": "SimpleListDetails",\n  "dataSources": ["CustTable"]\n}\n';
+        content += "```\n";
+      } else {
+        content += "No patterns found in the current D365 environment.\n";
+      }
+      
+      return await createLoggedResponse(content, requestId, "create_form");
+    } else {
+      return await createLoggedResponse(
+        `❌ Pattern discovery failed: ${response?.Error || 'Unknown error'}`,
+        requestId,
+        "create_form"
+      );
+    }
+  }
+
+  private static async formatFormCreationResponse(response: any, requestId: string): Promise<any> {
+    if (response?.Success && response?.Data?.Success) {
+      let content = `✅ **Form Created Successfully**\n\n`;
+      content += `📄 **Form Name:** ${response.Data.FormName}\n`;
+      content += `📦 **Model:** ${response.Data.Model}\n`;
+      content += `🎨 **Pattern:** ${response.Data.Pattern} ${response.Data.PatternVersion}\n`;
+      content += `✨ **Pattern Applied:** ${response.Data.PatternApplied ? 'Yes' : 'No'}\n`;
+      
+      if (response.Data.DataSources && response.Data.DataSources.length > 0) {
+        content += `🗄️ **DataSources:** ${response.Data.DataSources.length} added (${response.Data.DataSources.join(', ')})\n`;
+        content += `📊 **DataSources Added:** ${response.Data.DataSourcesAdded}/${response.Data.DataSources.length}\n`;
+      }
+      
+      content += `\n💬 **Message:** ${response.Data.Message}\n`;
+      
+      return await createLoggedResponse(content, requestId, "create_form");
+    } else {
+      return await createLoggedResponse(
+        `❌ Form creation failed: ${response?.Error || response?.Data?.Message || 'Unknown error'}`,
+        requestId,
+        "create_form"
+      );
     }
   }
 

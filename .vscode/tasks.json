@@ -181,6 +181,72 @@
 				"$tsc",
 				"$msCompile"
 			]
+		},
+		{
+			"label": "Test D365 Pattern Discovery",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"node misc/discover-available-patterns.mjs"
+			],
+			"group": "test",
+			"dependsOn": "Build and Run C# Service",
+			"problemMatcher": []
+		},
+		{
+			"label": "Start C# Service for Testing",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"taskkill /f /im D365MetadataService.exe 2>$null; Start-Sleep -Seconds 2; .\\tools\\build-and-run.ps1 -Action run -Target csharp"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Rebuild C# Service",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"taskkill /f /im D365MetadataService.exe 2>$null; Start-Sleep -Seconds 2; .\\tools\\build-and-run.ps1 -Action run -Target csharp"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Rebuild C# Service",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"taskkill /f /im D365MetadataService.exe 2>$null; Start-Sleep -Seconds 2; .\\tools\\build-and-run.ps1 -Action run -Target csharp"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Start Service",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-ExecutionPolicy",
+				"RemoteSigned",
+				"-Command",
+				"taskkill /f /im D365MetadataService.exe 2>$null; Start-Sleep -Seconds 2; .\\tools\\build-and-run.ps1 -Action run -Target csharp"
+			],
+			"isBackground": true,
+			"group": "build"
 		}
 	]
 }

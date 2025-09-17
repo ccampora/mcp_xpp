@@ -88,6 +88,8 @@ namespace D365MetadataService.Services
                 _axTypeCache[type.Name] = type;
             }
 
+            _logger.Information("Cached {Count} Ax types", _axTypeCache.Count);
+
             // Cache provider properties with Create methods
             // BREAKTHROUGH: Based on logs, provider DOES have direct collection properties:
             // Classes, Tables, Enums, Forms, etc. - we don't need to look in provider.Item!
@@ -195,7 +197,7 @@ namespace D365MetadataService.Services
 
                 // 6. Create ModelSaveInfo
                 var model = parameters.ContainsKey("model") ? parameters["model"]?.ToString() : "ApplicationSuite";
-                var modelSaveInfo = CreateModelSaveInfo(model);
+                var modelSaveInfo = CreateModelSaveInfo(model ?? "ApplicationSuite");
 
                 // 7. Deep type analysis before invoking Create method
                 _logger.Information("=== DEEP TYPE ANALYSIS ===");
@@ -234,7 +236,7 @@ namespace D365MetadataService.Services
                     Properties = new Dictionary<string, object>
                     {
                         ["message"] = $"{objectType} created successfully using dynamic factory",
-                        ["model"] = model,
+                        ["model"] = model ?? "ApplicationSuite",
                         ["providerProperty"] = providerProperty.Name
                     }
                 };
@@ -278,6 +280,18 @@ namespace D365MetadataService.Services
 
             foreach (var kvp in parameters)
             {
+                // Skip parameters that don't belong to the AxForm object itself
+                // These are handled elsewhere in the form creation process
+                if (axType.Name == "AxForm")
+                {
+                    var nonAxFormProperties = new[] { "Pattern", "PatternVersion", "Layer" };
+                    if (nonAxFormProperties.Contains(kvp.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        _logger.Debug("Skipping {PropertyName} - handled elsewhere in form creation process", kvp.Key);
+                        continue;
+                    }
+                }
+
                 var property = properties.FirstOrDefault(p => 
                     string.Equals(p.Name, kvp.Key, StringComparison.OrdinalIgnoreCase));
 
@@ -305,7 +319,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Find the appropriate provider property for an object type
         /// </summary>
-        private PropertyInfo FindProviderProperty(string objectType)
+        private PropertyInfo? FindProviderProperty(string objectType)
         {
             _logger.Information("Finding provider property for object type: {ObjectType}", objectType);
             _logger.Information("Provider property cache has {Count} entries", _providerPropertyCache.Count);
@@ -333,7 +347,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Convert parameter values to appropriate types
         /// </summary>
-        private object ConvertValue(object value, Type targetType)
+        private object? ConvertValue(object value, Type targetType)
         {
             if (value == null) return null;
             if (targetType.IsAssignableFrom(value.GetType())) return value;
@@ -344,7 +358,50 @@ namespace D365MetadataService.Services
                 if (targetType == typeof(int)) return int.Parse(stringValue);
                 if (targetType == typeof(bool)) return bool.Parse(stringValue);
                 if (targetType == typeof(DateTime)) return DateTime.Parse(stringValue);
-                // Add more conversions as needed
+                
+                // Handle enum conversions (including D365 enums like FormTemplate_ITxt)
+                if (targetType.IsEnum)
+                {
+                    try
+                    {
+                        return Enum.Parse(targetType, stringValue, true);
+                    }
+                    catch (ArgumentException)
+                    {
+                        _logger.Warning("Failed to parse '{Value}' as {EnumType}. Available values: {Values}", 
+                            stringValue, targetType.Name, string.Join(", ", Enum.GetNames(targetType)));
+                        throw;
+                    }
+                }
+                
+                // Handle D365 special enum types (like FormTemplate_ITxt)
+                if (targetType.Name.EndsWith("_ITxt") || targetType.Name.Contains("Template"))
+                {
+                    try
+                    {
+                        // First try standard enum parsing
+                        return Enum.Parse(targetType, stringValue, true);
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Try with common D365 pattern variations
+                        var possibleNames = new[] { stringValue, stringValue.ToLower(), stringValue.ToUpper(), 
+                                                  $"{stringValue}Pattern", $"{stringValue}Template" };
+                        
+                        foreach (var name in possibleNames)
+                        {
+                            try
+                            {
+                                return Enum.Parse(targetType, name, true);
+                            }
+                            catch (ArgumentException) { continue; }
+                        }
+                        
+                        _logger.Warning("Failed to parse '{Value}' as {EnumType}. Available values: {Values}", 
+                            stringValue, targetType.Name, string.Join(", ", Enum.GetNames(targetType)));
+                        throw;
+                    }
+                }
             }
 
             return Convert.ChangeType(value, targetType);
@@ -606,7 +663,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Retrieve an existing D365 object from metadata providers (tries custom first, then standard)
         /// </summary>
-        public object GetExistingObject(string objectType, string objectName)
+        public object? GetExistingObject(string objectType, string objectName)
         {
             try
             {
@@ -655,7 +712,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Try to retrieve an object from a specific metadata provider
         /// </summary>
-        private object TryGetObjectFromProvider(IMetadataProvider provider, string providerName, string objectType, string objectName, Type axType)
+        private object? TryGetObjectFromProvider(IMetadataProvider provider, string providerName, string objectType, string objectName, Type axType)
         {
             try
             {
@@ -749,7 +806,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Save a modified object back to the metadata store
         /// </summary>
-        public async Task<bool> SaveObjectAsync(string objectType, string objectName, object modifiedObject)
+        public Task<bool> SaveObjectAsync(string objectType, string objectName, object modifiedObject)
         {
             try
             {
@@ -757,7 +814,7 @@ namespace D365MetadataService.Services
                 {
                     _logger.Warning("Invalid parameters for SaveObjectAsync: objectType={ObjectType}, objectName={ObjectName}, object is null={IsNull}", 
                         objectType, objectName, modifiedObject == null);
-                    return false;
+                    return Task.FromResult(false);
                 }
 
                 _logger.Information("Saving modified object: {ObjectType}:{ObjectName}", objectType, objectName);
@@ -777,7 +834,7 @@ namespace D365MetadataService.Services
                     _logger.Information("Using provider method {MethodName} to save {ObjectType}:{ObjectName}", providerSaveMethod.Name, objectType, objectName);
                     providerSaveMethod.Invoke(_metadataProvider, new object[] { modifiedObject });
                     _logger.Information("Successfully saved {ObjectType}:{ObjectName} to metadata store using provider method", objectType, objectName);
-                    return true;
+                    return Task.FromResult(true);
                 }
 
                 // If no provider method found, try the collection approach as fallback
@@ -787,7 +844,7 @@ namespace D365MetadataService.Services
                 if (!_axTypeCache.TryGetValue(objectType, out var axType))
                 {
                     _logger.Warning("Object type {ObjectType} not found in cache", objectType);
-                    return false;
+                    return Task.FromResult(false);
                 }
 
                 // Find the provider property
@@ -795,7 +852,7 @@ namespace D365MetadataService.Services
                 if (providerProperty == null)
                 {
                     _logger.Warning("Provider property not found for {ObjectType}", objectType);
-                    return false;
+                    return Task.FromResult(false);
                 }
 
                 // Access the provider collection (e.g., Item[AxTable])
@@ -803,7 +860,7 @@ namespace D365MetadataService.Services
                 if (providerCollection == null)
                 {
                     _logger.Warning("Provider collection is null for {ObjectType}", objectType);
-                    return false;
+                    return Task.FromResult(false);
                 }
 
                 // Discover available methods on the provider collection
@@ -822,8 +879,8 @@ namespace D365MetadataService.Services
                     m.GetParameters().Length == 2 && 
                     m.GetParameters()[0].ParameterType.IsAssignableFrom(modifiedObject.GetType()));
 
-                MethodInfo saveMethod = null;
-                object[] parameters = null;
+                MethodInfo? saveMethod = null;
+                object[]? parameters = null;
 
                 if (createMethod != null)
                 {
@@ -847,7 +904,7 @@ namespace D365MetadataService.Services
                 if (saveMethod == null)
                 {
                     _logger.Warning("No suitable save method found on provider or collection for {ObjectType}", objectType);
-                    return false;
+                    return Task.FromResult(false);
                 }
 
                 _logger.Information("Using collection method {MethodName} to save {ObjectType}:{ObjectName}", saveMethod.Name, objectType, objectName);
@@ -856,12 +913,12 @@ namespace D365MetadataService.Services
                 saveMethod.Invoke(providerCollection, parameters);
                 
                 _logger.Information("Successfully saved {ObjectType}:{ObjectName} to metadata store using collection method", objectType, objectName);
-                return true;
+                return Task.FromResult(true);
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error saving object {ObjectType}:{ObjectName}", objectType, objectName);
-                return false;
+                return Task.FromResult(false);
             }
         }
 
@@ -931,7 +988,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Get an Ax type by name for external use
         /// </summary>
-        public Type GetAxType(string typeName)
+        public Type? GetAxType(string typeName)
         {
             return _axTypeCache.TryGetValue(typeName, out var type) ? type : null;
         }
@@ -939,7 +996,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// NO HARDCODING: Dynamically find read methods on provider collections
         /// </summary>
-        private MethodInfo GetReadMethodDynamically(Type providerType)
+        private MethodInfo? GetReadMethodDynamically(Type providerType)
         {
             try
             {
@@ -972,7 +1029,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// NO HARDCODING: Dynamically find save methods on provider collections
         /// </summary>
-        private MethodInfo GetSaveMethodDynamically(Type providerType, object modifiedObject, MethodInfo[] providerMethods)
+        private MethodInfo? GetSaveMethodDynamically(Type providerType, object modifiedObject, MethodInfo[] providerMethods)
         {
             try
             {

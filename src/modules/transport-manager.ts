@@ -225,6 +225,9 @@ export class TransportManager {
         case "execute_object_modification":
           return await ToolHandlers.executeObjectModification(args, requestId);
         
+        case "create_form":
+          return await ToolHandlers.createForm(args, requestId);
+        
         default:
           throw new McpError(
             ErrorCode.MethodNotFound,

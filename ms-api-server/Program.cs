@@ -93,14 +93,26 @@ namespace D365MetadataService
             services.AddSingleton<D365ObjectFactory>(sp =>
                 D365ReflectionManager.Instance.GetObjectFactory(config.D365Config));
 
+            // Register D365 Control Factory (dedicated for form controls)
+            services.AddSingleton<D365ControlFactory>(sp =>
+            {
+                var reflectionManager = D365ReflectionManager.Instance;
+                var logger = sp.GetRequiredService<ILogger>();
+                return new D365ControlFactory(reflectionManager, logger);
+            });
+
             // Register D365 Reflection Service
             services.AddSingleton<D365ReflectionService>();
 
             // Register Parameter Discovery Service
             services.AddSingleton<ParameterDiscoveryService>();
 
+            // Register FileSystemManager singleton instance for proper assembly loading and path discovery
+            services.AddSingleton<FileSystemManager>(_ => FileSystemManager.Instance);
+
             // Register all request handlers
             services.AddSingleton<IRequestHandler, CreateObjectHandler>();
+            services.AddSingleton<IRequestHandler, CreateFormHandler>();  // Enhanced form handler with pattern support
             services.AddSingleton<IRequestHandler, HealthCheckHandler>();
             services.AddSingleton<IRequestHandler, PingHandler>();
             services.AddSingleton<IRequestHandler, ParameterSchemasHandler>();
@@ -119,6 +131,7 @@ namespace D365MetadataService
             services.AddSingleton<IRequestHandler, DiscoverAvailableTypesHandler>();
             services.AddSingleton<IRequestHandler, ExecuteObjectModificationHandler>();
             services.AddSingleton<IRequestHandler, InspectObjectHandler>();
+            services.AddSingleton<IRequestHandler, DiscoverPatternsHandler>();
             
             // Register summary-first inspection handlers (new architecture)
             services.AddSingleton<IRequestHandler, ObjectSummaryHandler>();

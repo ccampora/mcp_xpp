@@ -1164,7 +1164,7 @@ namespace D365MetadataService.Handlers
         /// Get summary information about an object - counts only, no detailed content
         /// This is the new default inspection mode for better performance
         /// </summary>
-        public async Task<object> GetObjectSummaryAsync(string objectName, string objectType)
+        public Task<object> GetObjectSummaryAsync(string objectName, string objectType)
         {
             try
             {
@@ -1174,13 +1174,13 @@ namespace D365MetadataService.Handlers
                 var axType = _reflectionManager.GetD365Type(objectType);
                 if (axType == null)
                 {
-                    return new
+                    return Task.FromResult<object>(new
                     {
                         ObjectName = objectName,
                         ObjectType = objectType,
                         Found = false,
                         Error = $"Object type '{objectType}' not found"
-                    };
+                    });
                 }
 
                 // Load the object instance using existing pattern
@@ -1204,13 +1204,13 @@ namespace D365MetadataService.Handlers
 
                 if (!objectLoaded)
                 {
-                    return new
+                    return Task.FromResult<object>(new
                     {
                         ObjectName = objectName,
                         ObjectType = objectType,
                         Found = false,
                         Error = $"Object '{objectName}' of type '{objectType}' not found"
-                    };
+                    });
                 }
 
                 // Get property counts - separate Properties (non-collections) from Collections
@@ -1256,7 +1256,7 @@ namespace D365MetadataService.Handlers
                     }
                 }
 
-                return new
+                return Task.FromResult<object>(new
                 {
                     ObjectName = objectName,
                     ObjectType = objectType,
@@ -1276,18 +1276,18 @@ namespace D365MetadataService.Handlers
                         Available = true
                     },
                     Collections = collectionSummaries
-                };
+                });
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, "Error getting object summary for {ObjectType} '{ObjectName}'", objectType, objectName);
-                return new
+                return Task.FromResult<object>(new
                 {
                     ObjectName = objectName,
                     ObjectType = objectType,
                     Found = false,
                     Error = ex.Message
-                };
+                });
             }
         }
 
@@ -1556,7 +1556,7 @@ namespace D365MetadataService.Handlers
         /// Get code content from D365 object methods
         /// Supports extracting X++ source code from methods
         /// </summary>
-        public async Task<object> GetObjectCodeAsync(string objectName, string objectType, string codeTarget, string methodName = null, int? maxCodeLines = null)
+        public Task<object> GetObjectCodeAsync(string objectName, string objectType, string codeTarget, string methodName = null, int? maxCodeLines = null)
         {
             try
             {
@@ -1566,13 +1566,13 @@ namespace D365MetadataService.Handlers
                 var axType = _reflectionManager.GetD365Type(objectType);
                 if (axType == null)
                 {
-                    return new
+                    return Task.FromResult<object>(new
                     {
                         ObjectName = objectName,
                         ObjectType = objectType,
                         Found = false,
                         Error = $"Object type '{objectType}' not found"
-                    };
+                    });
                 }
 
                 // Try to create instance - prefer actual object loading
@@ -1614,13 +1614,13 @@ namespace D365MetadataService.Handlers
                     catch (Exception ex)
                     {
                         Logger.Debug("Could not create instance for type inspection: {Error}", ex.Message);
-                        return new
+                        return Task.FromResult<object>(new
                         {
                             ObjectName = objectName,
                             ObjectType = objectType,
                             Found = false,
                             Error = $"Could not create instance for code inspection: {ex.Message}"
-                        };
+                        });
                     }
                 }
 
@@ -1633,7 +1633,7 @@ namespace D365MetadataService.Handlers
                     _ => throw new ArgumentException($"Unsupported code target: {codeTarget}")
                 };
 
-                return new
+                return Task.FromResult<object>(new
                 {
                     ObjectName = objectName,
                     ObjectType = objectType,
@@ -1644,19 +1644,19 @@ namespace D365MetadataService.Handlers
                     ExtractedAt = DateTime.UtcNow,
                     CodeTarget = codeTarget,
                     MethodName = methodName
-                };
+                });
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, "Error getting code for {ObjectType} '{ObjectName}'", objectType, objectName);
-                return new
+                return Task.FromResult<object>(new
                 {
                     ObjectName = objectName,
                     ObjectType = objectType,
                     Found = false,
                     Error = ex.Message,
                     CodeTarget = codeTarget
-                };
+                });
             }
         }
 

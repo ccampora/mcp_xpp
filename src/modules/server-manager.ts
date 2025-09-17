@@ -74,6 +74,9 @@ export class ServerManager {
           case "create_xpp_object":
             return await ToolHandlers.createXppObject(args, requestId);
           
+          case "create_form":
+            return await ToolHandlers.createForm(args, requestId);
+          
           case "find_xpp_object":
             return await ToolHandlers.findXppObject(args, requestId);
           case "inspect_xpp_object":
