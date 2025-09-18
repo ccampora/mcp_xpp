@@ -923,6 +923,206 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
+        /// Delete an object from the metadata store using the provider's Delete method
+        /// Uses dynamic discovery of Delete methods via reflection, following the same pattern as SaveObjectAsync
+        /// </summary>
+        public Task<bool> DeleteObjectAsync(string objectType, string objectName)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(objectType) || string.IsNullOrWhiteSpace(objectName))
+                {
+                    _logger.Warning("Invalid parameters for DeleteObjectAsync: objectType={ObjectType}, objectName={ObjectName}", objectType, objectName);
+                    return Task.FromResult(false);
+                }
+
+                _logger.Information("🗑️ Deleting object: {ObjectType}:{ObjectName}", objectType, objectName);
+
+                // First, verify the object exists
+                var existingObject = GetExistingObject(objectType, objectName);
+                if (existingObject == null)
+                {
+                    _logger.Warning("❌ Object not found for deletion: {ObjectType}:{ObjectName}", objectType, objectName);
+                    return Task.FromResult(false);
+                }
+
+                _logger.Information("✅ Object found, proceeding with deletion: {ObjectType}:{ObjectName}", objectType, objectName);
+
+                // Get the Ax type
+                if (!_axTypeCache.TryGetValue(objectType, out var axType))
+                {
+                    _logger.Warning("Object type {ObjectType} not found in cache", objectType);
+                    return Task.FromResult(false);
+                }
+
+                // Find the appropriate provider property (Tables, Forms, Classes, etc.)
+                var providerProperty = FindProviderProperty(objectType);
+                if (providerProperty == null)
+                {
+                    _logger.Warning("No provider property found for {ObjectType}", objectType);
+                    return Task.FromResult(false);
+                }
+
+                var providerCollection = providerProperty.GetValue(_metadataProvider, new object[] { axType });
+                if (providerCollection == null)
+                {
+                    _logger.Warning("Provider collection is null for {ObjectType}", objectType);
+                    return Task.FromResult(false);
+                }
+
+                // Look for Delete method on the provider collection
+                var deleteMethod = GetDeleteMethodDynamically(providerCollection.GetType(), objectName);
+                if (deleteMethod == null)
+                {
+                    _logger.Warning("No Delete method found on provider for {ObjectType}", objectType);
+                    return Task.FromResult(false);
+                }
+
+                // Create ModelSaveInfo for deletion
+                var modelSaveInfoType = typeof(Microsoft.Dynamics.AX.Metadata.MetaModel.ModelSaveInfo);
+                var modelSaveInfo = CreateModelSaveInfoForObject(modelSaveInfoType, objectName, existingObject);
+
+                if (modelSaveInfo == null)
+                {
+                    _logger.Error("Failed to create ModelSaveInfo for deletion of {ObjectType}:{ObjectName}", objectType, objectName);
+                    return Task.FromResult(false);
+                }
+
+                // Prepare parameters for Delete method: Delete(string name, ModelSaveInfo saveInfo)
+                var parameters = new object[] { objectName, modelSaveInfo };
+
+                _logger.Information("🗑️ Invoking Delete method for {ObjectType}:{ObjectName}", objectType, objectName);
+
+                // Invoke the delete method
+                deleteMethod.Invoke(providerCollection, parameters);
+
+                _logger.Information("✅ Successfully deleted {ObjectType}:{ObjectName} from metadata store", objectType, objectName);
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "❌ Error deleting object {ObjectType}:{ObjectName}", objectType, objectName);
+                return Task.FromResult(false);
+            }
+        }
+
+        /// <summary>
+        /// Find Delete method on provider using reflection (similar to GetSaveMethodDynamically)
+        /// </summary>
+        private MethodInfo? GetDeleteMethodDynamically(Type providerType, string objectName)
+        {
+            try
+            {
+                _logger.Information("Looking for Delete method on provider type: {ProviderType}", providerType.Name);
+
+                var methods = providerType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+                
+                // Look for Delete method with signature: Delete(string name, ModelSaveInfo saveInfo)
+                var deleteMethods = methods
+                    .Where(m => m.Name == "Delete" && 
+                               m.GetParameters().Length == 2 &&
+                               m.GetParameters()[0].ParameterType == typeof(string) &&
+                               m.GetParameters()[1].ParameterType.Name.Contains("ModelSaveInfo"))
+                    .ToArray();
+
+                if (deleteMethods.Length > 0)
+                {
+                    var selectedMethod = deleteMethods.First();
+                    _logger.Information("✅ Found Delete method: {MethodName}", selectedMethod.Name);
+                    return selectedMethod;
+                }
+
+                _logger.Warning("❌ No Delete method found with expected signature on {ProviderType}", providerType.Name);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error finding Delete method dynamically");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Create ModelSaveInfo for an object being deleted (extracts model info from existing object)
+        /// </summary>
+        private object? CreateModelSaveInfoForObject(Type modelSaveInfoType, string objectName, object existingObject)
+        {
+            try
+            {
+                _logger.Information("Creating ModelSaveInfo for object deletion: {ObjectName}", objectName);
+
+                var modelSaveInfo = Activator.CreateInstance(modelSaveInfoType);
+
+                // Try to extract model information from the existing object
+                var objectType = existingObject.GetType();
+                _logger.Information("Existing object type: {ObjectType}", objectType.Name);
+
+                // Set basic properties
+                var idProperty = modelSaveInfoType.GetProperty("Id");
+                if (idProperty != null && idProperty.CanWrite)
+                {
+                    idProperty.SetValue(modelSaveInfo, 1);
+                    _logger.Information("Set Id property to: 1");
+                }
+
+                var sequenceIdProperty = modelSaveInfoType.GetProperty("SequenceId");
+                if (sequenceIdProperty != null && sequenceIdProperty.CanWrite)
+                {
+                    sequenceIdProperty.SetValue(modelSaveInfo, 1);
+                    _logger.Information("Set SequenceId property to: 1");
+                }
+
+                var layerProperty = modelSaveInfoType.GetProperty("Layer");
+                if (layerProperty != null && layerProperty.CanWrite)
+                {
+                    // Use layer enum value - 8 is typically USR layer
+                    layerProperty.SetValue(modelSaveInfo, 8);
+                    _logger.Information("Set Layer property to: 8 (USR)");
+                }
+
+                var nameProperty = modelSaveInfoType.GetProperty("Name");
+                if (nameProperty != null && nameProperty.CanWrite)
+                {
+                    // Try to get model name from existing object, fall back to default
+                    string modelName = "MyCustomModel"; // Default
+                    
+                    // Look for model-related properties on the existing object
+                    var objectModelProperty = objectType.GetProperty("Model");
+                    var objectModelNameProperty = objectType.GetProperty("ModelName");
+                    
+                    if (objectModelProperty != null)
+                    {
+                        var modelValue = objectModelProperty.GetValue(existingObject);
+                        if (modelValue != null)
+                        {
+                            modelName = modelValue.ToString();
+                            _logger.Information("Extracted model name from object.Model: {ModelName}", modelName);
+                        }
+                    }
+                    else if (objectModelNameProperty != null)
+                    {
+                        var modelValue = objectModelNameProperty.GetValue(existingObject);
+                        if (modelValue != null)
+                        {
+                            modelName = modelValue.ToString();
+                            _logger.Information("Extracted model name from object.ModelName: {ModelName}", modelName);
+                        }
+                    }
+
+                    nameProperty.SetValue(modelSaveInfo, modelName);
+                    _logger.Information("Set Name property to: {ModelName}", modelName);
+                }
+
+                return modelSaveInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to create ModelSaveInfo for object deletion: {ObjectName}", objectName);
+                return Activator.CreateInstance(modelSaveInfoType);
+            }
+        }
+
+        /// <summary>
         /// Create a properly initialized ModelSaveInfo object
         /// </summary>
         private object CreateModelSaveInfo(Type modelSaveInfoType, string objectName)

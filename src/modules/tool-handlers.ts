@@ -456,7 +456,10 @@ export class ToolHandlers {
   }
 
   private static async formatFormCreationResponse(response: any, requestId: string): Promise<any> {
+    console.log('🐛 DEBUG: formatFormCreationResponse called with response:', JSON.stringify(response, null, 2));
+    
     if (response?.Success && response?.Data?.Success) {
+      console.log('🐛 DEBUG: Entering success path');
       let content = `✅ **Form Created Successfully**\n\n`;
       content += `📄 **Form Name:** ${response.Data.FormName}\n`;
       content += `📦 **Model:** ${response.Data.Model}\n`;
@@ -470,12 +473,149 @@ export class ToolHandlers {
       
       content += `\n💬 **Message:** ${response.Data.Message}\n`;
       
+      // Add form to search index for immediate searchability (same as create_xpp_object)
+      try {
+        const model = response.Data.Model || 'ApplicationSuite';
+        const formName = response.Data.FormName;
+        const filePath = `Models/${model}/AxForm/${formName}.xml`;
+        
+        console.log(`🔍 Attempting to add form to index: ${formName} (AxForm) in model ${model} at ${filePath}`);
+        
+        const indexSuccess = await ObjectIndexManager.addObjectToIndex(
+          formName,
+          'AxForm',
+          model,
+          filePath
+        );
+        
+        console.log(`🔍 Index operation result: ${indexSuccess}`);
+        
+        if (indexSuccess) {
+          content += `\n🔍 Form added to search index - immediately searchable`;
+        } else {
+          content += `\n⚠️  Form created but not added to search index`;
+        }
+      } catch (indexError) {
+        console.warn(`Failed to add form to search index: ${indexError}`);
+        content += `\n⚠️  Form created but search index update failed: ${indexError instanceof Error ? indexError.message : String(indexError)}`;
+      }
+      
       return await createLoggedResponse(content, requestId, "create_form");
     } else {
       return await createLoggedResponse(
         `❌ Form creation failed: ${response?.Error || response?.Data?.Message || 'Unknown error'}`,
         requestId,
         "create_form"
+      );
+    }
+  }
+
+  static async deleteXppObject(args: any, requestId: string): Promise<any> {
+    
+    const schema = z.object({
+      objectName: z.string(),
+      objectType: z.string(),
+      cascadeDelete: z.boolean().optional()
+    });
+
+    try {
+      const { objectName, objectType, cascadeDelete } = schema.parse(args);
+      
+      console.log(`🗑️ Deleting D365 object: ${objectName} (${objectType}), cascade: ${cascadeDelete || false}`);
+      
+      // Let C# service validate object existence - don't pre-validate in cache
+      console.log(`📡 Sending delete request to C# service for ${objectName} (${objectType})`);
+
+      // Use D365ServiceClient to communicate via named pipe
+      console.log(`🔄 Connecting to D365 service to delete object: ${objectName} (${objectType})`);
+      
+      // Import D365ServiceClient dynamically (consistent with other handlers)
+      const { D365ServiceClient } = await import('./d365-service-client.js');
+      const client = new D365ServiceClient();
+      await client.connect();
+      const response = await client.sendRequest('delete-object', requestId, {
+        objectName,
+        objectType,
+        cascadeDelete: cascadeDelete || false
+      });
+      
+      // Always disconnect
+      await client.disconnect();
+      
+      if (response.Success) {
+        console.log(`✅ Object deleted successfully: ${objectName} (${objectType})`);
+        
+        // Update cache by removing the deleted object
+        const sqliteLookup = new SQLiteObjectLookup();
+        const cacheUpdateSuccess = sqliteLookup.deleteObject(objectName, objectType);
+        
+        let content = `✅ **Successfully deleted object:** ${objectName} (${objectType})\n\n`;
+        
+        if (response.Data?.ObjectsDeleted?.length > 0) {
+          content += `📋 **Objects Deleted:**\n`;
+          response.Data.ObjectsDeleted.forEach((obj: string) => {
+            content += `  • ${obj}\n`;
+          });
+          content += `\n`;
+        }
+        
+        if (response.Data?.DependenciesFound?.length > 0) {
+          content += `⚠️ **Dependencies Found (but deletion succeeded):**\n`;
+          response.Data.DependenciesFound.forEach((dep: any) => {
+            content += `  • ${dep.Name} (${dep.Type})\n`;
+          });
+          content += `\n`;
+        }
+        
+        if (response.Data?.Warnings?.length > 0) {
+          content += `⚠️ **Warnings:**\n`;
+          response.Data.Warnings.forEach((warning: string) => {
+            content += `  • ${warning}\n`;
+          });
+          content += `\n`;
+        }
+        
+        content += `🔄 **Cache Update:** ${cacheUpdateSuccess ? 'Success' : 'Failed'}\n`;
+        content += `💬 **Message:** ${response.Data?.Message || 'Object deleted successfully'}\n`;
+        
+        return await createLoggedResponse(content, requestId, "delete_xpp_object");
+      } else {
+        let content = `❌ **Deletion failed:** ${response.Data?.Message || 'Unknown error'}\n\n`;
+        
+        if (response.Data?.DependenciesFound?.length > 0) {
+          content += `🔗 **Dependencies prevent deletion:**\n`;
+          response.Data.DependenciesFound.forEach((dep: any) => {
+            content += `  • ${dep.Name} (${dep.Type}) - ${dep.Description || 'References this object'}\n`;
+          });
+          content += `\n`;
+          content += `💡 **Suggestion:** Remove dependencies first, or use cascadeDelete: true to delete dependent objects.\n`;
+        }
+        
+        if (response.Data?.Errors?.length > 0) {
+          content += `❌ **Errors:**\n`;
+          response.Data.Errors.forEach((error: string) => {
+            content += `  • ${error}\n`;
+          });
+        }
+        
+        throw new McpError(ErrorCode.InvalidRequest, content);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error in deleteXppObject:', error);
+      
+      if (error instanceof z.ZodError) {
+        const issues = error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ');
+        throw new McpError(ErrorCode.InvalidParams, `❌ Invalid parameters: ${issues}`);
+      }
+      
+      if (error instanceof McpError) {
+        throw error; // Re-throw McpErrors as-is
+      }
+      
+      throw new McpError(
+        ErrorCode.InternalError,
+        `❌ Error deleting object: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

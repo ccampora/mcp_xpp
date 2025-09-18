@@ -90,6 +90,7 @@ export class SQLiteObjectLookup {
         getTotalCount?: Database.Statement;
         getTypeCount?: Database.Statement;
         insertObject?: Database.Statement;
+        deleteObject?: Database.Statement;
     } = {};
 
     constructor(private dbPath: string = 'cache/object-lookup.db') {}
@@ -301,6 +302,12 @@ export class SQLiteObjectLookup {
             insertObject: this.db.prepare(`
                 INSERT OR REPLACE INTO objects (name, path, model, type, lastModified)
                 VALUES (?, ?, ?, ?, ?)
+            `),
+
+            // Delete object statement for cache maintenance
+            deleteObject: this.db.prepare(`
+                DELETE FROM objects 
+                WHERE name = ? AND type = ?
             `)
         };
     }
@@ -380,6 +387,39 @@ export class SQLiteObjectLookup {
             return true;
         } catch (error) {
             console.error('❌ Error inserting object:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Delete an object from the database
+     * Used to maintain cache consistency when objects are deleted
+     */
+    public deleteObject(objectName: string, objectType: string): boolean {
+        // Check if database needs to be reopened in write mode  
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for object deletion...');
+            this.close();
+            
+            // Reopen in write mode
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+
+        if (!this.prepared.deleteObject) return false;
+
+        try {
+            const result = this.prepared.deleteObject.run(objectName, objectType);
+            
+            if (result.changes > 0) {
+                console.log(`✅ Deleted object from cache: ${objectName} (${objectType})`);
+                return true;
+            } else {
+                console.log(`ℹ️ Object not found in cache: ${objectName} (${objectType})`);
+                return true; // Not an error - object might not have been in cache
+            }
+        } catch (error) {
+            console.error('❌ Error deleting object:', error);
             return false;
         }
     }

@@ -113,6 +113,7 @@ namespace D365MetadataService
             // Register all request handlers
             services.AddSingleton<IRequestHandler, CreateObjectHandler>();
             services.AddSingleton<IRequestHandler, CreateFormHandler>();  // Enhanced form handler with pattern support
+            services.AddSingleton<IRequestHandler, DeleteObjectHandler>(); // Safe object deletion with dependency validation
             services.AddSingleton<IRequestHandler, HealthCheckHandler>();
             services.AddSingleton<IRequestHandler, PingHandler>();
             services.AddSingleton<IRequestHandler, ParameterSchemasHandler>();

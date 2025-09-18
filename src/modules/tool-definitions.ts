@@ -213,6 +213,54 @@ export class ToolDefinitions {
           ]
         },
         {
+          name: "delete_xpp_object",
+          description: "🗑️ SAFE D365 OBJECT DELETION: Delete D365 F&O objects with dependency validation and safety checks. ⚠️ HIGH RISK OPERATION: This tool permanently removes objects from metadata. Will fail if dependencies exist to prevent breaking changes. Supports cascade deletion for complex objects like forms with dependent parts/controls.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              objectName: {
+                type: "string",
+                description: "Name of the D365 object to delete (e.g., 'MyCustomClass', 'MyTestTable', 'MyCustomForm'). Object must exist in metadata.",
+              },
+              objectType: {
+                type: "string", 
+                enum: availableObjectTypes,
+                description: "D365 object type to delete. Common types: 'AxClass' (X++ classes), 'AxTable' (data tables), 'AxForm' (UI forms), 'AxEnum' (enumerations), 'AxEdt' (extended data types), 'AxView' (database views), 'AxQuery' (queries), 'AxReport' (SSRS reports), 'AxMenuItemDisplay' (menu items). Use find_xpp_object first to confirm object exists and get correct type."
+              },
+              cascadeDelete: {
+                type: "boolean",
+                description: "Delete dependent objects too (default: false). When true, deletes child objects like form parts, controls, table field groups, etc. Use with caution as this can delete multiple objects.",
+                default: false
+              },
+            },
+            required: ["objectName", "objectType"],
+            examples: [
+              {
+                description: "🗑️ SAFE DELETION: Delete a custom class (will fail if other objects reference it)",
+                parameters: {
+                  objectName: "MyCustomClass",
+                  objectType: "AxClass"
+                }
+              },
+              {
+                description: "🗑️ CASCADE DELETION: Delete a form and all its dependent parts/controls",
+                parameters: {
+                  objectName: "MyTestForm", 
+                  objectType: "AxForm",
+                  cascadeDelete: true
+                }
+              },
+              {
+                description: "🗑️ TABLE DELETION: Delete a custom table (will fail if relations/forms reference it)", 
+                parameters: {
+                  objectName: "MyTestTable",
+                  objectType: "AxTable"
+                }
+              }
+            ]
+          }
+        },
+        {
           name: "find_xpp_object",
           description: "Find and analyze X++ objects (classes, tables, forms, etc.) by name. Can also be used to validate if an object exists in the codebase.",
           inputSchema: {
