@@ -9,9 +9,10 @@ A Model Context Protocol (MCP) server for Microsoft Dynamics 365 Finance & Opera
 ## Recent Updates ✨
 
 **September 18, 2025 - Array Modifications & Form Creation Enhancements:**
-- 🚀 **NEW Array Modifications**: `execute_object_modification` now supports batch operations on same object
-- 🔄 **Bulk Operations**: Add multiple fields, methods, or components in single call with per-operation tracking
-- 📊 **Detailed Response Tracking**: Per-operation success/failure reporting for precise error handling
+- 🚀 **NEW Array-Only Modifications**: `execute_object_modification` now exclusively uses batch format for consistent operations
+- 🔄 **Enforced Bulk Processing**: Single operations use array with one element - no more consecutive separate calls
+- 📊 **Enhanced Response Tracking**: Per-operation success/failure reporting with detailed timing and error messages
+- 📋 **Best Practice Documentation**: Clear guidance to group all modifications for same object into single call
 - 🎯 **NEW create_form Tool**: Specialized form creation with pattern support and datasource integration
 - 🔧 **DetailsMaster Pattern Fixed**: Resolved validation issues through intelligent field control creation  
 - 🗄️ **Enhanced DataSource Support**: Flexible datasource handling (arrays, strings, comma-separated)
@@ -53,7 +54,7 @@ The server provides 9 specialized tools for D365 development:
 
 1. **create_xpp_object** - Create D365 objects (classes, tables, enums, etc.) - *Note: Use create_form for forms*
 2. **create_form** - ✨ **NEW** - Specialized form creation with pattern support and datasource integration
-3. **execute_object_modification** - ✨ **ENHANCED** - Modify existing objects (add methods, fields) - **NEW**: Supports array modifications
+3. **execute_object_modification** - ✨ **ENHANCED** - Array-based object modification with batch processing - **BEST PRACTICE**: Group all modifications for same object
 4. **discover_modification_capabilities** - Explore available modification methods
 5. **find_xpp_object** - Find specific objects by name/type
 6. **search_objects_pattern** - Pattern search with wildcard support
@@ -260,42 +261,30 @@ inspect_xpp_object({
 
 ### Object Modification
 
-#### `execute_object_modification` ✨ **ENHANCED**
-Executes modification methods on existing D365 objects. **NEW**: Supports both single and array modifications for efficient bulk operations.
+#### `execute_object_modification` ✨ **ENHANCED WITH BATCH PROCESSING**
+Executes modification methods on existing D365 objects with array-based batch processing. **Always use array format** - single operations use array with one element.
 
-**Single Modification Parameters:**
-- `objectType` (string, required) - D365 object type
-- `objectName` (string, required) - Name of existing object to modify
-- `methodName` (string, required) - Modification method to execute
-- `parameters` (object, optional) - Method-specific parameters
+**📋 BEST PRACTICE**: Group ALL modifications for the same object into ONE call instead of making separate calls. This provides better performance, error handling, and transactional integrity.
 
-**Array Modification Parameters (NEW):**
-- `objectType` (string, required) - D365 object type
+**Parameters:**
+- `objectType` (string, required) - D365 object type (e.g., 'AxTable', 'AxClass', 'AxForm')
 - `objectName` (string, required) - Name of existing object to modify
 - `modifications` (array, required) - Array of modification operations:
   - `methodName` (string, required) - Modification method to execute
-  - `parameters` (object, optional) - Method-specific parameters
+  - `parameters` (object, required) - Method-specific parameters including:
+    - `concreteType` (string, required) - Exact type from discover_modification_capabilities
+    - `Name` (string) - Field/object name (use 'Name' not 'fieldName')
+    - Other D365-specific parameters as required
+
+**✅ Features:**
+- **Per-operation tracking**: Each operation returns individual success/failure status
+- **Detailed error reporting**: Clear validation messages for failed operations
+- **Sequential processing**: Operations execute in order with timing information
+- **Batch efficiency**: Multiple operations in single service call
 
 **Examples:**
 
-Single modification:
-```javascript
-execute_object_modification({
-  "objectType": "AxTable",
-  "objectName": "CustTable", 
-  "methodName": "AddField",
-  "parameters": {
-    "concreteType": "AxTableFieldString",
-    "Name": "MyCustomField",
-    "Label": "My Custom Field",
-    "SaveContents": "Yes",
-    "Mandatory": "No",
-    // ... other required parameters
-  }
-})
-```
-
-Array modifications (multiple operations on same object):
+✅ **Single field (array with one element):**
 ```javascript
 execute_object_modification({
   "objectType": "AxTable",
@@ -305,36 +294,113 @@ execute_object_modification({
       "methodName": "AddField",
       "parameters": {
         "concreteType": "AxTableFieldString",
-        "Name": "Field1",
-        // ... parameters
-      }
-    },
-    {
-      "methodName": "AddField", 
-      "parameters": {
-        "concreteType": "AxTableFieldInt",
-        "Name": "Field2",
-        // ... parameters
+        "Name": "MyCustomField",
+        "Label": "My Custom Field",
+        "HelpText": "Custom field description",
+        "SaveContents": "Yes",
+        "Mandatory": "No",
+        "AllowEditOnCreate": "Yes",
+        "AllowEdit": "Yes",
+        "Visible": "Yes",
+        "AosAuthorization": "None",
+        "MinReadAccess": "Auto",
+        "IgnoreEDTRelation": "No",
+        "Null": "Yes",
+        "IsSystemGenerated": "No",
+        "IsManuallyUpdated": "No",
+        "IsObsolete": "No",
+        "GeneralDataProtectionRegulation": "None",
+        "SysSharingType": "Duplicate"
       }
     }
   ]
 })
 ```
 
-**Response Format:**
-- Single: Standard success/failure response
-- Array: Detailed per-operation results with summary:
-  ```json
-  {
-    "totalOperations": 3,
-    "successCount": 2, 
-    "failureCount": 1,
-    "operations": [
-      {"methodName": "AddField", "success": true, "result": "..."},
-      {"methodName": "AddField", "success": false, "error": "..."}
-    ]
-  }
-  ```
+⭐ **Multiple fields in one batch (PREFERRED):**
+```javascript
+execute_object_modification({
+  "objectType": "AxTable",
+  "objectName": "CustTable",
+  "modifications": [
+    {
+      "methodName": "AddField",
+      "parameters": {
+        "concreteType": "AxTableFieldString",
+        "Name": "CustomerCategory",
+        "Label": "Customer Category",
+        "HelpText": "Customer classification category",
+        "SaveContents": "Yes",
+        "Mandatory": "No",
+        "AllowEditOnCreate": "Yes",
+        "AllowEdit": "Yes",
+        "Visible": "Yes",
+        "AosAuthorization": "None",
+        "MinReadAccess": "Auto",
+        "IgnoreEDTRelation": "No",
+        "Null": "Yes",
+        "IsSystemGenerated": "No",
+        "IsManuallyUpdated": "No",
+        "IsObsolete": "No",
+        "GeneralDataProtectionRegulation": "None",
+        "SysSharingType": "Duplicate"
+      }
+    },
+    {
+      "methodName": "AddField", 
+      "parameters": {
+        "concreteType": "AxTableFieldInt",
+        "Name": "CustomerPriority",
+        "Label": "Customer Priority",
+        "HelpText": "Priority level for customer",
+        "SaveContents": "Yes",
+        "Mandatory": "No",
+        "AllowEditOnCreate": "Yes",
+        "AllowEdit": "Yes",
+        "Visible": "Yes",
+        "AosAuthorization": "None",
+        "MinReadAccess": "Auto",
+        "IgnoreEDTRelation": "No",
+        "Null": "Yes",
+        "IsSystemGenerated": "No",
+        "IsManuallyUpdated": "No",
+        "IsObsolete": "No",
+        "GeneralDataProtectionRegulation": "None",
+        "SysSharingType": "Duplicate"
+      }
+    }
+  ]
+})
+```
+
+**📊 Response Format:**
+The tool returns detailed per-operation results:
+```json
+{
+  "summary": "2 succeeded, 1 failed (3 total)",
+  "targetObject": "AxTable:CustTable",
+  "operations": [
+    {
+      "methodName": "AddField",
+      "success": true,
+      "processingTime": "371ms",
+      "message": "Successfully executed AddField on AxTable:CustTable"
+    },
+    {
+      "methodName": "AddField",
+      "success": false,
+      "processingTime": "0ms",
+      "error": "Parameter validation failed: Missing required parameters"
+    }
+  ]
+}
+```
+
+**💡 Tips:**
+- Use `discover_modification_capabilities` first to get exact parameter requirements
+- All D365 table fields require parameters like `SaveContents`, `Mandatory`, etc.
+- Group related modifications together for better performance
+- Check individual operation results for debugging failed operations
 
 #### `discover_modification_capabilities`
 Discovers available modification methods for D365 object types.
