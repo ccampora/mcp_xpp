@@ -8,7 +8,10 @@ A Model Context Protocol (MCP) server for Microsoft Dynamics 365 Finance & Opera
 
 ## Recent Updates ✨
 
-**September 18, 2025 - Form Creation Enhancements:**
+**September 18, 2025 - Array Modifications & Form Creation Enhancements:**
+- 🚀 **NEW Array Modifications**: `execute_object_modification` now supports batch operations on same object
+- 🔄 **Bulk Operations**: Add multiple fields, methods, or components in single call with per-operation tracking
+- 📊 **Detailed Response Tracking**: Per-operation success/failure reporting for precise error handling
 - 🎯 **NEW create_form Tool**: Specialized form creation with pattern support and datasource integration
 - 🔧 **DetailsMaster Pattern Fixed**: Resolved validation issues through intelligent field control creation  
 - 🗄️ **Enhanced DataSource Support**: Flexible datasource handling (arrays, strings, comma-separated)
@@ -50,7 +53,7 @@ The server provides 9 specialized tools for D365 development:
 
 1. **create_xpp_object** - Create D365 objects (classes, tables, enums, etc.) - *Note: Use create_form for forms*
 2. **create_form** - ✨ **NEW** - Specialized form creation with pattern support and datasource integration
-3. **execute_object_modification** - Modify existing objects (add methods, fields)
+3. **execute_object_modification** - ✨ **ENHANCED** - Modify existing objects (add methods, fields) - **NEW**: Supports array modifications
 4. **discover_modification_capabilities** - Explore available modification methods
 5. **find_xpp_object** - Find specific objects by name/type
 6. **search_objects_pattern** - Pattern search with wildcard support
@@ -257,14 +260,81 @@ inspect_xpp_object({
 
 ### Object Modification
 
-#### `execute_object_modification`
-Executes modification methods on existing D365 objects.
+#### `execute_object_modification` ✨ **ENHANCED**
+Executes modification methods on existing D365 objects. **NEW**: Supports both single and array modifications for efficient bulk operations.
 
-**Parameters:**
+**Single Modification Parameters:**
 - `objectType` (string, required) - D365 object type
 - `objectName` (string, required) - Name of existing object to modify
 - `methodName` (string, required) - Modification method to execute
 - `parameters` (object, optional) - Method-specific parameters
+
+**Array Modification Parameters (NEW):**
+- `objectType` (string, required) - D365 object type
+- `objectName` (string, required) - Name of existing object to modify
+- `modifications` (array, required) - Array of modification operations:
+  - `methodName` (string, required) - Modification method to execute
+  - `parameters` (object, optional) - Method-specific parameters
+
+**Examples:**
+
+Single modification:
+```javascript
+execute_object_modification({
+  "objectType": "AxTable",
+  "objectName": "CustTable", 
+  "methodName": "AddField",
+  "parameters": {
+    "concreteType": "AxTableFieldString",
+    "Name": "MyCustomField",
+    "Label": "My Custom Field",
+    "SaveContents": "Yes",
+    "Mandatory": "No",
+    // ... other required parameters
+  }
+})
+```
+
+Array modifications (multiple operations on same object):
+```javascript
+execute_object_modification({
+  "objectType": "AxTable",
+  "objectName": "CustTable",
+  "modifications": [
+    {
+      "methodName": "AddField",
+      "parameters": {
+        "concreteType": "AxTableFieldString",
+        "Name": "Field1",
+        // ... parameters
+      }
+    },
+    {
+      "methodName": "AddField", 
+      "parameters": {
+        "concreteType": "AxTableFieldInt",
+        "Name": "Field2",
+        // ... parameters
+      }
+    }
+  ]
+})
+```
+
+**Response Format:**
+- Single: Standard success/failure response
+- Array: Detailed per-operation results with summary:
+  ```json
+  {
+    "totalOperations": 3,
+    "successCount": 2, 
+    "failureCount": 1,
+    "operations": [
+      {"methodName": "AddField", "success": true, "result": "..."},
+      {"methodName": "AddField", "success": false, "error": "..."}
+    ]
+  }
+  ```
 
 #### `discover_modification_capabilities`
 Discovers available modification methods for D365 object types.

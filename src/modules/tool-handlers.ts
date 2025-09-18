@@ -1590,26 +1590,36 @@ export class ToolHandlers {
     
     const actualArgs = args?.arguments || args;
     
-    // Validate required parameters
-    const modificationSchema = z.object({
+    // Define schema for array-based modifications only
+    const arrayModificationSchema = z.object({
       objectType: z.string().min(1, "objectType is required and must be non-empty"),
       objectName: z.string().min(1, "objectName is required and must be non-empty"),
-      methodName: z.string().min(1, "methodName is required and must be non-empty"),
-      parameters: z.record(z.any()).optional().default({})
+      modifications: z.array(z.object({
+        methodName: z.string().min(1, "methodName is required and must be non-empty"),
+        parameters: z.record(z.any()).optional().default({})
+      })).min(1, "modifications array must contain at least one modification")
     });
 
-    const validationResult = modificationSchema.safeParse(actualArgs);
-    if (!validationResult.success) {
-      const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
-      throw new McpError(ErrorCode.InvalidParams, `Validation failed: ${errors}`);
+    // Validate array modification format only
+    const arrayValidation = arrayModificationSchema.safeParse(actualArgs);
+    
+    if (!arrayValidation.success) {
+      const errors = arrayValidation.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+      throw new McpError(ErrorCode.InvalidParams, 
+        `❌ Invalid format. This tool only accepts array-based modifications.\n` +
+        `📋 Required format: { objectType, objectName, modifications: [{ methodName, parameters }] }\n` +
+        `🚫 Validation errors: ${errors}\n` +
+        `� For single operations, use: modifications: [{ methodName: "AddField", parameters: {...} }]`
+      );
     }
-
-    const { objectType, objectName, methodName, parameters } = validationResult.data;
+    
+    const objectType = arrayValidation.data.objectType;
+    const objectName = arrayValidation.data.objectName;
+    const modifications = arrayValidation.data.modifications;
+    
+    console.log(`🔧 Processing ${modifications.length} modifications for ${objectType}:${objectName}`);
 
     try {
-      console.log(`🔧 Executing modification: ${methodName} on ${objectType}:${objectName}`);
-      console.log('📋 Parameters:', JSON.stringify(parameters, null, 2));
-
       // Import D365ServiceClient dynamically to avoid circular dependencies
       const { D365ServiceClient } = await import('./d365-service-client.js');
       const client = new D365ServiceClient('mcp-xpp-d365-service', 10000, 60000); // Longer timeout for modifications
@@ -1619,62 +1629,151 @@ export class ToolHandlers {
       await client.connect();
       console.log('✅ Connected to D365 service');
 
-      // Execute the modification
-      console.log(`🚀 Executing ${methodName} on ${objectType}:${objectName}...`);
-      const response = await client.executeObjectModification(objectType, objectName, methodName, parameters);
-      console.log('📦 Raw service response:', JSON.stringify(response, null, 2));
+      // Process each modification and collect results
+      const operationResults: Array<{
+        methodName: string;
+        parameters: Record<string, any>;
+        success: boolean;
+        result?: string;
+        error?: string;
+        processingTimeMs?: number;
+      }> = [];
+
+      let successCount = 0;
+      let failureCount = 0;
+
+      console.log(`🚀 Starting execution of ${modifications.length} modification(s)...`);
+      
+      for (let i = 0; i < modifications.length; i++) {
+        const modification = modifications[i];
+        console.log(`📝 [${i + 1}/${modifications.length}] Executing ${modification.methodName}...`);
+        
+        try {
+          const startTime = Date.now();
+          const response = await client.executeObjectModification(
+            objectType, 
+            objectName, 
+            modification.methodName, 
+            modification.parameters
+          );
+          const processingTime = Date.now() - startTime;
+          
+          console.log(`📦 [${i + 1}/${modifications.length}] Response:`, JSON.stringify(response, null, 2));
+          
+          // Extract the result data
+          const result = response.Data || response.data || response;
+          
+          if (!result) {
+            operationResults.push({
+              methodName: modification.methodName,
+              parameters: modification.parameters,
+              success: false,
+              error: 'No result returned from service',
+              processingTimeMs: processingTime
+            });
+            failureCount++;
+            continue;
+          }
+          
+          // Check for errors in the result
+          if (result.Error || result.error || !result.Success) {
+            const errorMsg = result.Error || result.error || 'Unknown error occurred during modification';
+            operationResults.push({
+              methodName: modification.methodName,
+              parameters: modification.parameters,
+              success: false,
+              error: errorMsg,
+              processingTimeMs: processingTime
+            });
+            failureCount++;
+          } else {
+            operationResults.push({
+              methodName: modification.methodName,
+              parameters: modification.parameters,
+              success: true,
+              result: `${modification.methodName} executed successfully`,
+              processingTimeMs: processingTime
+            });
+            successCount++;
+          }
+          
+        } catch (operationError: any) {
+          console.error(`❌ [${i + 1}/${modifications.length}] Error in ${modification.methodName}:`, operationError);
+          operationResults.push({
+            methodName: modification.methodName,
+            parameters: modification.parameters,
+            success: false,
+            error: operationError.message || 'Unexpected error during operation',
+            processingTimeMs: 0
+          });
+          failureCount++;
+        }
+      }
 
       // Ensure we disconnect
       await client.disconnect();
       console.log('🔌 Disconnected from D365 service');
 
-      // Extract the result data
-      const result = response.Data || response.data || response;
+      // Format the response based on whether it was single or array modification
+      const isArrayResponse = modifications.length > 1;
       
-      if (!result) {
+      if (isArrayResponse) {
+        // Array modification response
+        const summary = `${successCount > 0 ? '✅' : '❌'} **BATCH MODIFICATION RESULTS**\n\n` +
+          `🎯 **Target Object:** ${objectType}:${objectName}\n` +
+          `� **Summary:** ${successCount} succeeded, ${failureCount} failed (${modifications.length} total)\n\n` +
+          `� **Operation Results:**\n` +
+          operationResults.map((op, index) => 
+            `   ${index + 1}. ${op.success ? '✅' : '❌'} **${op.methodName}** ` +
+            `(${op.processingTimeMs}ms)${op.success ? '' : `\n      💥 Error: ${op.error}`}`
+          ).join('\n') +
+          `\n\n💾 **Next Steps:**\n` +
+          `   • Save the modified object to persist changes\n` +
+          `   • Build/compile the project to apply modifications\n` +
+          `   • ${failureCount > 0 ? 'Retry failed operations if needed\n   • ' : ''}Test the modified object functionality`;
+
         return await createLoggedResponse(
-          `❌ No result returned from ${methodName} execution on ${objectType}:${objectName}`,
+          summary,
           requestId,
           "execute_object_modification"
         );
+      } else {
+        // Single modification response (backwards compatibility)
+        const operation = operationResults[0];
+        if (operation.success) {
+          const summary = `✅ **MODIFICATION EXECUTED SUCCESSFULLY**\n\n` +
+            `🎯 **Operation Details:**\n` +
+            `   • Method: ${operation.methodName}\n` +
+            `   • Target: ${objectType}:${objectName}\n` +
+            `   • Parameters: ${Object.keys(operation.parameters).length} provided\n\n` +
+            `📊 **Execution Results:**\n` +
+            `   • Status: Success\n` +
+            `   • Processing Time: ${operation.processingTimeMs}ms\n` +
+            `   • Timestamp: ${new Date().toLocaleString()}\n\n` +
+            `💾 **Next Steps:**\n` +
+            `   • Save the modified object to persist changes\n` +
+            `   • Build/compile the project to apply modifications\n` +
+            `   • Test the modified object functionality`;
+
+          return await createLoggedResponse(
+            summary,
+            requestId,
+            "execute_object_modification"
+          );
+        } else {
+          return await createLoggedResponse(
+            `❌ **Modification Failed:**\n\n` +
+            `🎯 **Operation:** ${operation.methodName} on ${objectType}:${objectName}\n` +
+            `💥 **Error:** ${operation.error}\n\n` +
+            `💡 **Suggestions:**\n` +
+            `   • Verify the object exists in the metadata\n` +
+            `   • Check parameter format using discover_modification_capabilities\n` +
+            `   • Ensure required parameters are provided`,
+            requestId,
+            "execute_object_modification"
+          );
+        }
       }
-
-      // Check for errors in the result
-      if (result.Error || result.error || !result.Success) {
-        const errorMsg = result.Error || result.error || 'Unknown error occurred during modification';
-        return await createLoggedResponse(
-          `❌ **Modification Failed:**\n\n` +
-          `🎯 **Operation:** ${methodName} on ${objectType}:${objectName}\n` +
-          `💥 **Error:** ${errorMsg}\n\n` +
-          `💡 **Suggestions:**\n` +
-          `   • Verify the object exists in the metadata\n` +
-          `   • Check parameter format using discover_modification_capabilities\n` +
-          `   • Ensure required parameters are provided`,
-          requestId,
-          "execute_object_modification"
-        );
-      }
-
-      // Format successful response
-      const summary = `✅ **MODIFICATION EXECUTED SUCCESSFULLY**\n\n` +
-        `🎯 **Operation Details:**\n` +
-        `   • Method: ${methodName}\n` +
-        `   • Target: ${objectType}:${objectName}\n` +
-        `   • Parameters: ${Object.keys(parameters).length} provided\n\n` +
-        `📊 **Execution Results:**\n` +
-        `   • Status: ${result.Success ? 'Success' : 'Completed'}\n` +
-        `   • Processing Time: ${response.ProcessingTimeMs || 'N/A'}ms\n` +
-        `   • Timestamp: ${new Date(response.Timestamp || Date.now()).toLocaleString()}\n\n` +
-        `💾 **Next Steps:**\n` +
-        `   • Save the modified object to persist changes\n` +
-        `   • Build/compile the project to apply modifications\n` +
-        `   • Test the modified object functionality`;
-
-      return await createLoggedResponse(
-        summary,
-        requestId,
-        "execute_object_modification"
-      );
 
     } catch (error: any) {
       console.error('❌ Error executing object modification:', error);
@@ -1697,8 +1796,7 @@ export class ToolHandlers {
       if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
         return await createLoggedResponse(
           `🔍 **Object Not Found**: The specified object could not be located.\n\n` +
-          `**Target:** ${objectType}:${objectName}\n` +
-          `**Method:** ${methodName}\n\n` +
+          `**Target:** ${objectType}:${objectName}\n\n` +
           `**Suggestions:**\n` +
           `• Verify object name spelling and case\n` +
           `• Check if object exists in the current model\n` +
@@ -1710,7 +1808,7 @@ export class ToolHandlers {
       }
 
       return await createLoggedResponse(
-        `❌ **Error executing ${methodName} on ${objectType}:${objectName}:**\n${errorMessage}`,
+        `❌ **Error executing modifications on ${objectType}:${objectName}:**\n${errorMessage}`,
         requestId,
         "execute_object_modification"
       );

@@ -566,7 +566,7 @@ export class ToolDefinitions {
         },
         {
           name: "execute_object_modification",
-          description: "Execute a specific modification method on a D365 object. Use discover_modification_capabilities first to see available methods and required parameters.",
+          description: "🚀 BATCH MODIFICATION TOOL: Execute one or more D365 object modifications with per-operation tracking. 🔄 ARRAY-BASED: Always uses array format for consistency - single operations use array with one element. ✅ PER-OPERATION TRACKING: Each operation returns individual success/failure status with detailed error reporting. 📋 BEST PRACTICE: **ALWAYS GROUP MULTIPLE MODIFICATIONS** targeting the same object into a single call instead of making consecutive separate calls. This is more efficient, provides better error handling, and maintains transactional integrity. Use discover_modification_capabilities first to see available methods and required parameters.",
           inputSchema: {
             type: "object",
             properties: {
@@ -579,90 +579,182 @@ export class ToolDefinitions {
                 type: "string",
                 description: "Name of the existing D365 object to modify (e.g., 'CustTable', 'SalesTable')"
               },
-              methodName: {
-                type: "string",
-                description: "Name of the modification method to execute (e.g., 'AddField', 'AddMethod', 'AddIndex'). Get exact method names from discover_modification_capabilities."
-              },
-              parameters: {
-                type: "object",
-                description: "Parameters required by the modification method. **CRITICAL**: Must include 'concreteType' parameter with exact type name from discovery (e.g., 'AxTableFieldString', 'AxTableFieldEnum', 'AxFormDataSourceRoot'). Use discover_modification_capabilities to get exact concrete type names and required parameters.",
-                additionalProperties: true,
-                properties: {
-                  fieldName: {
-                    type: "string",
-                    description: "Name of the field/object being added"
+              modifications: {
+                type: "array",
+                description: "🔄 Array of modifications to execute on the same object. Each modification is processed sequentially with individual success/failure tracking. For single operations, use array with one element. 📋 **BEST PRACTICE**: Always group ALL modifications for the same object into ONE call instead of making multiple separate calls. This provides better performance, error handling, and transactional integrity.",
+                minItems: 1,
+                items: {
+                  type: "object",
+                  properties: {
+                    methodName: {
+                      type: "string",
+                      description: "Name of the modification method to execute (e.g., 'AddField', 'AddMethod', 'AddIndex'). Get exact method names from discover_modification_capabilities."
+                    },
+                    parameters: {
+                      type: "object",
+                      description: "Parameters required by the modification method. **CRITICAL**: Must include 'concreteType' parameter with exact type name from discovery (e.g., 'AxTableFieldString', 'AxTableFieldEnum', 'AxFormDataSourceRoot'). Use discover_modification_capabilities to get exact concrete type names and required parameters.",
+                      additionalProperties: true,
+                      properties: {
+                        concreteType: {
+                          type: "string",
+                          description: "**REQUIRED**: Exact concrete type name from discover_modification_capabilities. Examples: 'AxTableFieldString', 'AxTableFieldEnum', 'AxTableFieldInt', 'AxFormDataSourceRoot', 'AxEnumValue'. This enables pure reflection architecture without hardcoded mappings."
+                        },
+                        Name: {
+                          type: "string",
+                          description: "Name of the field/object being added (use 'Name' not 'fieldName' for D365 objects)"
+                        },
+                        Label: {
+                          type: "string",
+                          description: "Optional display label for the object"
+                        },
+                        HelpText: {
+                          type: "string",
+                          description: "Optional help text for the object"
+                        }
+                      }
+                    }
                   },
-                  concreteType: {
-                    type: "string", 
-                    description: "**REQUIRED**: Exact concrete type name from discover_modification_capabilities. Examples: 'AxTableFieldString', 'AxTableFieldEnum', 'AxTableFieldInt', 'AxFormDataSourceRoot', 'AxEnumValue'. This enables pure reflection architecture without hardcoded mappings."
-                  },
-                  label: {
-                    type: "string",
-                    description: "Optional display label for the object"
-                  },
-                  helpText: {
-                    type: "string",
-                    description: "Optional help text for the object"
-                  }
+                  required: ["methodName"]
                 }
               }
             },
-            required: ["objectType", "objectName", "methodName"],
+            required: ["objectType", "objectName", "modifications"],
             examples: [
               {
-                description: "🔧 ADD STRING FIELD: Add a string field using exact concrete type from discovery",
-                parameters: {
-                  objectType: "AxTable",
-                  objectName: "CustTable", 
-                  methodName: "AddField",
-                  parameters: {
-                    fieldName: "MyCustomField",
-                    concreteType: "AxTableFieldString",
-                    label: "My Custom Field",
-                    helpText: "Custom field description"
-                  }
-                }
-              },
-              {
-                description: "🔧 ADD ENUM FIELD: Add an enum field with custom enum reference",
+                description: "⭐ PREFERRED: Batch multiple fields in ONE call (BEST PRACTICE - don't make separate calls)",
                 parameters: {
                   objectType: "AxTable",
                   objectName: "CustTable",
-                  methodName: "AddField",
-                  parameters: {
-                    fieldName: "CustomerStatus",
-                    concreteType: "AxTableFieldEnum",
-                    label: "Customer Status",
-                    enumType: "MyCustomEnum"
-                  }
+                  modifications: [
+                    {
+                      methodName: "AddField",
+                      parameters: {
+                        concreteType: "AxTableFieldString",
+                        Name: "CustomerCategory",
+                        Label: "Customer Category",
+                        HelpText: "Customer classification category",
+                        SaveContents: "Yes",
+                        Mandatory: "No",
+                        AllowEditOnCreate: "Yes",
+                        AllowEdit: "Yes",
+                        Visible: "Yes",
+                        AosAuthorization: "None",
+                        MinReadAccess: "Auto",
+                        IgnoreEDTRelation: "No",
+                        Null: "Yes",
+                        IsSystemGenerated: "No",
+                        IsManuallyUpdated: "No",
+                        IsObsolete: "No",
+                        GeneralDataProtectionRegulation: "None",
+                        SysSharingType: "Duplicate"
+                      }
+                    },
+                    {
+                      methodName: "AddField",
+                      parameters: {
+                        concreteType: "AxTableFieldInt",
+                        Name: "CustomerPriority",
+                        Label: "Customer Priority",
+                        HelpText: "Priority level for customer",
+                        SaveContents: "Yes",
+                        Mandatory: "No",
+                        AllowEditOnCreate: "Yes",
+                        AllowEdit: "Yes",
+                        Visible: "Yes",
+                        AosAuthorization: "None",
+                        MinReadAccess: "Auto",
+                        IgnoreEDTRelation: "No",
+                        Null: "Yes",
+                        IsSystemGenerated: "No",
+                        IsManuallyUpdated: "No",
+                        IsObsolete: "No",
+                        GeneralDataProtectionRegulation: "None",
+                        SysSharingType: "Duplicate"
+                      }
+                    },
+                    {
+                      methodName: "AddField",
+                      parameters: {
+                        concreteType: "AxTableFieldDate",
+                        Name: "LastReviewDate",
+                        Label: "Last Review Date",
+                        HelpText: "Date of last customer review",
+                        SaveContents: "Yes",
+                        Mandatory: "No",
+                        AllowEditOnCreate: "Yes",
+                        AllowEdit: "Yes",
+                        Visible: "Yes",
+                        AosAuthorization: "None",
+                        MinReadAccess: "Auto",
+                        IgnoreEDTRelation: "No",
+                        Null: "Yes",
+                        IsSystemGenerated: "No",
+                        IsManuallyUpdated: "No",
+                        IsObsolete: "No",
+                        GeneralDataProtectionRegulation: "None",
+                        SysSharingType: "Duplicate"
+                      }
+                    }
+                  ]
                 }
               },
               {
-                description: "🔧 ADD ENUM VALUE: Add a value to a custom enum",
+                description: "🔧 Single field: Add one field using array format (only when one modification needed)",
+                parameters: {
+                  objectType: "AxTable",
+                  objectName: "CustTable",
+                  modifications: [
+                    {
+                      methodName: "AddField",
+                      parameters: {
+                        concreteType: "AxTableFieldString",
+                        Name: "MyCustomField",
+                        Label: "My Custom Field",
+                        HelpText: "Custom field description",
+                        SaveContents: "Yes",
+                        Mandatory: "No",
+                        AllowEditOnCreate: "Yes",
+                        AllowEdit: "Yes",
+                        Visible: "Yes",
+                        AosAuthorization: "None",
+                        MinReadAccess: "Auto",
+                        IgnoreEDTRelation: "No",
+                        Null: "Yes",
+                        IsSystemGenerated: "No",
+                        IsManuallyUpdated: "No",
+                        IsObsolete: "No",
+                        GeneralDataProtectionRegulation: "None",
+                        SysSharingType: "Duplicate"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                description: "🔧 Enum values: Add multiple values to a custom enum in one call",
                 parameters: {
                   objectType: "AxEnum",
                   objectName: "MyCustomEnum",
-                  methodName: "AddEnumValue",
-                  parameters: {
-                    fieldName: "Active",
-                    concreteType: "AxEnumValue",
-                    label: "Active",
-                    value: 0
-                  }
-                }
-              },
-              {
-                description: "🔧 ADD FORM DATASOURCE: Add a datasource to a form",
-                parameters: {
-                  objectType: "AxForm",
-                  objectName: "MyCustomForm",
-                  methodName: "AddDataSource",
-                  parameters: {
-                    fieldName: "Customer",
-                    concreteType: "AxFormDataSourceRoot",
-                    table: "CustTable",
-                    label: "Customer Data Source"
-                  }
+                  modifications: [
+                    {
+                      methodName: "AddEnumValue",
+                      parameters: {
+                        concreteType: "AxEnumValue",
+                        Name: "Active",
+                        Label: "Active",
+                        Value: 0
+                      }
+                    },
+                    {
+                      methodName: "AddEnumValue",
+                      parameters: {
+                        concreteType: "AxEnumValue",
+                        Name: "Inactive",
+                        Label: "Inactive",
+                        Value: 1
+                      }
+                    }
+                  ]
                 }
               }
             ]
