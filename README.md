@@ -8,6 +8,14 @@ A Model Context Protocol (MCP) server for Microsoft Dynamics 365 Finance & Opera
 
 ## Recent Updates ✨
 
+**September 19, 2025 - Safe Object Deletion Feature:**
+- 🗑️ **NEW delete_xpp_object Tool**: Safe D365 object deletion with dependency validation and cascade support
+- 🛡️ **Dependency Protection**: Prevents deletion if other objects depend on target, avoiding breaking changes
+- 🔄 **Cache Consistency**: Automatic search index updates after successful deletions
+- ⚡ **High Performance**: Direct metadata provider integration with ISingleKeyedMetadataProvider.Delete
+- 🌲 **Cascade Deletion**: Optional deletion of child objects (form parts, table relations, etc.)
+- ✅ **Comprehensive Testing**: Full create/delete cycle validation across object types
+
 **September 18, 2025 - Array Modifications & Form Creation Enhancements:**
 - 🚀 **NEW Array-Only Modifications**: `execute_object_modification` now exclusively uses batch format for consistent operations
 - 🔄 **Enforced Bulk Processing**: Single operations use array with one element - no more consecutive separate calls
@@ -25,6 +33,7 @@ This MCP server provides D365 F&O development capabilities including:
 
 - **Object Creation**: Support for D365 classes, tables, forms, enums, and 544+ other object types
 - **Form Creation**: ✨ **Enhanced** - Specialized form creation with pattern validation and datasource integration
+- **Object Deletion**: ✨ **NEW** - Safe object deletion with dependency validation and cascade support
 - **Object Modification**: Add methods, fields, and other components to existing objects
 - **Object Inspection**: Analyze D365 objects and extract X++ source code
 - **Codebase Search**: Browse and search through D365 codebases with pattern matching
@@ -50,17 +59,18 @@ The architecture enables D365 development from various MCP-compatible clients wh
 
 ## Available Tools
 
-The server provides 9 specialized tools for D365 development:
+The server provides 10 specialized tools for D365 development:
 
 1. **create_xpp_object** - Create D365 objects (classes, tables, enums, etc.) - *Note: Use create_form for forms*
 2. **create_form** - ✨ **NEW** - Specialized form creation with pattern support and datasource integration
-3. **execute_object_modification** - ✨ **ENHANCED** - Array-based object modification with batch processing - **BEST PRACTICE**: Group all modifications for same object
-4. **discover_modification_capabilities** - Explore available modification methods
-5. **find_xpp_object** - Find specific objects by name/type
-6. **search_objects_pattern** - Pattern search with wildcard support
-7. **inspect_xpp_object** - Object analysis with X++ source code extraction
-8. **get_current_config** - System configuration and status
-9. **build_object_index** - Index management for search performance
+3. **delete_xpp_object** - ✨ **NEW** - Safe D365 object deletion with dependency validation and cache consistency
+4. **execute_object_modification** - ✨ **ENHANCED** - Array-based object modification with batch processing - **BEST PRACTICE**: Group all modifications for same object
+5. **discover_modification_capabilities** - Explore available modification methods
+6. **find_xpp_object** - Find specific objects by name/type
+7. **search_objects_pattern** - Pattern search with wildcard support
+8. **inspect_xpp_object** - Object analysis with X++ source code extraction
+9. **get_current_config** - System configuration and status
+10. **build_object_index** - Index management for search performance
 
 ## Prerequisites
 
@@ -203,6 +213,76 @@ create_form({
 - Patterns like DetailsMaster, SimpleListDetails, and ListPage automatically get enhanced with field controls (RecId, Name, Description, Code) when datasources are provided
 - Pattern validation has been fixed - forms can be created with or without datasources depending on pattern requirements
 - The tool uses direct VS2022 service integration for optimal D365 compatibility
+
+#### `delete_xpp_object` ✨ **NEW**
+Safely deletes D365 F&O objects with comprehensive dependency validation and cache consistency. This tool prevents breaking changes by validating dependencies before deletion.
+
+**Parameters:**
+- `objectName` (string, required) - Name of the D365 object to delete
+- `objectType` (string, required) - D365 object type (AxClass, AxTable, AxForm, AxEnum, etc.)
+- `cascadeDelete` (boolean, optional) - Delete dependent objects too (default: false)
+
+**Key Features:**
+- 🛡️ **Dependency Validation**: Prevents deletion if other objects depend on the target
+- 🗑️ **Safe Deletion**: Uses D365's ISingleKeyedMetadataProvider.Delete for proper cleanup
+- 🔄 **Cache Consistency**: Automatically updates search index after successful deletion
+- ⚡ **Fast Performance**: Direct metadata provider integration for optimal speed
+- 🌲 **Cascade Support**: Optional deletion of child objects (forms with parts/controls, etc.)
+
+**Examples:**
+
+```javascript
+// Delete a custom class
+delete_xpp_object({
+  "objectName": "MyCustomClass",
+  "objectType": "AxClass"
+})
+
+// Delete a table with cascade (removes dependent field groups, relations, etc.)
+delete_xpp_object({
+  "objectName": "MyTestTable", 
+  "objectType": "AxTable",
+  "cascadeDelete": true
+})
+
+// Delete a form (will fail if dependencies exist without cascade)
+delete_xpp_object({
+  "objectName": "MyCustomForm",
+  "objectType": "AxForm"
+})
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "message": "Successfully deleted object: MyCustomClass (AxClass)",
+  "objectName": "MyCustomClass",
+  "objectType": "AxClass",
+  "cascadeDelete": false,
+  "dependenciesRemoved": [],
+  "cacheUpdate": "Success",
+  "performance": "156ms"
+}
+```
+
+**⚠️ Safety Notes:**
+- **HIGH RISK OPERATION**: Deletion is permanent and cannot be undone
+- Always verify dependencies with `find_xpp_object` before deletion
+- Use `cascadeDelete: false` (default) for maximum safety
+- Test deletions in development environments first
+- Tool will fail safely if dependencies exist without cascade flag
+- Cache updates ensure immediate search consistency after deletion
+
+**Common Object Types:**
+- `AxClass` - X++ classes and business logic
+- `AxTable` - Data tables and schema
+- `AxForm` - User interface forms  
+- `AxEnum` - Enumerations and value lists
+- `AxEdt` - Extended data types
+- `AxView` - Database views
+- `AxQuery` - Data queries
+- `AxReport` - SSRS reports
 
 ### Object Discovery
 
