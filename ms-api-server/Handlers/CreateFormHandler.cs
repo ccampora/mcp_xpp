@@ -1357,11 +1357,8 @@ namespace D365MetadataService.Handlers
             var patternsRequiringFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "DetailsMaster",
-                "Details Master",
-                "DetailsFormMaster",
                 "SimpleList",
                 "SimpleListDetails", 
-                "List Page",
                 "ListPage"
             };
             

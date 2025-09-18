@@ -148,7 +148,7 @@ export class ToolDefinitions {
               },
               patternName: {
                 type: "string",
-                description: "D365 form pattern to apply (e.g., 'SimpleListDetails', 'Details Master', 'Dialog - Basic'). Optional - if not specified, defaults to 'SimpleListDetails'. Use mode='list_patterns' first to see all available patterns."
+                description: "D365 form pattern to apply. Optional - defaults to 'SimpleListDetails' if not specified. Use mode='list_patterns' first to discover all available patterns with exact names and descriptions. Pattern names are case-sensitive and must match exactly."
               },
               patternVersion: {
                 type: "string",
@@ -183,22 +183,23 @@ export class ToolDefinitions {
               }
             },
             {
-              description: "🏗️ CREATE COMPLEX FORM: Create a form with multiple datasources and specific pattern",
+              description: "🏗️ CREATE COMPLEX FORM: Create a details master form with multiple datasources",
               parameters: {
                 mode: "create",
                 formName: "MySalesOrderForm",
-                patternName: "Details Master",
+                patternName: "DetailsMaster",
                 patternVersion: "UX7 1.0",
                 dataSources: ["SalesTable", "SalesLine", "CustTable"],
                 modelName: "MyCustomModel"
               }
             },
             {
-              description: "🏗️ CREATE DIALOG FORM: Create a dialog form without datasources",
+              description: "🏗️ CREATE LIST PAGE: Create a list page form for browsing records",
               parameters: {
                 mode: "create",
-                formName: "MyConfirmationDialog",
-                patternName: "Dialog - Basic"
+                formName: "MyCustomerListPage",
+                patternName: "ListPage",
+                dataSources: ["CustTable"]
               }
             },
             {

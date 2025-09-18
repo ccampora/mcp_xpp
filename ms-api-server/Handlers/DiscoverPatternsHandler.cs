@@ -69,9 +69,10 @@ namespace D365MetadataService.Handlers
             {
                 _logger.Information("🔍 Loading D365 Patterns assembly...");
 
-                // Load the Patterns assembly
+                // Load the required assemblies
                 var vsExtensionPath = @"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\avm13osb.viu";
                 var patternsAssemblyPath = Path.Combine(vsExtensionPath, "Microsoft.Dynamics.AX.Metadata.Patterns.dll");
+                var metadataAssemblyPath = Path.Combine(vsExtensionPath, "Microsoft.Dynamics.AX.Metadata.dll");
 
                 if (!File.Exists(patternsAssemblyPath))
                 {
@@ -79,8 +80,17 @@ namespace D365MetadataService.Handlers
                     return null;
                 }
 
+                if (!File.Exists(metadataAssemblyPath))
+                {
+                    _logger.Error("Metadata assembly not found at {Path}", metadataAssemblyPath);
+                    return null;
+                }
+
                 var patternsAssembly = Assembly.LoadFrom(patternsAssemblyPath);
+                var metadataAssembly = Assembly.LoadFrom(metadataAssemblyPath);
+                
                 var patternFactoryType = patternsAssembly.GetType("Microsoft.Dynamics.AX.Metadata.Patterns.PatternFactory");
+                var axFormDesignType = metadataAssembly.GetType("Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormDesign");
 
                 if (patternFactoryType == null)
                 {
@@ -88,30 +98,40 @@ namespace D365MetadataService.Handlers
                     return null;
                 }
 
+                if (axFormDesignType == null)
+                {
+                    _logger.Error("AxFormDesign type not found in metadata assembly");
+                    return null;
+                }
+
                 // Create PatternFactory instance
                 var patternFactory = Activator.CreateInstance(patternFactoryType, new object[] { true });
                 _logger.Information("✅ PatternFactory created");
 
-                // Get AllPatterns property
-                var allPatternsProperty = patternFactoryType.GetProperty("AllPatterns");
-                if (allPatternsProperty == null)
+                // Create a dummy AxFormDesign instance to test pattern applicability
+                var dummyFormDesign = Activator.CreateInstance(axFormDesignType);
+                _logger.Information("✅ Dummy AxFormDesign created for pattern matching");
+
+                // Get patterns applicable to forms using GetPatternsForTarget
+                var getPatternsForTargetMethod = patternFactoryType.GetMethod("GetPatternsForTarget");
+                if (getPatternsForTargetMethod == null)
                 {
-                    _logger.Error("AllPatterns property not found");
+                    _logger.Error("GetPatternsForTarget method not found");
                     return null;
                 }
 
-                var allPatterns = allPatternsProperty.GetValue(patternFactory);
-                if (allPatterns == null)
+                var applicablePatterns = getPatternsForTargetMethod.Invoke(patternFactory, new object[] { dummyFormDesign });
+                if (applicablePatterns == null)
                 {
-                    _logger.Warning("AllPatterns returned null");
+                    _logger.Warning("GetPatternsForTarget returned null");
                     return Task.FromResult(new List<object>());
                 }
 
-                _logger.Information("🔍 Processing discovered patterns...");
+                _logger.Information("🔍 Processing applicable form patterns...");
 
                 // Convert to our format
                 var patternList = new List<object>();
-                var patternCollection = allPatterns as System.Collections.IEnumerable;
+                var patternCollection = applicablePatterns as System.Collections.IEnumerable;
 
                 if (patternCollection != null)
                 {
@@ -132,7 +152,7 @@ namespace D365MetadataService.Handlers
                     }
                 }
 
-                _logger.Information("✅ Successfully processed {PatternCount} patterns", patternList.Count);
+                _logger.Information("✅ Successfully processed {PatternCount} applicable form patterns", patternList.Count);
                 
                 // Sort by name for better usability
                 patternList = patternList.OrderBy(p => ((dynamic)p).Name).ToList();
@@ -172,12 +192,8 @@ namespace D365MetadataService.Handlers
                     return null;
                 }
 
-                // Filter to only include form patterns by checking if the pattern is applicable to forms
-                if (!IsFormPattern(name, category))
-                {
-                    _logger.Debug("Skipping non-form pattern: {PatternName} (Category: {Category})", name, category);
-                    return null;
-                }
+                // Since we used GetPatternsForTarget with AxFormDesign, all patterns returned are applicable to forms
+                _logger.Debug("Including applicable form pattern: {PatternName} (Category: {Category})", name, category);
 
                 return new
                 {
@@ -194,96 +210,6 @@ namespace D365MetadataService.Handlers
                 _logger.Warning(ex, "Failed to extract pattern info");
                 return null;
             }
-        }
-
-        /// <summary>
-        /// Determines if a pattern is applicable to forms based on its name and category
-        /// </summary>
-        private bool IsFormPattern(string name, string category)
-        {
-            if (string.IsNullOrEmpty(name))
-                return false;
-
-            // Known form pattern names from the Visual Studio attachment
-            var knownFormPatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "Details Master",
-                "DetailsMaster",
-                "Details Master w/Standard Tabs",
-                "DetailsMasterTabs",
-                "Details Transaction",
-                "DetailsTransaction",
-                "Dialog - Advanced Selection",
-                "Dialog - Basic",
-                "Dialog",
-                "Dialog - Double Tabs",
-                "DialogDoubleTabs",
-                "Dialog - FastTabs",
-                "DialogFastTabs",
-                "Dialog - Read Only",
-                "DialogReadOnly",
-                "Dialog - Tabs",
-                "DialogTabs",
-                "Drop Dialog",
-                "DropDialog",
-                "Drop Dialog - Read Only",
-                "DropDialogReadOnly",
-                "Form Part Factbox Card",
-                "FormPartFactboxCard",
-                "Form Part Factbox Grid",
-                "FormPartFactboxGrid",
-                "Form Part Section List",
-                "FormPartSectionList",
-                "Form Part Section List Double",
-                "FormPartSectionListDouble",
-                "Hub Part Chart",
-                "HubPartChart",
-                "List Page",
-                "ListPage",
-                "Lookup - Basic",
-                "Lookup w/ Preview",
-                "LookupPreview",
-                "Lookup w/ Tabs",
-                "LookupTab",
-                "Simple Details w/Fast Tabs",
-                "SimpleDetails-FastTabsContainer",
-                "Simple Details w/Panorama",
-                "SimpleDetails-Panorama",
-                "Simple Details w/Standard Tabs",
-                "SimpleDetails-StandardTabsContainer",
-                "Simple Details w/Toolbar and Fields",
-                "SimpleDetails-ToolbarFields",
-                "Simple List",
-                "SimpleList",
-                "Simple List and Details - List Grid",
-                "SimpleListDetails-Grid",
-                "Simple List and Details - Tabular Grid",
-                "SimpleListDetails",
-                "Simple List and Details - Tree",
-                "SimpleListDetails-Tree",
-                "Table of Contents",
-                "TableOfContents",
-                "Task Double",
-                "TaskParentChild",
-                "Task Single",
-                "Task",
-                "Wizard",
-                "Workspace Operational",
-                "WorkspaceOperational",
-                "Workspace Operations w/Tabs",
-                "WorkspaceOperationalTabs",
-                "Workspace Tabbed",
-                "TabbedWorkspace"
-            };
-
-            // Check if the pattern name matches any known form patterns
-            return knownFormPatterns.Contains(name) || 
-                   knownFormPatterns.Any(fp => name.IndexOf(fp, StringComparison.OrdinalIgnoreCase) >= 0) ||
-                   // Additional check for categories that indicate form patterns
-                   (category != null && (category.IndexOf("Form", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                        category.IndexOf("Dialog", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                        category.IndexOf("List", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                        category.IndexOf("Details", StringComparison.OrdinalIgnoreCase) >= 0));
         }
     }
 }
