@@ -1,3 +1,156 @@
+/**
+ * ============================================================================
+ * MCP X++ CLIENT - Professional MCP Server Integration
+ * ============================================================================
+ * 
+ * USAGE EXAMPLES:
+ * 
+ * 1. BASIC SETUP:
+ * ```javascript
+ * import { MCPXppClient } from './tests/tools/mcp-xpp-client.js';
+ * 
+ * const client = new MCPXppClient();
+ * // Client auto-connects, no need to call connect()
+ * 
+ * try {
+ *   // Your tool calls here
+ * } finally {
+ *   // No close() method needed for this client
+ * }
+ * ```
+ * 
+ * 2. AVAILABLE TOOLS:
+ * - get_current_config: Get server configuration
+ * - search_objects_pattern: Search D365 objects by pattern
+ * - build_object_index: Build search index
+ * - create_xpp_object: Create D365 objects (classes, tables, enums, etc)
+ * - create_form: Create D365 forms with patterns
+ * - find_xpp_object: Find specific objects by name
+ * - inspect_xpp_object: Analyze objects and extract source code
+ * - discover_modification_capabilities: Get modification methods
+ * - execute_object_modification: Modify objects (NEW: supports arrays!)
+ * 
+ * 3. SINGLE OBJECT MODIFICATION:
+ * ```javascript
+ * const result = await client.executeTool('execute_object_modification', {
+ *   objectType: 'AxTable',
+ *   objectName: 'CustTable',
+ *   methodName: 'AddField',
+ *   parameters: {
+ *     concreteType: 'AxTableFieldString',
+ *     Name: 'MyField',
+ *     Label: 'My Custom Field',
+ *     SaveContents: 'Yes',
+ *     Mandatory: 'No',
+ *     AllowEditOnCreate: 'Yes',
+ *     AllowEdit: 'Yes',
+ *     Visible: 'Yes',
+ *     AosAuthorization: 'None',
+ *     MinReadAccess: 'Auto',
+ *     IgnoreEDTRelation: 'No',
+ *     Null: 'Yes',
+ *     IsSystemGenerated: 'No',
+ *     IsManuallyUpdated: 'No',
+ *     IsObsolete: 'No',
+ *     GeneralDataProtectionRegulation: 'None',
+ *     SysSharingType: 'Duplicate'
+ *   }
+ * });
+ * ```
+ * 
+ * 4. ARRAY/BATCH MODIFICATIONS (NEW FEATURE):
+ * ```javascript
+ * const result = await client.executeTool('execute_object_modification', {
+ *   objectType: 'AxTable',
+ *   objectName: 'CustTable',
+ *   modifications: [
+ *     {
+ *       methodName: 'AddField',
+ *       parameters: {
+ *         concreteType: 'AxTableFieldString',
+ *         Name: 'Field1',
+ *         Label: 'First Field',
+ *         SaveContents: 'Yes',
+ *         Mandatory: 'No',
+ *         AllowEditOnCreate: 'Yes',
+ *         AllowEdit: 'Yes',
+ *         Visible: 'Yes',
+ *         AosAuthorization: 'None',
+ *         MinReadAccess: 'Auto',
+ *         IgnoreEDTRelation: 'No',
+ *         Null: 'Yes',
+ *         IsSystemGenerated: 'No',
+ *         IsManuallyUpdated: 'No',
+ *         IsObsolete: 'No',
+ *         GeneralDataProtectionRegulation: 'None',
+ *         SysSharingType: 'Duplicate'
+ *       }
+ *     },
+ *     {
+ *       methodName: 'AddField', 
+ *       parameters: {
+ *         concreteType: 'AxTableFieldInt',
+ *         Name: 'Field2',
+ *         Label: 'Second Field',
+ *         SaveContents: 'Yes',
+ *         Mandatory: 'No',
+ *         AllowEditOnCreate: 'Yes',
+ *         AllowEdit: 'Yes',
+ *         Visible: 'Yes',
+ *         AosAuthorization: 'None',
+ *         MinReadAccess: 'Auto',
+ *         IgnoreEDTRelation: 'No',
+ *         Null: 'Yes',
+ *         IsSystemGenerated: 'No',
+ *         IsManuallyUpdated: 'No',
+ *         IsObsolete: 'No',
+ *         GeneralDataProtectionRegulation: 'None',
+ *         SysSharingType: 'Duplicate'
+ *       }
+ *     }
+ *   ]
+ * });
+ * ```
+ * 
+ * 5. RESPONSE FORMAT:
+ * - Single modification: Returns success/failure with details
+ * - Array modifications: Returns per-operation results with summary:
+ *   ```json
+ *   {
+ *     "objectType": "AxTable",
+ *     "objectName": "CustTable",
+ *     "totalOperations": 3,
+ *     "successCount": 2,
+ *     "failureCount": 1,
+ *     "operations": [
+ *       {"methodName": "AddField", "success": true, "result": "..."},
+ *       {"methodName": "AddField", "success": true, "result": "..."},
+ *       {"methodName": "AddIndex", "success": false, "error": "..."}
+ *     ]
+ *   }
+ *   ```
+ * 
+ * 6. ERROR HANDLING:
+ * ```javascript
+ * try {
+ *   const result = await client.executeTool('execute_object_modification', {...});
+ *   console.log('Success:', result?.content?.[0]?.text);
+ * } catch (error) {
+ *   console.error('Error:', error.message);
+ * }
+ * ```
+ * 
+ * 7. COMMON PATTERNS:
+ * - Use client.executeTool() method (not callTool)
+ * - Always check result?.content?.[0]?.text for response text
+ * - No close() method needed - client handles cleanup automatically
+ * - Check for JSON data in response text for detailed results
+ * - Retry individual failed operations from array results
+ * - Use discover_modification_capabilities to get correct parameters
+ * 
+ * ============================================================================
+ */
+
 // =============================================================================
 // MCP X++ CLIENT - Professional MCP Server Integration
 // =============================================================================
