@@ -527,6 +527,7 @@ namespace D365MetadataService.Services
                 try { var result = provider.Reports.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Reports"] = result; } catch { }
                 try { var result = provider.DataEntityViews.ListObjectsForModel(modelName); if (result?.Any() == true) objects["DataEntityViews"] = result; } catch { }
                 try { var result = provider.CompositeDataEntityViews.ListObjectsForModel(modelName); if (result?.Any() == true) objects["CompositeDataEntityViews"] = result; } catch { }
+                try { var result = provider.LabelFiles.ListObjectsForModel(modelName); if (result?.Any() == true) objects["LabelFiles"] = result; } catch { }
                 
                 var totalObjects = objects.Values.OfType<System.Collections.IEnumerable>().Sum(collection => collection.Cast<object>().Count());
                 _logger.Information("🎯 Found {TotalObjects} total objects across {Collections} collections for model {Model}", 
