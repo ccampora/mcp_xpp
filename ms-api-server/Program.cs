@@ -107,13 +107,18 @@ namespace D365MetadataService
             // Register Parameter Discovery Service
             services.AddSingleton<ParameterDiscoveryService>();
 
+            // Register REAL Dynamic Template Discovery Service - NO MORE HARDCODING!
+            services.AddSingleton<ITemplateGuidanceService, RealDynamicTemplateService>();
+
             // Register FileSystemManager singleton instance for proper assembly loading and path discovery
             services.AddSingleton<FileSystemManager>(_ => FileSystemManager.Instance);
 
             // Register all request handlers
             services.AddSingleton<IRequestHandler, CreateObjectHandler>();
             services.AddSingleton<IRequestHandler, CreateFormHandler>();  // Enhanced form handler with pattern support
+            // services.AddSingleton<IRequestHandler, CreateUsingTemplateHandler>(); // VS2022 template-based object creation - DISABLED due to compilation errors
             services.AddSingleton<IRequestHandler, DeleteObjectHandler>(); // Safe object deletion with dependency validation
+            services.AddSingleton<IRequestHandler, GetTemplateGuidanceHandler>(); // Template guidance for object creation
             services.AddSingleton<IRequestHandler, HealthCheckHandler>();
             services.AddSingleton<IRequestHandler, PingHandler>();
             services.AddSingleton<IRequestHandler, ParameterSchemasHandler>();

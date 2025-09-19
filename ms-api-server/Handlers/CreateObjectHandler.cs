@@ -9,17 +9,20 @@ namespace D365MetadataService.Handlers
     /// <summary>
     /// Handler for object creation requests using dynamic object factory
     /// Supports all 575+ D365 object types dynamically with parameter discovery
+    /// Enhanced with template guidance for better object configuration
     /// </summary>
     public class CreateObjectHandler : BaseRequestHandler
     {
         private readonly D365ObjectFactory _objectFactory;
         private readonly ParameterDiscoveryService _parameterDiscoveryService;
+        private readonly ITemplateGuidanceService _templateGuidanceService;
 
-        public CreateObjectHandler(D365ObjectFactory objectFactory, ParameterDiscoveryService parameterDiscoveryService, ILogger logger) 
+        public CreateObjectHandler(D365ObjectFactory objectFactory, ParameterDiscoveryService parameterDiscoveryService, ITemplateGuidanceService templateGuidanceService, ILogger logger) 
             : base(logger)
         {
             _objectFactory = objectFactory ?? throw new ArgumentNullException(nameof(objectFactory));
             _parameterDiscoveryService = parameterDiscoveryService ?? throw new ArgumentNullException(nameof(parameterDiscoveryService));
+            _templateGuidanceService = templateGuidanceService ?? throw new ArgumentNullException(nameof(templateGuidanceService));
         }
 
         public override string SupportedAction => "create";
@@ -71,7 +74,30 @@ namespace D365MetadataService.Handlers
                 parameters
             );
 
-            return ServiceResponse.CreateSuccess(result);
+            // Check if this object type has template guidance available
+            var templateGuidance = await _templateGuidanceService.GetTemplateGuidanceAsync(request.ObjectType);
+            
+            if (templateGuidance?.HasTemplate == true)
+            {
+                Logger.Information("Template guidance available for {ObjectType} with {TemplateCount} template options", 
+                    request.ObjectType, templateGuidance.AvailableTemplates.Count);
+            }
+
+            // Create enhanced response with template guidance
+            var enhancedResult = new
+            {
+                ObjectCreated = result,
+                TemplateGuidance = new
+                {
+                    HasTemplate = templateGuidance?.HasTemplate == true,
+                    Guidance = templateGuidance,
+                    Message = templateGuidance?.HasTemplate == true
+                        ? $"✅ {request.ObjectType} created successfully! This object type has template options available for enhanced configuration."
+                        : $"✅ {request.ObjectType} created successfully!"
+                }
+            };
+
+            return ServiceResponse.CreateSuccess(enhancedResult);
         }
     }
 }
