@@ -32,9 +32,15 @@ namespace D365MetadataService.Services
         private readonly Dictionary<string, PropertyInfo> _providerPropertyCache;
         private readonly Dictionary<string, MethodInfo> _createMethodCache;
 
+        // Default model from configuration (D365Config.DefaultModel)
+        private readonly string _defaultModel;
+
         public D365ObjectFactory(D365Configuration config, ILogger logger)
         {
             _logger = logger.ForContext<D365ObjectFactory>();
+            _defaultModel = (config != null && !string.IsNullOrWhiteSpace(config.DefaultModel))
+                ? config.DefaultModel
+                : "ApplicationSuite";
             _reflectionManager = D365ReflectionManager.Instance;
             _axTypeCache = new Dictionary<string, Type>();
             _providerPropertyCache = new Dictionary<string, PropertyInfo>();
@@ -42,12 +48,16 @@ namespace D365MetadataService.Services
 
             try
             {
+                _logger.Information("🎯 Default model configured for object creation: {DefaultModel}", _defaultModel);
                 // Initialize DUAL metadata providers
                 var providerFactory = new MetadataProviderFactory();
-                
+
+                if (config == null)
+                    throw new ArgumentNullException(nameof(config));
+
                 _customMetadataProvider = providerFactory.CreateDiskProvider(config.CustomMetadataPath);
                 _logger.Information("✅ Custom metadata provider initialized: {Path}", config.CustomMetadataPath);
-                
+
                 _standardMetadataProvider = providerFactory.CreateDiskProvider(config.PackagesLocalDirectory);
                 _logger.Information("✅ Standard metadata provider initialized: {Path}", config.PackagesLocalDirectory);
 
@@ -66,7 +76,40 @@ namespace D365MetadataService.Services
             }
         }
 
+        /// <summary>
+        /// Resolve model to use for object creation.
+        /// Priority:
+        /// 1) parameters["model"]
+        /// 2) parameters["modelName"]
+        /// 3) parameters["Model"] / parameters["ModelName"]
+        /// 4) D365Config.DefaultModel
+        /// 5) ApplicationSuite
+        /// </summary>
+        private (string ModelName, string SourceKey) ResolveModel(Dictionary<string, object> parameters)
+        {
+            if (parameters != null)
+            {
+                var candidateKeys = new[] { "model", "modelName", "Model", "ModelName" };
+                foreach (var key in candidateKeys)
+                {
+                    if (parameters.TryGetValue(key, out var value) && value != null)
+                    {
+                        var str = value.ToString();
+                        if (!string.IsNullOrWhiteSpace(str))
+                        {
+                            return (str, key);
+                        }
+                    }
+                }
+            }
 
+            if (!string.IsNullOrWhiteSpace(_defaultModel))
+            {
+                return (_defaultModel, "D365Config.DefaultModel");
+            }
+
+            return ("ApplicationSuite", "fallback");
+        }
 
         /// <summary>
         /// Initialize reflection caches for performance
@@ -195,9 +238,11 @@ namespace D365MetadataService.Services
                 
                 var createMethod = _createMethodCache[providerProperty.Name];
 
-                // 6. Create ModelSaveInfo
-                var model = parameters.ContainsKey("model") ? parameters["model"]?.ToString() : "ApplicationSuite";
-                var modelSaveInfo = CreateModelSaveInfo(model ?? "ApplicationSuite");
+                // 6. Resolve model and create ModelSaveInfo
+                var (resolvedModel, modelSourceKey) = ResolveModel(parameters);
+                _logger.Information("🧭 Model resolution for {ObjectType}: using '{Model}' (source: {SourceKey}, configured default: {DefaultModel})",
+                    objectType, resolvedModel, modelSourceKey, _defaultModel);
+                var modelSaveInfo = CreateModelSaveInfo(resolvedModel);
 
                 // 7. Deep type analysis before invoking Create method
                 _logger.Information("=== DEEP TYPE ANALYSIS ===");
@@ -236,7 +281,9 @@ namespace D365MetadataService.Services
                     Properties = new Dictionary<string, object>
                     {
                         ["message"] = $"{objectType} created successfully using dynamic factory",
-                        ["model"] = model ?? "ApplicationSuite",
+                        ["model"] = resolvedModel,
+                        ["modelSource"] = modelSourceKey,
+                        ["configuredDefaultModel"] = _defaultModel,
                         ["providerProperty"] = providerProperty.Name
                     }
                 };

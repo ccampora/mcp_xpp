@@ -51,7 +51,14 @@ if (!isMainThread && parentPort) {
             try {
                 // Get objects for this model
                 const response = await client.sendRequest('list_objects_by_model', undefined, {
-                    model: task.modelName
+                    model: task.modelName,
+                    // Ensure we include data types (EDTs) in the enumeration when the service supports category filters.
+                    // Older service versions will ignore unknown keys.
+                    includeCategories: ['All', 'Data Types'],
+                    includeTypePatterns: ['^AxEdt', '^Edt'],
+                    // Back-compat aliases (service may accept different casing)
+                    IncludeCategories: ['All', 'Data Types'],
+                    IncludeTypePatterns: ['^AxEdt', '^Edt']
                 });
 
                 if (!response.Success) {
@@ -71,14 +78,23 @@ if (!isMainThread && parentPort) {
                 const objects: ModelProcessingResult['objects'] = [];
                 
                 for (const [objectType, objectNames] of Object.entries(modelData.objects)) {
+                    // Normalize common EDT type keys into a consistent index type.
+                    // The service may return EDTs as AxEdt, Edt*, or other variants depending on enumeration strategy.
+                    const normalizedType = ((): string => {
+                        const t = String(objectType);
+                        if (/^AxEdt$/i.test(t)) return 'AxEdt';
+                        if (/^Edt/i.test(t)) return 'AxEdt';
+                        return t;
+                    })();
+
                     const objectArray = objectNames as string[];
                     
                     for (const objectName of objectArray) {
                         objects.push({
                             name: objectName,
-                            path: `${task.modelName}/${objectType}/${objectName}`,
+                            path: `${task.modelName}/${normalizedType}/${objectName}`,
                             model: task.modelName,
-                            type: objectType,
+                            type: normalizedType,
                             lastModified: new Date().toISOString()
                         });
                     }

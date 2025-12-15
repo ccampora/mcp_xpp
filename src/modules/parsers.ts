@@ -197,22 +197,24 @@ export async function parseXppTable(filepath: string): Promise<any> {
  */
 export async function findXppObject(objectName: string, objectType?: string, model?: string): Promise<any[]> {
   const results: any[] = [];
-  
+
   // Try SQLite lookup first (fastest method)
   const lookup = new SQLiteObjectLookup();
   if (lookup.initialize()) {
     try {
+      // Prefer exact-name lookup in SQLite.
+      // (findObject currently uses exact match on the 'name' column.)
       let objects = lookup.findObject(objectName);
-      
+
       // Apply filters
       if (objectType) {
         objects = objects.filter(obj => obj.type === objectType);
       }
-      
+
       if (model) {
         objects = objects.filter(obj => obj.model?.toLowerCase() === model.toLowerCase());
       }
-      
+
       // Convert to our expected format
       for (const obj of objects) {
         results.push({
@@ -222,9 +224,9 @@ export async function findXppObject(objectName: string, objectType?: string, mod
           model: obj.model
         });
       }
-      
+
       lookup.close();
-      
+
       // If we found results in SQLite, return them
       if (results.length > 0) {
         return results;
@@ -234,45 +236,47 @@ export async function findXppObject(objectName: string, objectType?: string, mod
       lookup.close();
     }
   }
-  
+
   // Fallback to filesystem search if SQLite lookup fails
   console.log('Falling back to filesystem search...');
-  
+
   async function searchInDirectory(dirPath: string, currentModel?: string) {
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         if (entry.isDirectory()) {
           // If we're at the top level, this might be a model/package directory
           const potentialModel = currentModel || entry.name;
-          
+
           // If model filter is specified, skip directories that don't match
           if (model && potentialModel.toLowerCase() !== model.toLowerCase()) {
             continue;
           }
-          
+
           await searchInDirectory(`${dirPath}/${entry.name}`, potentialModel);
         } else if (entry.isFile()) {
-          const fileName = entry.name.toLowerCase();
-          const targetName = objectName.toLowerCase();
-          
-          if (fileName.includes(targetName)) {
-            const fullPath = `${dirPath}/${entry.name}`;
-            const detectedType = getXppObjectType(fullPath);
-            
-            if (!objectType || detectedType === objectType) {
-              // Extract model from path if available
-              const pathParts = fullPath.split(/[\/\\]/);
-              const extractedModel = currentModel || (pathParts.length > 1 ? pathParts[pathParts.length - 3] || pathParts[pathParts.length - 2] : 'Unknown');
-              
-              results.push({
-                name: entry.name,
-                path: fullPath,
-                type: detectedType,
-                model: extractedModel
-              });
-            }
+          // Only treat as a match when the filename base matches exactly.
+          // This avoids false negatives/positives for short names like 'Name'.
+          const baseName = entry.name.replace(/\.[^.]+$/, '');
+          if (baseName.toLowerCase() !== objectName.toLowerCase()) {
+            continue;
+          }
+
+          const fullPath = `${dirPath}/${entry.name}`;
+          const detectedType = getXppObjectType(fullPath);
+
+          if (!objectType || detectedType === objectType) {
+            // Extract model from path if available
+            const pathParts = fullPath.split(/[\/\\]/);
+            const extractedModel = currentModel || (pathParts.length > 1 ? pathParts[pathParts.length - 3] || pathParts[pathParts.length - 2] : 'Unknown');
+
+            results.push({
+              name: baseName,
+              path: fullPath,
+              type: detectedType,
+              model: extractedModel
+            });
           }
         }
       }
@@ -280,11 +284,11 @@ export async function findXppObject(objectName: string, objectType?: string, mod
       // Skip directories we can't access
     }
   }
-  
+
   const xppCodebasePath = process.env.XPP_CODEBASE_PATH || "";
   if (xppCodebasePath) {
     await searchInDirectory(xppCodebasePath);
   }
-  
+
   return results;
 }

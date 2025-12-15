@@ -34,6 +34,10 @@ export class ToolDefinitions {
                 enum: availableLayers,
                 description: "D365 application layer for the object. Common layers: 'usr' (user layer - customizations), 'cus' (customer layer - modifications), 'var' (partner layer - VAR solutions), 'isl' (independent software layer), 'sys' (system layer - Microsoft). Choose 'usr' for most custom development."
               },
+              modelName: {
+                type: "string",
+                description: "Optional D365 model/package name to create the object in (e.g., 'ApplicationSuite', 'MyCustomModel'). If provided, this is forwarded to the service as the target model. If omitted, the service uses D365Config.DefaultModel.",
+              },
               outputPath: {
                 type: "string",
                 description: "Output directory path for the created object structure (relative to D365 metadata root). Default 'Models' creates under Models/ directory. Use existing model names like 'MyCustomModel' to add objects to specific models.",
@@ -108,6 +112,7 @@ export class ToolDefinitions {
                   objectName: "MyDataEntryForm",
                   objectType: "AxForm",
                   layer: "usr",
+                  modelName: "MyCustomModel",
                   outputPath: "MyCustomModel"
                 }
               },
@@ -579,13 +584,17 @@ export class ToolDefinitions {
                 type: "string",
                 description: "Name of the existing D365 object to modify (e.g., 'CustTable', 'SalesTable')"
               },
+              modelName: {
+                type: "string",
+                description: "Optional D365 model/package context for the target object (e.g., 'ApplicationSuite', 'MyCustomModel'). If the same object name exists in multiple models, providing modelName avoids ambiguity. If omitted, the service uses D365Config.DefaultModel.",
+              },
               methodName: {
                 type: "string",
                 description: "Name of the modification method to execute (e.g., 'AddField', 'AddMethod', 'AddIndex'). Get exact method names from discover_modification_capabilities."
               },
               parameters: {
                 type: "object",
-                description: "Parameters required by the modification method. **CRITICAL**: Must include 'concreteType' parameter with exact type name from discovery (e.g., 'AxTableFieldString', 'AxTableFieldEnum', 'AxFormDataSourceRoot'). Use discover_modification_capabilities to get exact concrete type names and required parameters.",
+                description: "Parameters required by the modification method. **CRITICAL**: Must include 'concreteType' parameter with exact type name from discovery (e.g., 'AxTableFieldString', 'AxTableFieldEnum', 'AxTableFieldInt', 'AxFormDataSourceRoot'). Use discover_modification_capabilities to get exact concrete type names and required parameters.",
                 additionalProperties: true,
                 properties: {
                   fieldName: {
@@ -614,6 +623,7 @@ export class ToolDefinitions {
                 parameters: {
                   objectType: "AxTable",
                   objectName: "CustTable", 
+                  modelName: "MyCustomModel",
                   methodName: "AddField",
                   parameters: {
                     fieldName: "MyCustomField",

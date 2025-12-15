@@ -17,6 +17,7 @@ const MCP_CONFIG = {
     fast: 5000,      // 5 seconds for fast operations
     medium: 15000,   // 15 seconds for medium operations
     slow: 30000,     // 30 seconds for slow operations
+    cache: 120000,   // 120 seconds for cache/index rebuilds (can be slow on CI/dev machines)
   },
   client: {
     maxRetries: 3,
@@ -333,12 +334,35 @@ describe('🗄️ Cache Management', () => {
         : JSON.stringify(rebuildResult.content).substring(0, 500) + '...');
     
     // Parse the result to extract statistics
-    const rebuildContent = typeof rebuildResult.content === 'string' 
-      ? rebuildResult.content 
-      : JSON.stringify(rebuildResult.content);
-    
+    // MCP tool results typically return `content` as an array of { type: 'text', text: '...' }.
+    // Parse that text directly (instead of JSON-stringifying the wrapper), otherwise newline-based
+    // regexes won't match because the content will contain escaped "\\n" sequences.
+    const rebuildContent = (() => {
+      const c = rebuildResult.content;
+      if (typeof c === 'string') return c;
+
+      if (Array.isArray(c)) {
+        return c
+          .map((part) => {
+            if (!part) return '';
+            if (typeof part === 'string') return part;
+            if (typeof part.text === 'string') return part.text;
+            return '';
+          })
+          .filter(Boolean)
+          .join('\n');
+      }
+
+      if (c && typeof c === 'object' && typeof c.text === 'string') return c.text;
+
+      return JSON.stringify(c);
+    })()
+      // Normalize newlines for consistent regex behavior.
+      .replace(/\r\n/g, '\n')
+      // If any layer still escaped newlines, unescape them.
+      .replace(/\\n/g, '\n');
+
     console.log('   🔍 DEBUG - rebuildContent for parsing:', rebuildContent.substring(0, 1000) + '...');
-    console.log('   ✅ Cache deletion and rebuild completed');
     
     // Step 2: Verify the cache was rebuilt successfully by checking configuration
     console.log('   Step 2: Verifying cache rebuild through configuration...');
@@ -384,27 +408,36 @@ describe('🗄️ Cache Management', () => {
     }
     
     // Also check for type-specific counts (tables, classes, etc.)
-    const typeCountMatches = rebuildContent.match(/- (AxTable|AxClass|AxForm|AxEnum|AxQuery):\s*(\d+)/gi);
+    // The build output uses human-readable names like "Classes" / "Tables".
+    // Example:
+    // - Classes: 57129
+    // - AxEdt: 24503
+    // - Tables: 18094
+    const typeCountMatches = rebuildContent.match(/^\s*-\s*([^:]+):\s*(\d+)\s*$/gmi);
     console.log('   🔍 DEBUG - typeCountMatches:', typeCountMatches);
     const typeCounts = {};
-    
+
     if (typeCountMatches) {
-      for (const match of typeCountMatches) {
-        const [, type, count] = match.match(/- (.*?):\s*(\d+)/i) || [];
-        if (type && count) {
-          typeCounts[type] = parseInt(count, 10);
+      for (const line of typeCountMatches) {
+        const m = line.match(/^\s*-\s*([^:]+):\s*(\d+)\s*$/i);
+        if (!m) continue;
+        const type = (m[1] || '').trim();
+        const count = parseInt(m[2], 10);
+        if (type && Number.isFinite(count)) {
+          typeCounts[type] = count;
         }
       }
     }
-    
+
     // Verify total objects count
     expect(totalObjects).toBeGreaterThan(0);
     console.log(`   📊 Total objects indexed: ${totalObjects}`);
-    
+
     // Verify at least some common object types have counts > 0
-    const commonTypes = ['AxTable', 'AxClass', 'AxForm', 'AxEnum'];
+    // (Accept both Ax* and human-readable names from the index build output.)
+    const commonTypes = ['AxTable', 'Tables', 'AxClass', 'Classes', 'AxForm', 'Forms', 'AxEnum', 'Enums', 'AxEdt'];
     let validTypeCount = 0;
-    
+
     for (const type of commonTypes) {
       const count = typeCounts[type] || 0;
       if (count > 0) {
@@ -412,7 +445,7 @@ describe('🗄️ Cache Management', () => {
         console.log(`   📋 ${type}: ${count} objects`);
       }
     }
-    
+
     // Expect at least 2 common types to have objects (most D365 systems have tables and classes)
     expect(validTypeCount).toBeGreaterThanOrEqual(2);
     
@@ -426,7 +459,7 @@ describe('🗄️ Cache Management', () => {
     console.log('   ✅ All object counts verified successfully');
     console.log('🎉 Cache management test sequence completed successfully!');
     
-  }, MCP_CONFIG.timeouts.slow); // Use slow timeout since index building can take time
+  }, MCP_CONFIG.timeouts.cache); // cache/index rebuilds can take >30s after EDT indexing
 
   test('should handle cache rebuild performance efficiently', async () => {
     if (!(await isMCPAvailable())) return;
@@ -459,12 +492,13 @@ describe('🗄️ Cache Management', () => {
       console.log(`   📊 Performance: ${objectsPerSecond} objects/second (${totalObjects} total objects)`);
     }
     
-    // Performance should be reasonable (less than 30 seconds for typical D365 codebases)
-    expect(duration).toBeLessThan(30000);
+    // Performance should be reasonable, but allow slower environments.
+    // (EDT indexing increases total rows and rebuild time noticeably.)
+    expect(duration).toBeLessThan(MCP_CONFIG.timeouts.cache);
     
     console.log('   ✅ Cache rebuild performance is acceptable');
     
-  }, MCP_CONFIG.timeouts.slow);
+  }, MCP_CONFIG.timeouts.cache);
 
   test('should verify cache persistence after rebuild', async () => {
     if (!(await isMCPAvailable())) return;

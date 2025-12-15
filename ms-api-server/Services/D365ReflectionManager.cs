@@ -527,7 +527,34 @@ namespace D365MetadataService.Services
                 try { var result = provider.Reports.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Reports"] = result; } catch { }
                 try { var result = provider.DataEntityViews.ListObjectsForModel(modelName); if (result?.Any() == true) objects["DataEntityViews"] = result; } catch { }
                 try { var result = provider.CompositeDataEntityViews.ListObjectsForModel(modelName); if (result?.Any() == true) objects["CompositeDataEntityViews"] = result; } catch { }
-                
+
+                // ✅ Add EDTs (Extended Data Types) via reflection.
+                // Some SDK versions do not expose ExtendedDataTypes on IMetadataProvider, but the concrete provider often has it.
+                try
+                {
+                    var providerType = provider.GetType();
+                    var edtProp = providerType.GetProperty("ExtendedDataTypes")
+                                 ?? providerType.GetProperty("Edts")
+                                 ?? providerType.GetProperty("EDTs")
+                                 ?? providerType.GetProperty("ExtendedDataType");
+
+                    if (edtProp != null)
+                    {
+                        var edtCollection = edtProp.GetValue(provider);
+                        var listMethod = edtCollection?.GetType().GetMethod("ListObjectsForModel");
+                        if (listMethod != null)
+                        {
+                            var result = listMethod.Invoke(edtCollection, new object[] { modelName }) as System.Collections.IEnumerable;
+                            if (result != null && result.Cast<object>().Any())
+                            {
+                                // Store under the canonical MetaModel type name expected by the TS indexer and tools.
+                                objects["AxEdt"] = result;
+                            }
+                        }
+                    }
+                }
+                catch { }
+
                 var totalObjects = objects.Values.OfType<System.Collections.IEnumerable>().Sum(collection => collection.Cast<object>().Count());
                 _logger.Information("🎯 Found {TotalObjects} total objects across {Collections} collections for model {Model}", 
                     totalObjects, objects.Count, modelName);

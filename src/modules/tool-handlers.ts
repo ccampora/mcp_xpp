@@ -110,6 +110,7 @@ export class ToolHandlers {
       objectName: z.string().optional(),
       objectType: z.string().optional(),
       layer: z.string().optional(),
+      modelName: z.string().optional(),
       publisher: z.string().default("YourCompany"),
       version: z.string().default("1.0.0.0"),
       dependencies: z.array(z.string()).default(["ApplicationPlatform", "ApplicationFoundation"]),
@@ -287,18 +288,23 @@ export class ToolHandlers {
     
     try {
       // Direct VS2022 service integration - supports all 544+ D365 object types
+      const mergedProperties = {
+        ...(params.properties || {}),
+        ...(params.modelName ? { model: params.modelName, modelName: params.modelName, ModelName: params.modelName } : {})
+      };
+
       content = await ObjectCreators.createGenericObject(params.objectType, params.objectName, {
         layer: params.layer,
         publisher: params.publisher,
         version: params.version,
         dependencies: params.dependencies,
         outputPath: params.outputPath,
-        properties: params.properties
+        properties: mergedProperties
       });
       
       // Immediately add the created object to the search index for instant searchability
       try {
-        const model = params.properties?.model || 'UnknownModel';
+        const model = mergedProperties?.model || mergedProperties?.modelName || 'UnknownModel';
         const filePath = `Models/${model}/${params.objectType}/${params.objectName}.xml`;
         
         const indexSuccess = await ObjectIndexManager.addObjectToIndex(
@@ -1594,6 +1600,7 @@ export class ToolHandlers {
     const modificationSchema = z.object({
       objectType: z.string().min(1, "objectType is required and must be non-empty"),
       objectName: z.string().min(1, "objectName is required and must be non-empty"),
+      modelName: z.string().optional(),
       methodName: z.string().min(1, "methodName is required and must be non-empty"),
       parameters: z.record(z.any()).optional().default({})
     });
@@ -1604,7 +1611,7 @@ export class ToolHandlers {
       throw new McpError(ErrorCode.InvalidParams, `Validation failed: ${errors}`);
     }
 
-    const { objectType, objectName, methodName, parameters } = validationResult.data;
+    const { objectType, objectName, modelName, methodName, parameters } = validationResult.data;
 
     try {
       console.log(`🔧 Executing modification: ${methodName} on ${objectType}:${objectName}`);
@@ -1621,7 +1628,11 @@ export class ToolHandlers {
 
       // Execute the modification
       console.log(`🚀 Executing ${methodName} on ${objectType}:${objectName}...`);
-      const response = await client.executeObjectModification(objectType, objectName, methodName, parameters);
+      const mergedParameters = {
+        ...(parameters || {}),
+        ...(modelName ? { model: modelName, modelName, ModelName: modelName } : {})
+      };
+      const response = await client.executeObjectModification(objectType, objectName, methodName, mergedParameters);
       console.log('📦 Raw service response:', JSON.stringify(response, null, 2));
 
       // Ensure we disconnect
