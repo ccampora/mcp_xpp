@@ -96,7 +96,7 @@ export class ObjectIndexManager {
       }
     } catch (error) {
       // Skip directories we can't access
-      console.log(`⚠️ Could not access directory: ${relative(basePath, dirPath)}`);
+      console.error(`⚠️ Could not access directory: ${relative(basePath, dirPath)}`);
     }
   }
 
@@ -135,7 +135,7 @@ export class ObjectIndexManager {
       }
     } catch (error) {
       // Skip packages we can't access
-      console.log(`⚠️ Could not access package: ${packageName}`);
+      console.error(`⚠️ Could not access package: ${packageName}`);
     }
   }
 
@@ -175,7 +175,7 @@ export class ObjectIndexManager {
             
             if (now - stats.mtime.getTime() > maxAgeMs) {
               await fs.unlink(filePath);
-              console.log(`Cleaned up old cache file: ${entry.name}`);
+              console.error(`Cleaned up old cache file: ${entry.name}`);
               return entry.name;
             }
             return null;
@@ -190,7 +190,7 @@ export class ObjectIndexManager {
       const cleanedCount = results.filter(result => result !== null).length;
       
       if (cleanedCount > 0) {
-        console.log(`Cache cleanup completed: ${cleanedCount} files removed`);
+        console.error(`Cache cleanup completed: ${cleanedCount} files removed`);
       }
     } catch (error) {
       console.error("Error cleaning up cache:", error);
@@ -208,25 +208,25 @@ export class ObjectIndexManager {
     
     if (forceRebuild) {
       // Force rebuild - always clear database and rebuild
-      console.log('🗑️ Force rebuild requested - clearing SQLite cache');
+      console.error('🗑️ Force rebuild requested - clearing SQLite cache');
       if (this.sqliteIndex) {
         this.sqliteIndex.clearDatabase();
-        console.log('✅ SQLite cache cleared successfully');
+        console.error('✅ SQLite cache cleared successfully');
       }
     } else {
       // Normal mode - skip if objects exist (use safe method to avoid read-only issues)
       const totalCount = SQLiteObjectLookup.safeGetTotalCount();
       if (totalCount > 0) {
-        console.log(`📊 SQLite index already has ${totalCount} objects, skipping rebuild`);
+        console.error(`📊 SQLite index already has ${totalCount} objects, skipping rebuild`);
         return;
       }
     }
 
     // Try DLL-based indexing via VS2022 service with parallel processing
     try {
-      console.log('🚀 Attempting DLL-based indexing via VS2022 service with parallel processing...');
+      console.error('🚀 Attempting DLL-based indexing via VS2022 service with parallel processing...');
       
-      console.log('🔌 Connecting to VS2022 C# service for model discovery...');
+      console.error('🔌 Connecting to VS2022 C# service for model discovery...');
       const client = new D365ServiceClient();
       await client.connect();
       
@@ -238,7 +238,7 @@ export class ObjectIndexManager {
           throw new Error('No models discovered from C# service');
         }
 
-        console.log(`📊 Processing ${TARGET_MODELS.length} models via parallel workers...`);
+        console.error(`📊 Processing ${TARGET_MODELS.length} models via parallel workers...`);
         
         // Process models in parallel using worker threads
         // Process 20 models each time
@@ -263,7 +263,7 @@ export class ObjectIndexManager {
           if (result.success) {
             totalObjects += result.objectCount;
             allObjects.push(...result.objects);
-            console.log(`   ✅ ${result.modelName}: ${result.objectCount} objects (${result.processingTime}ms)`);
+            console.error(`   ✅ ${result.modelName}: ${result.objectCount} objects (${result.processingTime}ms)`);
           } else {
             console.error(`   ❌ ${result.modelName}: ${result.error}`);
           }
@@ -271,19 +271,19 @@ export class ObjectIndexManager {
         
         // Bulk insert all objects from all models in one operation
         if (allObjects.length > 0) {
-          console.log(`🚀 Bulk inserting ${allObjects.length} objects from all models...`);
+          console.error(`🚀 Bulk inserting ${allObjects.length} objects from all models...`);
           const insertStartTime = Date.now();
           this.sqliteIndex!.insertObjectsBulk(allObjects);
           const insertTime = Date.now() - insertStartTime;
-          console.log(`✅ Bulk insert completed in ${insertTime}ms`);
+          console.error(`✅ Bulk insert completed in ${insertTime}ms`);
         }
 
-        console.log(`🎉 DLL-based indexing complete: ${totalObjects} objects indexed via service enumeration!`);
-        console.log('✅ Full index build completed successfully!');
+        console.error(`🎉 DLL-based indexing complete: ${totalObjects} objects indexed via service enumeration!`);
+        console.error('✅ Full index build completed successfully!');
         
       } finally {
         await client.disconnect();
-        console.log('📡 Disconnected from VS2022 service');
+        console.error('📡 Disconnected from VS2022 service');
       }
       
     } catch (error) {
@@ -305,7 +305,7 @@ export class ObjectIndexManager {
           .filter((model: any) => model.HasObjects && (model.Type === 'Standard' || model.ObjectCount > 0))
           .map((model: any) => model.Name);
           
-        console.log(`📋 Discovered ${modelsWithObjects.length} D365 models with objects via DLL enumeration`);
+        console.error(`📋 Discovered ${modelsWithObjects.length} D365 models with objects via DLL enumeration`);
         return modelsWithObjects;
       }
       
@@ -352,7 +352,7 @@ export class ObjectIndexManager {
     );
 
     // Wait for all workers to complete
-    console.log(`🧵 Starting ${workerPromises.length} worker threads...`);
+    console.error(`🧵 Starting ${workerPromises.length} worker threads...`);
     const results = await Promise.allSettled(workerPromises);
     
     // Process results
@@ -374,7 +374,7 @@ export class ObjectIndexManager {
     const successCount = processedResults.filter(r => r.success).length;
     const failedCount = processedResults.length - successCount;
     
-    console.log(`🎯 Parallel processing complete: ${successCount} successful, ${failedCount} failed`);
+    console.error(`🎯 Parallel processing complete: ${successCount} successful, ${failedCount} failed`);
     
     return processedResults;
   }
@@ -588,7 +588,7 @@ export class ObjectIndexManager {
 
       const success = this.sqliteIndex.insertObject(objectLocation);
       if (success) {
-        console.log(`✅ Added ${objectType} '${objectName}' to search index (model: ${model})`);
+        console.error(`✅ Added ${objectType} '${objectName}' to search index (model: ${model})`);
       } else {
         console.warn(`⚠️  Failed to add ${objectType} '${objectName}' to search index`);
       }

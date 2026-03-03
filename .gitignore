@@ -137,3 +137,4 @@ ms-api-server/appsettings.json
 docs/internal
 docs/xpp_guidelines
 .github/copilot-instructions.md
+config/vs2022_mcp_config.json

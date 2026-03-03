@@ -236,7 +236,7 @@ export async function findXppObject(objectName: string, objectType?: string, mod
   }
   
   // Fallback to filesystem search if SQLite lookup fails
-  console.log('Falling back to filesystem search...');
+  console.error('Falling back to filesystem search...');
   
   async function searchInDirectory(dirPath: string, currentModel?: string) {
     try {

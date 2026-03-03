@@ -407,11 +407,11 @@ export class AOTStructureManager {
       const cachedTypes = await ObjectIndexManager.getCachedObjectTypes();
       
       if (cachedTypes && cachedTypes.length > 0) {
-        console.log(`✅ Using ${cachedTypes.length} cached object types from SQLite`);
+        console.error(`✅ Using ${cachedTypes.length} cached object types from SQLite`);
         return cachedTypes;
       }
       
-      console.log('⚠️  No cached object types found, falling back to VS2022 service');
+      console.error('⚠️  No cached object types found, falling back to VS2022 service');
     } catch (error) {
       console.warn('Failed to retrieve cached object types:', error);
     }
@@ -468,11 +468,11 @@ export class AOTStructureManager {
       const cachedTypes = await ObjectIndexManager.getCachedObjectTypes();
       
       if (cachedTypes && cachedTypes.length > 0) {
-        console.log(`✅ Using ${cachedTypes.length} cached object types from SQLite (service method)`);
+        console.error(`✅ Using ${cachedTypes.length} cached object types from SQLite (service method)`);
         return cachedTypes;
       }
       
-      console.log('⚠️  No cached object types found, querying VS2022 service');
+      console.error('⚠️  No cached object types found, querying VS2022 service');
     } catch (error) {
       console.warn('Failed to retrieve cached object types:', error);
     }

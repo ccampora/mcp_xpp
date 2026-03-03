@@ -42,7 +42,7 @@ if (!isMainThread && parentPort) {
         };
 
         try {
-            console.log(`🔍 Worker processing model: ${task.modelName}`);
+            console.error(`🔍 Worker processing model: ${task.modelName}`);
             
             // Create independent connection to C# service
             const client = new D365ServiceClient();
@@ -60,7 +60,7 @@ if (!isMainThread && parentPort) {
 
                 const modelData = response.Data.models[0];
                 if (!modelData || !modelData.objects) {
-                    console.log(`   ⚠️  No objects found in model ${task.modelName}`);
+                    console.error(`   ⚠️  No objects found in model ${task.modelName}`);
                     result.success = true;
                     result.processingTime = Date.now() - startTime;
                     parentPort!.postMessage(result);
@@ -89,7 +89,7 @@ if (!isMainThread && parentPort) {
                 result.success = true;
                 result.processingTime = Date.now() - startTime;
 
-                console.log(`   ✅ Worker completed ${task.modelName}: ${result.objectCount} objects (${result.processingTime}ms)`);
+                console.error(`   ✅ Worker completed ${task.modelName}: ${result.objectCount} objects (${result.processingTime}ms)`);
                 
             } finally {
                 await client.disconnect();

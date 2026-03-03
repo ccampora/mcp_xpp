@@ -65,7 +65,7 @@ export class SQLiteObjectLookup {
             const result = stmt.get() as { count: number };
             return result?.count || 0;
         } catch (error) {
-            console.log('📖 Could not read existing database, will rebuild');
+            console.error('📖 Could not read existing database, will rebuild');
             return 0;
         } finally {
             if (tempDb) {
@@ -103,8 +103,8 @@ export class SQLiteObjectLookup {
         try {
             // Auto-create database if it doesn't exist
             if (!existsSync(this.dbPath)) {
-                console.log(`🔧 SQLite database not found: ${this.dbPath}`);
-                console.log('🚀 Auto-initializing database...');
+                console.error(`🔧 SQLite database not found: ${this.dbPath}`);
+                console.error('🚀 Auto-initializing database...');
                 
                 if (!this.createDatabase()) {
                     console.error('❌ Failed to auto-create database');
@@ -112,7 +112,7 @@ export class SQLiteObjectLookup {
                     return false;
                 }
                 
-                console.log('✅ Database auto-created successfully');
+                console.error('✅ Database auto-created successfully');
             }
 
             this.db = new Database(this.dbPath, { readonly: true });
@@ -125,14 +125,14 @@ export class SQLiteObjectLookup {
                 this.db.pragma('query_only = true');        // Read-only optimization
             } catch (error) {
                 // Ignore pragma errors on read-only database
-                console.log('📖 Read-only database - skipping pragma optimizations');
+                console.error('📖 Read-only database - skipping pragma optimizations');
             }
             
             // Prepare commonly used statements
             try {
                 this.prepareStatements();
             } catch (error) {
-                console.log('📖 Read-only database - will prepare statements on-demand');
+                console.error('📖 Read-only database - will prepare statements on-demand');
                 // Statements will be prepared on-demand when needed
             }
 
@@ -141,7 +141,7 @@ export class SQLiteObjectLookup {
                 try {
                     this.createOptimizedIndexes();
                 } catch (error) {
-                    console.log('📖 Could not create indexes (read-only database)');
+                    console.error('📖 Could not create indexes (read-only database)');
                 }
             }
             
@@ -195,7 +195,7 @@ export class SQLiteObjectLookup {
             `);
             
             newDb.close();
-            console.log('✅ Created empty SQLite database with schema');
+            console.error('✅ Created empty SQLite database with schema');
             return true;
         } catch (error) {
             console.error('❌ Error creating database:', error);
@@ -361,7 +361,7 @@ export class SQLiteObjectLookup {
     public insertObject(obj: ObjectLocation): boolean {
         // Check if database needs to be reopened in write mode
         if (!this.db || this.db.readonly) {
-            console.log('🔄 Reopening database in write mode for object insertion...');
+            console.error('🔄 Reopening database in write mode for object insertion...');
             this.close();
             
             // Reopen in write mode
@@ -398,7 +398,7 @@ export class SQLiteObjectLookup {
     public deleteObject(objectName: string, objectType: string): boolean {
         // Check if database needs to be reopened in write mode  
         if (!this.db || this.db.readonly) {
-            console.log('🔄 Reopening database in write mode for object deletion...');
+            console.error('🔄 Reopening database in write mode for object deletion...');
             this.close();
             
             // Reopen in write mode
@@ -412,10 +412,10 @@ export class SQLiteObjectLookup {
             const result = this.prepared.deleteObject.run(objectName, objectType);
             
             if (result.changes > 0) {
-                console.log(`✅ Deleted object from cache: ${objectName} (${objectType})`);
+                console.error(`✅ Deleted object from cache: ${objectName} (${objectType})`);
                 return true;
             } else {
-                console.log(`ℹ️ Object not found in cache: ${objectName} (${objectType})`);
+                console.error(`ℹ️ Object not found in cache: ${objectName} (${objectType})`);
                 return true; // Not an error - object might not have been in cache
             }
         } catch (error) {
@@ -433,7 +433,7 @@ export class SQLiteObjectLookup {
         
         // Check if database needs to be reopened in write mode
         if (!this.db || this.db.readonly) {
-            console.log('🔄 Reopening database in write mode for bulk insertion...');
+            console.error('🔄 Reopening database in write mode for bulk insertion...');
             this.close();
             
             // Reopen in write mode
@@ -619,7 +619,7 @@ export class SQLiteObjectLookup {
             // Store metadata as JSON
             insert.run('aot_structure', JSON.stringify(metadata));
             
-            console.log('✅ AOT metadata stored in SQLite database');
+            console.error('✅ AOT metadata stored in SQLite database');
             return true;
         } catch (error) {
             console.error('❌ Failed to store AOT metadata:', error);
@@ -762,7 +762,7 @@ export class SQLiteObjectLookup {
      */
     public clearDatabase(): void {
         if (!this.db || this.db.readonly) {
-            console.log('🔄 Reopening database in write mode for clearing...');
+            console.error('🔄 Reopening database in write mode for clearing...');
             this.close();
             
             // Reopen in write mode
@@ -782,10 +782,10 @@ export class SQLiteObjectLookup {
             this.db.exec('DELETE FROM object_types_cache');
             
             // Ensure all optimized indexes exist for best performance
-            console.log('� Ensuring optimized indexes exist...');
+            console.error('� Ensuring optimized indexes exist...');
             this.createOptimizedIndexes();
             
-            console.log('�🗑️ Database cleared successfully');
+            console.error('�🗑️ Database cleared successfully');
             
             // Reopen in readonly mode for future operations
             this.close();
@@ -817,7 +817,7 @@ export class SQLiteObjectLookup {
                 this.db.exec(indexSql);
             } catch (error) {
                 // Ignore errors if index already exists
-                console.log('📝 Index may already exist, continuing...');
+                console.error('📝 Index may already exist, continuing...');
             }
         }
         
@@ -836,7 +836,7 @@ export class SQLiteObjectLookup {
     public async cacheObjectTypes(objectTypes: string[]): Promise<void> {
         // For write operations, we need to reopen database in write mode
         if (!this.db || this.db.readonly) {
-            console.log('📝 Reopening database in write mode for caching...');
+            console.error('📝 Reopening database in write mode for caching...');
             this.close();
             
             // Reopen in write mode (readonly: false)
@@ -867,7 +867,7 @@ export class SQLiteObjectLookup {
             });
 
             insertMany(objectTypes);
-            console.log(`✅ Cached ${objectTypes.length} object types in SQLite`);
+            console.error(`✅ Cached ${objectTypes.length} object types in SQLite`);
             
             // Reopen in readonly mode for future operations
             this.close();

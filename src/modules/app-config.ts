@@ -139,7 +139,7 @@ class AppConfigManager {
     if (!this.config.xppPath || !this.config.xppMetadataFolder) {
       try {
         await DiskLogger.logDebug("Attempting to get setup configuration from VS2022 service...");
-        console.log("Attempting to get setup configuration from VS2022 service (30s timeout)...");
+        console.error("Attempting to get setup configuration from VS2022 service (30s timeout)...");
         
         const setupInfo = await this.getSetupFromVS2022Service(30000); // 30 second timeout
         if (setupInfo) {
@@ -149,12 +149,12 @@ class AppConfigManager {
           this.config.vs2022ExtensionPath = this.config.vs2022ExtensionPath || setupInfo.ExtensionPath;
           
           setupFromService = true;
-          console.log("Setup configuration retrieved from VS2022 service");
+          console.error("Setup configuration retrieved from VS2022 service");
           await DiskLogger.logDebug(`Setup from VS2022 service: ${JSON.stringify(setupInfo, null, 2)}`);
         }
       } catch (error) {
         await DiskLogger.logDebug(`Failed to get setup from VS2022 service: ${error}`);
-        console.log("Could not get setup from VS2022 service, proceeding with available configuration");
+        console.error("Could not get setup from VS2022 service, proceeding with available configuration");
       }
     }
 
@@ -194,10 +194,10 @@ class AppConfigManager {
         if (autoDetectedPath) {
           this.config.vs2022ExtensionPath = autoDetectedPath;
           await DiskLogger.logDebug(`VS2022 extension path auto-detected: ${autoDetectedPath}`);
-          console.log(`Auto-detected VS2022 extension path: ${autoDetectedPath}`);
+          console.error(`Auto-detected VS2022 extension path: ${autoDetectedPath}`);
         } else {
           await DiskLogger.logDebug("VS2022 extension path not provided and auto-detection failed");
-          console.log("VS2022 extension path not provided and could not be auto-detected");
+          console.error("VS2022 extension path not provided and could not be auto-detected");
         }
       } catch (error) {
         await DiskLogger.logDebug(`VS2022 auto-detection failed: ${error}`);

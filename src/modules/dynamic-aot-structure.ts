@@ -38,7 +38,7 @@ export class DynamicAOTStructureManager {
         });
       });
 
-      console.log(`Dynamic AOT structure loaded: ${this.discoveredObjectTypes.size} types from ${Object.keys(reflectionCache.categories).length} categories`);
+      console.error(`Dynamic AOT structure loaded: ${this.discoveredObjectTypes.size} types from ${Object.keys(reflectionCache.categories).length} categories`);
       
     } catch (error) {
       console.error('ERROR: Failed to load dynamic AOT structure:', error);
@@ -192,7 +192,7 @@ export class DynamicAOTStructureManager {
   static async discoverAvailableObjectTypes(basePath: string): Promise<void> {
     // For dynamic structure, we already have this from reflection
     // This method is kept for compatibility with existing code
-    console.log(`📍 Using dynamic reflection data instead of filesystem discovery`);
+    console.error(`📍 Using dynamic reflection data instead of filesystem discovery`);
   }
 
   /**
@@ -254,7 +254,7 @@ export class DynamicAOTStructureManager {
     const isStale = await cacheManager.isCacheStale();
     
     if (isStale) {
-      console.log('🔄 AOT structure cache is stale, regenerating...');
+      console.error('🔄 AOT structure cache is stale, regenerating...');
       await cacheManager.generateAOTStructureCache();
     }
   }
