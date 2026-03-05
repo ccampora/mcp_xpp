@@ -1,5 +1,6 @@
 @echo off
 REM Build both C# service and MCP server
+cd /d "%~dp0.."
 echo ================================================
 echo Building MCP X++ Full Stack
 echo ================================================

@@ -1,5 +1,6 @@
 @echo off
 REM Check status of MCP X++ components
+cd /d "%~dp0.."
 echo ================================================
 echo MCP X++ Status Check
 echo ================================================
