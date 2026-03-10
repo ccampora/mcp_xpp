@@ -922,11 +922,13 @@ export class ToolHandlers {
     });
     const { objectType, forceRebuild } = schema.parse(args);
     
-    // Note: xppPath no longer required for index building - VS2022 service provides all data
+    // VS2022 service provides standard model data; xppMetadataFolder is used to
+    // supplement the index with custom models stored on the filesystem.
+    const xppMetadataFolder = AppConfig.getXppMetadataFolder();
     let content = "";
-  
-    // Build file object index
-    await ObjectIndexManager.buildFullIndex(forceRebuild);
+
+    // Build file object index (supplements with custom models from xppMetadataFolder)
+    await ObjectIndexManager.buildFullIndex(forceRebuild, xppMetadataFolder);
     const stats = ObjectIndexManager.getStats();
     content = `Full index build complete:\n`;
     content += `- Total objects: ${stats.totalObjects}\n\n`;
