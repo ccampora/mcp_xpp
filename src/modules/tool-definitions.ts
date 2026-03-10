@@ -298,8 +298,8 @@ export class ToolDefinitions {
               },
               inspectionMode: {
                 type: "string",
-                enum: ["summary", "properties", "collection", "xppcode"],
-                description: "Controls inspection detail level: 'summary' = Fast overview with collection counts (~50ms, agent-friendly), 'properties' = All object properties without collections (~100ms), 'collection' = Specific collection items without limits (requires collectionName), 'xppcode' = Extract X++ source code from methods (requires codeTarget). Default: 'summary'.",
+                enum: ["summary", "properties", "collection", "xppcode", "field", "controls"],
+                description: "Controls inspection detail level: 'summary' = Fast overview with collection counts (~50ms, agent-friendly), 'properties' = All object properties without collections (~100ms), 'collection' = Specific collection items without limits (requires collectionName), 'xppcode' = Extract X++ source code from methods (requires codeTarget), 'field' = Field-level metadata for a single table field — label, EDT, help text, mandatory, config key (requires fieldName), 'controls' = Form control tree with caption, data binding and parent group (AxForm only, optional filterPattern). Default: 'summary'.",
               },
               collectionName: {
                 type: "string",
@@ -307,8 +307,8 @@ export class ToolDefinitions {
               },
               codeTarget: {
                 type: "string",
-                enum: ["methods", "specific-method", "event-handlers"],
-                description: "Required when inspectionMode='xppcode'. Target for code extraction: 'methods' = All method source code, 'specific-method' = Single method by name (requires methodName), 'event-handlers' = Event handler methods.",
+                enum: ["methods", "specific-method", "event-handlers", "method-scan"],
+                description: "Required when inspectionMode='xppcode'. Target for code extraction: 'methods' = All method source code, 'specific-method' = Single method by name (requires methodName), 'event-handlers' = Event handler methods, 'method-scan' = Method names and line counts only (no source code) — use this first to identify large methods before fetching full code.",
               },
               methodName: {
                 type: "string",
@@ -320,7 +320,11 @@ export class ToolDefinitions {
               },
               filterPattern: {
                 type: "string",
-                description: "Filter results with wildcards (*=any chars, ?=single char). Examples: '*validate*' (methods containing 'validate'), 'cust*' (items starting with 'cust'), '*Address*'. Applies to property/method/field names to reduce response size.",
+                description: "Filter results with wildcards (*=any chars, ?=single char). Examples: '*validate*' (methods containing 'validate'), 'cust*' (items starting with 'cust'), '*Address*'. Applies to collection items and form controls to reduce response size.",
+              },
+              fieldName: {
+                type: "string",
+                description: "Required when inspectionMode='field'. Name of the specific table field to inspect (e.g., 'ShippingDateConfirmed', 'CustAccount').",
               },
             },
             required: ["objectName", "objectType"],

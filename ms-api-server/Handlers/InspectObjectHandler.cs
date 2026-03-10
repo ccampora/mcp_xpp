@@ -1472,6 +1472,245 @@ namespace D365MetadataService.Handlers
         }
 
         /// <summary>
+        /// Get field-level metadata for a single field on a table/view/entity.
+        /// Returns label, EDT, help text, mandatory, config key, visible, allow-edit flags.
+        /// </summary>
+        public Task<object> GetObjectFieldAsync(string objectName, string objectType, string fieldName)
+        {
+            try
+            {
+                Logger.Information("Getting field metadata for {ObjectType} '{ObjectName}' field '{FieldName}'", objectType, objectName, fieldName);
+
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                    return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, FieldName = fieldName, Found = false, Error = $"Object type '{objectType}' not found" });
+
+                object actualObject = null;
+                try
+                {
+                    var objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                    if (objectFactory != null)
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "Failed to load object for field inspection");
+                }
+
+                if (actualObject == null)
+                    return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, FieldName = fieldName, Found = false, Error = $"Object '{objectName}' not found" });
+
+                // Find the Fields collection property
+                var fieldsProperty = axType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(p => IsCollectionType(p.PropertyType) &&
+                        (p.Name.Equals("Fields", StringComparison.OrdinalIgnoreCase) ||
+                         p.Name.Equals("FieldCollection", StringComparison.OrdinalIgnoreCase)));
+
+                if (fieldsProperty == null)
+                    return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, FieldName = fieldName, Found = false, Error = "No Fields collection on this object type" });
+
+                var fieldsCollection = fieldsProperty.GetValue(actualObject);
+                if (fieldsCollection == null || !typeof(System.Collections.IEnumerable).IsAssignableFrom(fieldsCollection.GetType()))
+                    return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, FieldName = fieldName, Found = false, Error = "Fields collection is empty or not enumerable" });
+
+                object matchedField = null;
+                var availableFields = new List<string>();
+
+                foreach (var field in (System.Collections.IEnumerable)fieldsCollection)
+                {
+                    var nameVal = field?.GetType().GetProperty("Name")?.GetValue(field)?.ToString();
+                    if (nameVal != null) availableFields.Add(nameVal);
+                    if (string.Equals(nameVal, fieldName, StringComparison.OrdinalIgnoreCase))
+                        matchedField = field;
+                }
+
+                if (matchedField == null)
+                    return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, FieldName = fieldName, Found = false, Error = $"Field '{fieldName}' not found", AvailableFields = availableFields.Take(50).ToList() });
+
+                // Extract metadata from the field object via reflection
+                object ExtractProp(string propName) =>
+                    matchedField.GetType().GetProperty(propName)?.GetValue(matchedField)?.ToString();
+
+                var fieldData = new
+                {
+                    Name            = ExtractProp("Name"),
+                    Label           = ExtractProp("Label"),
+                    HelpText        = ExtractProp("HelpText"),
+                    ExtendedDataType= ExtractProp("ExtendedDataType"),
+                    Mandatory       = ExtractProp("Mandatory"),
+                    ConfigurationKey= ExtractProp("ConfigurationKey"),
+                    Visible         = ExtractProp("Visible"),
+                    AllowEdit       = ExtractProp("AllowEdit"),
+                    AllowEditOnCreate = ExtractProp("AllowEditOnCreate"),
+                    Type            = ExtractProp("Type") ?? ExtractProp("FieldType"),
+                };
+
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    FieldName = fieldName,
+                    Found = true,
+                    Field = fieldData
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error getting field metadata for {ObjectType} '{ObjectName}' field '{FieldName}'", objectType, objectName, fieldName);
+                return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, FieldName = fieldName, Found = false, Error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get form control tree for a form object.
+        /// Returns control name, type, caption, dataField binding, and parent group.
+        /// </summary>
+        public Task<object> GetObjectControlsAsync(string objectName, string objectType, string filterPattern)
+        {
+            try
+            {
+                Logger.Information("Getting form controls for {ObjectType} '{ObjectName}' filter '{FilterPattern}'", objectType, objectName, filterPattern ?? "none");
+
+                var axType = _reflectionManager.GetD365Type(objectType);
+                if (axType == null)
+                    return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, Found = false, Error = $"Object type '{objectType}' not found" });
+
+                object actualObject = null;
+                try
+                {
+                    var objectFactory = _reflectionManager.GetObjectFactory(_config.D365Config);
+                    if (objectFactory != null)
+                        actualObject = objectFactory.GetExistingObject(objectType, objectName);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "Failed to load form object for controls inspection");
+                }
+
+                if (actualObject == null)
+                    return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, Found = false, Error = $"Form '{objectName}' not found" });
+
+                // Collect controls recursively from the Design/Controls tree
+                var controls = new List<object>();
+                CollectFormControls(actualObject, axType, controls, null);
+
+                var totalCount = controls.Count;
+
+                // Apply filter if requested
+                if (!string.IsNullOrEmpty(filterPattern))
+                {
+                    controls = controls.Where(c =>
+                    {
+                        var name = c?.GetType().GetProperty("Name")?.GetValue(c)?.ToString() ?? "";
+                        return MatchesWildcardPattern(name, filterPattern);
+                    }).ToList();
+                }
+
+                return Task.FromResult<object>(new
+                {
+                    ObjectName = objectName,
+                    ObjectType = objectType,
+                    Found = true,
+                    FilterPattern = filterPattern,
+                    TotalCount = totalCount,
+                    FilteredCount = controls.Count,
+                    Controls = controls
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error getting form controls for {ObjectType} '{ObjectName}'", objectType, objectName);
+                return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, Found = false, Error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Recursively collect form controls from the Design hierarchy
+        /// </summary>
+        private void CollectFormControls(object formObject, Type axType, List<object> results, string parentGroup)
+        {
+            try
+            {
+                // Try Design property first, then Controls
+                string[] controlContainerProps = { "Design", "Controls" };
+                foreach (var containerPropName in controlContainerProps)
+                {
+                    var containerProp = axType.GetProperty(containerPropName);
+                    if (containerProp == null) continue;
+
+                    var container = containerProp.GetValue(formObject);
+                    if (container == null) continue;
+
+                    // The container itself might have a Controls property
+                    var controlsProp = container.GetType().GetProperties()
+                        .FirstOrDefault(p => p.Name.Equals("Controls", StringComparison.OrdinalIgnoreCase) && IsCollectionType(p.PropertyType));
+
+                    System.Collections.IEnumerable controlsCollection = null;
+                    if (controlsProp != null)
+                        controlsCollection = controlsProp.GetValue(container) as System.Collections.IEnumerable;
+                    else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(container.GetType()))
+                        controlsCollection = (System.Collections.IEnumerable)container;
+
+                    if (controlsCollection == null) continue;
+
+                    foreach (var control in controlsCollection)
+                    {
+                        if (control == null) continue;
+                        var ct = control.GetType();
+                        string Prop(string n) => ct.GetProperty(n)?.GetValue(control)?.ToString();
+
+                        var name = Prop("Name");
+                        var controlType = ct.Name.Replace("AxForm", "").Replace("Control", "");
+                        var caption = Prop("Caption") ?? Prop("Label");
+                        var dataField = Prop("DataField") ?? Prop("DataSource");
+                        var dataSource = Prop("DataSource");
+
+                        results.Add(new
+                        {
+                            Name = name,
+                            ControlType = controlType,
+                            Caption = caption,
+                            DataField = dataField,
+                            DataSource = dataSource,
+                            ParentGroup = parentGroup
+                        });
+
+                        // Recurse into group/tab controls that have nested controls
+                        var nestedControlsProp = ct.GetProperties()
+                            .FirstOrDefault(p => p.Name.Equals("Controls", StringComparison.OrdinalIgnoreCase) && IsCollectionType(p.PropertyType));
+                        if (nestedControlsProp != null)
+                        {
+                            var nested = nestedControlsProp.GetValue(control) as System.Collections.IEnumerable;
+                            if (nested != null)
+                            {
+                                foreach (var child in nested)
+                                {
+                                    if (child == null) continue;
+                                    var cct = child.GetType();
+                                    string CProp(string n) => cct.GetProperty(n)?.GetValue(child)?.ToString();
+                                    results.Add(new
+                                    {
+                                        Name = CProp("Name"),
+                                        ControlType = cct.Name.Replace("AxForm", "").Replace("Control", ""),
+                                        Caption = CProp("Caption") ?? CProp("Label"),
+                                        DataField = CProp("DataField") ?? CProp("DataSource"),
+                                        DataSource = CProp("DataSource"),
+                                        ParentGroup = name
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    break; // stop after first successful container
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning(ex, "Error collecting form controls");
+            }
+        }
+
+        /// <summary>
         /// Helper method to get collection count
         /// </summary>
         private int GetCollectionCount(object collection)
@@ -1630,6 +1869,7 @@ namespace D365MetadataService.Handlers
                     "methods" => ExtractAllMethodsCode(axType, actualObject, maxCodeLines),
                     "specific-method" => ExtractSpecificMethodCode(axType, actualObject, methodName, maxCodeLines),
                     "event-handlers" => ExtractEventHandlersCode(axType, actualObject, maxCodeLines),
+                    "method-scan" => ExtractMethodScan(axType, actualObject),
                     _ => throw new ArgumentException($"Unsupported code target: {codeTarget}")
                 };
 
@@ -1778,6 +2018,62 @@ namespace D365MetadataService.Handlers
             // For now, treat this the same as all methods
             // Could be enhanced to filter for event-specific methods
             return ExtractAllMethodsCode(axType, actualObject, maxCodeLines);
+        }
+
+        /// <summary>
+        /// Scan methods and return names + line counts without source code.
+        /// Use this before codeTarget="methods" to identify which methods are large
+        /// so the caller can decide whether to fetch them individually via specific-method.
+        /// </summary>
+        private object ExtractMethodScan(Type axType, object actualObject)
+        {
+            var methods = new List<object>();
+            int totalMethods = 0;
+
+            try
+            {
+                var methodsProperty = axType.GetProperty("Methods");
+                if (methodsProperty != null)
+                {
+                    var methodsCollection = methodsProperty.GetValue(actualObject);
+                    if (methodsCollection != null && typeof(System.Collections.IEnumerable).IsAssignableFrom(methodsCollection.GetType()))
+                    {
+                        foreach (var method in (System.Collections.IEnumerable)methodsCollection)
+                        {
+                            var methodType = method.GetType();
+                            var name = methodType.GetProperty("Name")?.GetValue(method)?.ToString() ?? "Unknown";
+                            var source = methodType.GetProperty("Source")?.GetValue(method)?.ToString();
+                            var lineCount = string.IsNullOrEmpty(source) ? 0 : source.Split('\n').Length;
+                            var visibility = ExtractMethodVisibility(method);
+                            var isOverride = ExtractMethodFlag(method, "IsOverride");
+                            var isStatic = ExtractMethodFlag(method, "IsStatic");
+
+                            methods.Add(new
+                            {
+                                Name = name,
+                                LineCount = lineCount,
+                                Visibility = visibility,
+                                IsOverride = isOverride,
+                                IsStatic = isStatic,
+                                HasSourceCode = !string.IsNullOrEmpty(source)
+                            });
+                            totalMethods++;
+                        }
+                    }
+                }
+
+                return new
+                {
+                    Methods = methods,
+                    TotalMethods = totalMethods,
+                    Note = "method-scan returns line counts only. Use codeTarget='specific-method' with methodName to fetch source for individual large methods."
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error scanning methods on {TypeName}", axType.Name);
+                return new { Methods = methods, TotalMethods = totalMethods, Error = ex.Message };
+            }
         }
 
         /// <summary>

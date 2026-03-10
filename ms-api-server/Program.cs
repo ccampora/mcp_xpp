@@ -111,8 +111,11 @@ namespace D365MetadataService
             services.AddSingleton<FileSystemManager>(_ => FileSystemManager.Instance);
 
             // Register Label Parser Service
-            services.AddSingleton<LabelParser>(sp => 
-                new LabelParser(config.D365Config.PackagesLocalDirectory, sp.GetRequiredService<ILogger>()));
+            services.AddSingleton<LabelParser>(sp =>
+                new LabelParser(
+                    config.D365Config.PackagesLocalDirectory,
+                    sp.GetRequiredService<ILogger>(),
+                    config.D365Config.AdditionalLabelSearchPaths));
 
             // Register all request handlers
             services.AddSingleton<IRequestHandler, CreateObjectHandler>();
@@ -144,6 +147,8 @@ namespace D365MetadataService
             services.AddSingleton<IRequestHandler, ObjectPropertiesHandler>();
             services.AddSingleton<IRequestHandler, ObjectCollectionHandler>();
             services.AddSingleton<IRequestHandler, ObjectCodeHandler>();
+            services.AddSingleton<IRequestHandler, ObjectFieldHandler>();
+            services.AddSingleton<IRequestHandler, ObjectControlsHandler>();
 
             // Register handler factory
             services.AddSingleton<RequestHandlerFactory>();

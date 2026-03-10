@@ -101,6 +101,14 @@ namespace D365MetadataService.Models
         public string DefaultModel { get; set; } = "ApplicationSuite";
         public string PackagesLocalDirectory { get; set; }
         public string CustomMetadataPath { get; set; }
+
+        /// <summary>
+        /// Additional root directories to search for label files when a label is not found
+        /// in PackagesLocalDirectory. Useful for platform label files (e.g. @SYS) that live
+        /// in a separate installation path. Each entry is treated as a packages root with the
+        /// same package/model/AxLabelFile/LabelResources/language directory structure.
+        /// </summary>
+        public List<string> AdditionalLabelSearchPaths { get; set; } = new List<string>();
     }
 
     /// <summary>

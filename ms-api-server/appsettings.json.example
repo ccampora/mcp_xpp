@@ -4,6 +4,9 @@
   "D365Config": {
     "DefaultModel": "ApplicationSuite",
     "PackagesLocalDirectory": "{{PACKAGES_LOCAL_DIRECTORY}}",
-    "CustomMetadataPath": "{{CUSTOM_METADATA_PATH}}"
+    "CustomMetadataPath": "{{CUSTOM_METADATA_PATH}}",
+    "AdditionalLabelSearchPaths": [
+      "{{PLATFORM_PACKAGES_DIRECTORY}}"
+    ]
   }
 }
