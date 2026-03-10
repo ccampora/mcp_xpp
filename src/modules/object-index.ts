@@ -197,7 +197,122 @@ export class ObjectIndexManager {
     }
   }
 
-  static async buildFullIndex(forceRebuild: boolean = false): Promise<void> {
+  /**
+   * Extract ObjectLocation entries from a single model's AOT folder tree.
+   * Walks ModelName/AxClass/*.xml, ModelName/AxTable/*.xml, etc.
+   */
+  private static async extractObjectsFromModelFolder(
+    modelName: string,
+    innerModelPath: string
+  ): Promise<ObjectLocation[]> {
+    const objects: ObjectLocation[] = [];
+
+    try {
+      const entries = await fs.readdir(innerModelPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !entry.name.startsWith('Ax')) continue;
+
+        const objectType = entry.name; // e.g. "AxClass", "AxTable"
+        const aotFolderPath = join(innerModelPath, objectType);
+
+        try {
+          const xmlFiles = await fs.readdir(aotFolderPath);
+
+          for (const xmlFile of xmlFiles) {
+            if (!xmlFile.endsWith('.xml')) continue;
+
+            const objectName = xmlFile.slice(0, -4); // strip .xml
+            objects.push({
+              name: objectName,
+              path: `${modelName}/${objectType}/${objectName}`,
+              model: modelName,
+              type: objectType,
+              lastModified: new Date().toISOString(),
+              hasCode: true,
+              isValid: true,
+            });
+          }
+        } catch {
+          // skip AOT folders we cannot access
+        }
+      }
+    } catch (error) {
+      console.error(`⚠️ Could not scan model folder ${modelName}: ${(error as Error).message}`);
+    }
+
+    return objects;
+  }
+
+  /**
+   * Supplement the index with objects found on the filesystem under the parent
+   * directory of xppMetadataFolder.  This catches custom models (HSO, Dometic,
+   * DYSAdministrativeTools …) that the VS2022 service may not enumerate.
+   *
+   * Directory layout expected:
+   *   <parentDir>/
+   *     ModelName/          ← outer folder
+   *       ModelName/        ← inner (double-nested) folder
+   *         AxClass/
+   *           Foo.xml
+   *         AxTable/
+   *           Bar.xml
+   */
+  static async buildIndexFromCustomModelPaths(xppMetadataFolder: string): Promise<void> {
+    const parentDir = dirname(xppMetadataFolder);
+    console.error(`🔍 Supplementing index with custom models from: ${parentDir}`);
+
+    // Collect already-indexed model names so we skip duplicates
+    const modelStats = this.sqliteIndex ? this.sqliteIndex.getModelStats() : {};
+    const alreadyIndexed = new Set(Object.keys(modelStats).map(m => m.toLowerCase()));
+
+    const customObjects: ObjectLocation[] = [];
+
+    try {
+      const entries = await fs.readdir(parentDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+
+        const modelName = entry.name;
+
+        if (alreadyIndexed.has(modelName.toLowerCase())) {
+          console.error(`   ⏭️  Skipping already-indexed model: ${modelName}`);
+          continue;
+        }
+
+        const outerPath = join(parentDir, modelName);
+        const innerPath = join(outerPath, modelName); // double-nested
+
+        // Only process folders that follow the D365 double-nested model structure
+        try {
+          const innerStat = await fs.stat(innerPath);
+          if (!innerStat.isDirectory()) continue;
+        } catch {
+          continue; // no double-nested folder → not a D365 model folder
+        }
+
+        const objects = await this.extractObjectsFromModelFolder(modelName, innerPath);
+        if (objects.length > 0) {
+          console.error(`   📦 ${modelName}: ${objects.length} objects found on filesystem`);
+          customObjects.push(...objects);
+        }
+      }
+    } catch (error) {
+      console.error(`⚠️ Could not scan custom model directory: ${(error as Error).message}`);
+      return;
+    }
+
+    if (customObjects.length > 0) {
+      console.error(`🚀 Adding ${customObjects.length} custom-model objects to index...`);
+      this.sqliteIndex!.insertObjectsBulk(customObjects);
+      console.error(`✅ Custom model objects added to index`);
+    } else {
+      console.error(`ℹ️  No new custom model objects discovered in ${parentDir}`);
+    }
+  }
+
+  static async buildFullIndex(forceRebuild: boolean = false, xppMetadataFolder?: string): Promise<void> {
     try {
       this.initializeSQLiteIndex();
     } catch (error) {
@@ -290,6 +405,17 @@ export class ObjectIndexManager {
       console.warn(`⚠️  DLL-based indexing failed, falling back to file-based: ${(error as Error).message}`);
       // Could add file-based fallback here if needed
     }
+
+    // Supplement the index with objects from custom model paths on disk.
+    // This handles models that the VS2022 service does not enumerate
+    // (e.g. HSO, Dometic, DYSAdministrativeTools stored under xppMetadataFolder).
+    if (xppMetadataFolder) {
+      try {
+        await this.buildIndexFromCustomModelPaths(xppMetadataFolder);
+      } catch (error) {
+        console.warn(`⚠️  Filesystem supplement for custom models failed: ${(error as Error).message}`);
+      }
+    }
   }
 
   /**
@@ -300,11 +426,11 @@ export class ObjectIndexManager {
       const result = await client.sendRequest('models', undefined, {});
       
       if (result.Success && result.Data?.models) {
-        // Filter to only models that have objects and are standard D365 models
+        // Filter to only models that have objects - include all model types (Standard, Custom, Extension, etc.)
         const modelsWithObjects = result.Data.models
-          .filter((model: any) => model.HasObjects && (model.Type === 'Standard' || model.ObjectCount > 0))
+          .filter((model: any) => model.HasObjects || model.ObjectCount > 0)
           .map((model: any) => model.Name);
-          
+
         console.error(`📋 Discovered ${modelsWithObjects.length} D365 models with objects via DLL enumeration`);
         return modelsWithObjects;
       }
