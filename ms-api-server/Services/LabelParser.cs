@@ -38,13 +38,40 @@ namespace D365MetadataService.Services
         // Regex patterns for parsing
         private static readonly Regex LabelLineRegex = new Regex(@"^([A-Za-z0-9_]+)=(.*)$", RegexOptions.Compiled);
         private static readonly Regex DescriptionLineRegex = new Regex(@"^;(.*)$", RegexOptions.Compiled);
+        // Modern format: @LabelFileID:LabelID
         private static readonly Regex LabelReferenceRegex = new Regex(@"^@([A-Za-z0-9_]+):([A-Za-z0-9_]+)$", RegexOptions.Compiled);
+        // Legacy D365/AX format: @SYS12345 (alphabetic prefix followed by digits, no colon)
+        private static readonly Regex LegacyLabelReferenceRegex = new Regex(@"^@([A-Za-z]+)(\d+)$", RegexOptions.Compiled);
 
         public LabelParser(string packagesDirectory, ILogger logger, List<string> additionalSearchPaths = null)
         {
             _packagesDirectory = packagesDirectory ?? throw new ArgumentNullException(nameof(packagesDirectory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _additionalSearchPaths = additionalSearchPaths ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Parse a label reference into (labelFileId, labelId) for both formats:
+        ///   Modern: @LabelFileID:LabelID  → ("LabelFileID", "LabelID")
+        ///   Legacy: @SYS12345             → ("SYS", "SYS12345")
+        /// Returns null if the reference cannot be parsed.
+        /// </summary>
+        private static (string labelFileId, string labelId)? ParseLabelReference(string labelReference)
+        {
+            var match = LabelReferenceRegex.Match(labelReference);
+            if (match.Success)
+                return (match.Groups[1].Value, match.Groups[2].Value);
+
+            var legacyMatch = LegacyLabelReferenceRegex.Match(labelReference);
+            if (legacyMatch.Success)
+            {
+                var prefix = legacyMatch.Groups[1].Value;
+                var number = legacyMatch.Groups[2].Value;
+                // The key stored in the label file is the full string without '@', e.g. "SYS12345"
+                return (prefix, prefix + number);
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -67,16 +94,16 @@ namespace D365MetadataService.Services
                 return null;
             }
 
-            // Parse label reference
-            var match = LabelReferenceRegex.Match(labelReference);
-            if (!match.Success)
+            // Parse label reference (supports modern @FileID:LabelID and legacy @SYS12345 formats)
+            var parsed = ParseLabelReference(labelReference);
+            if (parsed == null)
             {
-                _logger.Warning("Invalid label reference format: {LabelReference}. Expected format: @LabelFileID:LabelID", labelReference);
+                _logger.Warning("Invalid label reference format: {LabelReference}. Expected @LabelFileID:LabelID or @SYS12345", labelReference);
                 return null;
             }
 
-            var labelFileId = match.Groups[1].Value;
-            var labelId = match.Groups[2].Value;
+            var labelFileId = parsed.Value.labelFileId;
+            var labelId = parsed.Value.labelId;
 
             // Try to find the label file
             var labelFile = FindLabelFile(labelFileId, language);
@@ -124,11 +151,11 @@ namespace D365MetadataService.Services
 
             foreach (var reference in labelReferences)
             {
-                var match = LabelReferenceRegex.Match(reference);
-                if (match.Success)
+                var parsed = ParseLabelReference(reference);
+                if (parsed != null)
                 {
-                    var labelFileId = match.Groups[1].Value;
-                    var labelId = match.Groups[2].Value;
+                    var labelFileId = parsed.Value.labelFileId;
+                    var labelId = parsed.Value.labelId;
 
                     if (!groupedByFile.ContainsKey(labelFileId))
                     {
