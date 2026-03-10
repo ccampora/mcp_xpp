@@ -684,22 +684,24 @@ export class ToolHandlers {
     const schema = z.object({
       objectName: z.string(),
       objectType: z.string().optional(),
-      inspectionMode: z.enum(["summary", "properties", "collection", "xppcode"]).optional().default("summary"),
+      inspectionMode: z.enum(["summary", "properties", "collection", "xppcode", "field", "controls"]).optional().default("summary"),
       collectionName: z.string().optional(),
-      codeTarget: z.enum(["methods", "specific-method", "event-handlers"]).optional(),
+      codeTarget: z.enum(["methods", "specific-method", "event-handlers", "method-scan"]).optional(),
       methodName: z.string().optional(),
       maxCodeLines: z.number().optional(),
       filterPattern: z.string().optional(),
+      fieldName: z.string().optional(),
     });
-    const { 
-      objectName, 
-      objectType, 
-      inspectionMode, 
+    const {
+      objectName,
+      objectType,
+      inspectionMode,
       collectionName,
       codeTarget,
       methodName,
       maxCodeLines,
-      filterPattern 
+      filterPattern,
+      fieldName
     } = schema.parse(args);
     
     // Validate collectionName is provided when inspectionMode is "collection"
@@ -728,6 +730,15 @@ export class ToolHandlers {
         "inspect_xpp_object"
       );
     }
+
+    // Validate fieldName is provided when inspectionMode is "field"
+    if (inspectionMode === "field" && !fieldName) {
+      return await createLoggedResponse(
+        `fieldName parameter is required when inspectionMode is "field".`,
+        requestId,
+        "inspect_xpp_object"
+      );
+    }
     
     try {
       const client = ObjectCreators['getServiceClient'](15000); // Use longer timeout for inspection
@@ -747,12 +758,21 @@ export class ToolHandlers {
         case "collection":
           action = "objectcollection";
           requestData.collectionName = collectionName;
+          if (filterPattern) requestData.filterPattern = filterPattern;
           break;
         case "xppcode":
           action = "objectcode";
           requestData.codeTarget = codeTarget;
           if (methodName) requestData.methodName = methodName;
           if (maxCodeLines) requestData.maxCodeLines = maxCodeLines;
+          break;
+        case "field":
+          action = "objectfield";
+          requestData.fieldName = fieldName;
+          break;
+        case "controls":
+          action = "objectcontrols";
+          if (filterPattern) requestData.filterPattern = filterPattern;
           break;
         default:
           // Default to summary mode for backward compatibility
@@ -817,9 +837,57 @@ export class ToolHandlers {
         return this.formatCollectionResult(content, objectName, data, collectionName);
       case "xppcode":
         return this.formatCodeResult(content, objectName, data);
+      case "field":
+        return this.formatFieldResult(content, objectName, data);
+      case "controls":
+        return this.formatControlsResult(content, objectName, data);
       default:
         return this.formatSummaryResult(content, objectName, data);
     }
+  }
+
+  static formatFieldResult(content: string, objectName: string, data: any): string {
+    content += `✅ Field Metadata: ${data.ObjectType} "${data.ObjectName}" → field "${data.FieldName}"\n\n`;
+    if (data.Field) {
+      const f = data.Field;
+      content += `📋 Field: ${f.Name}\n`;
+      if (f.Label)              content += `   Label:          ${f.Label}\n`;
+      if (f.HelpText)           content += `   HelpText:       ${f.HelpText}\n`;
+      if (f.ExtendedDataType)   content += `   EDT:            ${f.ExtendedDataType}\n`;
+      if (f.Mandatory !== undefined) content += `   Mandatory:      ${f.Mandatory}\n`;
+      if (f.ConfigurationKey)   content += `   ConfigKey:      ${f.ConfigurationKey}\n`;
+      if (f.Visible !== undefined)   content += `   Visible:        ${f.Visible}\n`;
+      if (f.AllowEdit !== undefined) content += `   AllowEdit:      ${f.AllowEdit}\n`;
+      if (f.AllowEditOnCreate !== undefined) content += `   AllowEditOnCreate: ${f.AllowEditOnCreate}\n`;
+      if (f.Type)               content += `   Type:           ${f.Type}\n`;
+    } else {
+      content += `Field not found.\n`;
+      if (data.AvailableFields && data.AvailableFields.length > 0) {
+        content += `\nAvailable fields (first 20): ${data.AvailableFields.slice(0, 20).join(', ')}\n`;
+      }
+    }
+    return content;
+  }
+
+  static formatControlsResult(content: string, objectName: string, data: any): string {
+    content += `✅ Form Controls: ${data.ObjectType} "${data.ObjectName}"\n\n`;
+    if (data.Controls && data.Controls.length > 0) {
+      content += `📋 Controls (${data.FilteredCount ?? data.Controls.length}`;
+      if (data.FilterPattern && data.TotalCount > data.Controls.length) {
+        content += ` of ${data.TotalCount} matching "${data.FilterPattern}"`;
+      }
+      content += `):\n\n`;
+      for (const c of data.Controls) {
+        content += `   ${c.Name} (${c.ControlType})`;
+        if (c.Caption) content += ` — "${c.Caption}"`;
+        if (c.DataField) content += ` → ${c.DataField}`;
+        if (c.ParentGroup) content += ` [in: ${c.ParentGroup}]`;
+        content += `\n`;
+      }
+    } else {
+      content += `No controls found.\n`;
+    }
+    return content;
   }
 
   // Format summary mode result

@@ -30,19 +30,21 @@ namespace D365MetadataService.Services
     {
         private readonly string _packagesDirectory;
         private readonly ILogger _logger;
-        
+        private readonly List<string> _additionalSearchPaths;
+
         // Cache for parsed label files - key: filePath, value: labels dictionary
         private readonly ConcurrentDictionary<string, Dictionary<string, LabelInfo>> _labelCache = new();
-        
+
         // Regex patterns for parsing
         private static readonly Regex LabelLineRegex = new Regex(@"^([A-Za-z0-9_]+)=(.*)$", RegexOptions.Compiled);
         private static readonly Regex DescriptionLineRegex = new Regex(@"^;(.*)$", RegexOptions.Compiled);
         private static readonly Regex LabelReferenceRegex = new Regex(@"^@([A-Za-z0-9_]+):([A-Za-z0-9_]+)$", RegexOptions.Compiled);
 
-        public LabelParser(string packagesDirectory, ILogger logger)
+        public LabelParser(string packagesDirectory, ILogger logger, List<string> additionalSearchPaths = null)
         {
             _packagesDirectory = packagesDirectory ?? throw new ArgumentNullException(nameof(packagesDirectory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _additionalSearchPaths = additionalSearchPaths ?? new List<string>();
         }
 
         /// <summary>
@@ -257,46 +259,49 @@ namespace D365MetadataService.Services
         /// </summary>
         private string FindLabelFile(string labelFileId, string language)
         {
-            if (!Directory.Exists(_packagesDirectory))
+            // Build the ordered list of root directories to search.
+            // PackagesLocalDirectory is searched first; AdditionalLabelSearchPaths are fallbacks.
+            var searchRoots = new List<string>();
+            if (Directory.Exists(_packagesDirectory))
+                searchRoots.Add(_packagesDirectory);
+            foreach (var extra in _additionalSearchPaths)
+                if (!string.IsNullOrWhiteSpace(extra) && Directory.Exists(extra))
+                    searchRoots.Add(extra);
+
+            if (searchRoots.Count == 0)
             {
-                _logger.Warning("Packages directory not found: {PackagesDirectory}", _packagesDirectory);
+                _logger.Warning("No valid label search directories found. PackagesDirectory='{PackagesDirectory}'", _packagesDirectory);
                 return null;
             }
 
-            try
-            {
-                // Search in all packages
-                var packages = Directory.GetDirectories(_packagesDirectory);
-                var foundFiles = new List<string>();
+            var foundFiles = new List<string>();
 
-                foreach (var package in packages)
+            foreach (var root in searchRoots)
+            {
+                try
                 {
-                    var packageName = Path.GetFileName(package);
-                    
-                    // Search in all models in this package
-                    var models = Directory.GetDirectories(package);
-                    foreach (var model in models)
+                    foreach (var package in Directory.GetDirectories(root))
                     {
-                        var labelFilePath = Path.Combine(model, "AxLabelFile", "LabelResources", language, $"{labelFileId}.{language}.label.txt");
-                        
-                        if (File.Exists(labelFilePath))
+                        foreach (var model in Directory.GetDirectories(package))
                         {
-                            foundFiles.Add(labelFilePath);
+                            var labelFilePath = Path.Combine(model, "AxLabelFile", "LabelResources", language, $"{labelFileId}.{language}.label.txt");
+                            if (File.Exists(labelFilePath))
+                                foundFiles.Add(labelFilePath);
                         }
                     }
                 }
-
-                // Return the last found file (supports layering - custom models override standard)
-                if (foundFiles.Count > 0)
+                catch (Exception ex)
                 {
-                    var selectedFile = foundFiles.Last();
-                    _logger.Debug("Found label file: {LabelFile}", selectedFile);
-                    return selectedFile;
+                    _logger.Error(ex, "Error searching label files in root '{Root}' for '{LabelFileId}'", root, labelFileId);
                 }
             }
-            catch (Exception ex)
+
+            // Return the last found file (supports layering - custom models override standard)
+            if (foundFiles.Count > 0)
             {
-                _logger.Error(ex, "Error finding label file: {LabelFileId}", labelFileId);
+                var selectedFile = foundFiles.Last();
+                _logger.Debug("Found label file: {LabelFile}", selectedFile);
+                return selectedFile;
             }
 
             return null;
