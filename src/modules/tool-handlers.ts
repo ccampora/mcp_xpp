@@ -803,8 +803,8 @@ export class ToolHandlers {
         try {
           const lookup = new SQLiteObjectLookup();
           if (lookup.initialize()) {
+            // First, try to get Label/HelpText from the field's own XML definition
             const objects = lookup.findObject(objectName);
-            lookup.close();
             const match = objects.find(o => !objectType || o.type === objectType);
             if (match?.path) {
               const xmlContent = readFileSync(match.path, 'utf-8');
@@ -824,6 +824,26 @@ export class ToolHandlers {
                 }
               }
             }
+
+            // If still missing, fall back to the Extended Data Type's Label/HelpText
+            const edtName = data.Field.ExtendedDataType;
+            if (edtName && (!data.Field.Label || !data.Field.HelpText)) {
+              const edtObjects = lookup.findObject(edtName);
+              const edtMatch = edtObjects.find(o => o.type === 'AxEdt');
+              if (edtMatch?.path) {
+                const edtXml = readFileSync(edtMatch.path, 'utf-8');
+                if (!data.Field.Label) {
+                  const edtLabelMatch = edtXml.match(/<Label>([^<]+)<\/Label>/);
+                  if (edtLabelMatch) data.Field.Label = edtLabelMatch[1];
+                }
+                if (!data.Field.HelpText) {
+                  const edtHelpMatch = edtXml.match(/<HelpText>([^<]+)<\/HelpText>/);
+                  if (edtHelpMatch) data.Field.HelpText = edtHelpMatch[1];
+                }
+              }
+            }
+
+            lookup.close();
           }
         } catch (xmlError) {
           // Non-critical: field data from C# is still usable without XML enrichment
