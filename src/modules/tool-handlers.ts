@@ -691,6 +691,7 @@ export class ToolHandlers {
       maxCodeLines: z.number().optional(),
       filterPattern: z.string().optional(),
       fieldName: z.string().optional(),
+      maxDepth: z.number().optional(),
     });
     const {
       objectName,
@@ -701,7 +702,8 @@ export class ToolHandlers {
       methodName,
       maxCodeLines,
       filterPattern,
-      fieldName
+      fieldName,
+      maxDepth
     } = schema.parse(args);
     
     // Validate collectionName is provided when inspectionMode is "collection"
@@ -773,6 +775,7 @@ export class ToolHandlers {
         case "controls":
           action = "objectcontrols";
           if (filterPattern) requestData.filterPattern = filterPattern;
+          if (maxDepth) requestData.maxDepth = maxDepth;
           break;
         default:
           // Default to summary mode for backward compatibility
@@ -878,7 +881,9 @@ export class ToolHandlers {
       }
       content += `):\n\n`;
       for (const c of data.Controls) {
-        content += `   ${c.Name} (${c.ControlType})`;
+        const depth = c.Depth ?? 0;
+        const indent = "   " + "  ".repeat(depth);
+        content += `${indent}${c.Name} (${c.ControlType})`;
         if (c.Caption) content += ` — "${c.Caption}"`;
         if (c.DataField) content += ` → ${c.DataField}`;
         if (c.ParentGroup) content += ` [in: ${c.ParentGroup}]`;

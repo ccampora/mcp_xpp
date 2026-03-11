@@ -299,7 +299,7 @@ export class ToolDefinitions {
               inspectionMode: {
                 type: "string",
                 enum: ["summary", "properties", "collection", "xppcode", "field", "controls"],
-                description: "Controls inspection detail level: 'summary' = Fast overview with collection counts (~50ms, agent-friendly), 'properties' = All object properties without collections (~100ms), 'collection' = Specific collection items without limits (requires collectionName), 'xppcode' = Extract X++ source code from methods (requires codeTarget), 'field' = Field-level metadata for a single table field — label, EDT, help text, mandatory, config key (requires fieldName), 'controls' = Form control tree with caption, data binding and parent group (AxForm only, optional filterPattern). Default: 'summary'.",
+                description: "Controls inspection detail level: 'summary' = Fast overview with collection counts (~50ms, agent-friendly), 'properties' = All object properties without collections (~100ms), 'collection' = Specific collection items without limits (requires collectionName), 'xppcode' = Extract X++ source code from methods (requires codeTarget), 'field' = Field-level metadata for a single table field — label, EDT, help text, mandatory, config key (requires fieldName), 'controls' = Full recursive form control tree with depth traversal, caption, data binding and parent group (AxForm only, optional filterPattern and maxDepth). Default: 'summary'.",
               },
               collectionName: {
                 type: "string",
@@ -325,6 +325,10 @@ export class ToolDefinitions {
               fieldName: {
                 type: "string",
                 description: "Required when inspectionMode='field'. Name of the specific table field to inspect (e.g., 'ShippingDateConfirmed', 'CustAccount').",
+              },
+              maxDepth: {
+                type: "number",
+                description: "Optional when inspectionMode='controls'. Maximum depth for recursive control tree traversal. 0 or omitted = unlimited (full tree). Use 1 for top-level only, 2 for one level of nesting, 3+ for deeper traversal. Example: SalesTable form has controls nested 4+ levels deep within tab pages and groups.",
               },
             },
             required: ["objectName", "objectType"],
