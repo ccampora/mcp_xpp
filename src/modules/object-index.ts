@@ -260,7 +260,7 @@ export class ObjectIndexManager {
    */
   static async buildIndexFromCustomModelPaths(xppMetadataFolder: string): Promise<void> {
     const parentDir = dirname(xppMetadataFolder);
-    console.error(`🔍 Supplementing index with custom models from: ${parentDir}`);
+    console.error(`🔍 Supplementing index with filesystem models from: ${parentDir}`);
 
     // Collect already-indexed model names so we skip duplicates
     const modelStats = this.sqliteIndex ? this.sqliteIndex.getModelStats() : {};
@@ -268,47 +268,78 @@ export class ObjectIndexManager {
 
     const customObjects: ObjectLocation[] = [];
 
+    // Names that are not D365 model folders
+    const skipNames = new Set([
+      'bin', 'Descriptor', 'Resources', 'WebContent', 'XppMetadata',
+      'Reports', '.pkgrefgen', 'Content',
+    ]);
+
+    let packageEntries: string[];
     try {
-      const entries = await fs.readdir(parentDir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-
-        const modelName = entry.name;
-
-        if (alreadyIndexed.has(modelName.toLowerCase())) {
-          console.error(`   ⏭️  Skipping already-indexed model: ${modelName}`);
-          continue;
-        }
-
-        const outerPath = join(parentDir, modelName);
-        const innerPath = join(outerPath, modelName); // double-nested
-
-        // Only process folders that follow the D365 double-nested model structure
-        try {
-          const innerStat = await fs.stat(innerPath);
-          if (!innerStat.isDirectory()) continue;
-        } catch {
-          continue; // no double-nested folder → not a D365 model folder
-        }
-
-        const objects = await this.extractObjectsFromModelFolder(modelName, innerPath);
-        if (objects.length > 0) {
-          console.error(`   📦 ${modelName}: ${objects.length} objects found on filesystem`);
-          customObjects.push(...objects);
-        }
-      }
+      // Use readdirSync-via-fs.readdir; check each entry with statSync so that
+      // NTFS junction points (e.g. ApplicationSuite, ApplicationPlatform) are
+      // followed correctly — entry.isDirectory() returns false for junctions (RC2 fix).
+      const dirents = await fs.readdir(parentDir, { withFileTypes: true });
+      packageEntries = dirents
+        .filter(e => !e.name.startsWith('.'))
+        .map(e => e.name);
     } catch (error) {
-      console.error(`⚠️ Could not scan custom model directory: ${(error as Error).message}`);
+      console.error(`⚠️ Could not read metadata root: ${(error as Error).message}`);
       return;
     }
 
+    for (const pkgName of packageEntries) {
+      const pkgPath = join(parentDir, pkgName);
+
+      // Use statSync (not dirent) so junction points are treated as directories
+      let pkgIsDir = false;
+      try { pkgIsDir = (await fs.stat(pkgPath)).isDirectory(); } catch { continue; }
+      if (!pkgIsDir) continue;
+
+      // Each package may contain one or more model subdirectories.
+      // Scan all subdirs of the package for Ax* folders (RC2 fix: multi-model packages).
+      let pkgSubdirs: string[];
+      try {
+        pkgSubdirs = (await fs.readdir(pkgPath)).filter(
+          n => !n.startsWith('.') && !skipNames.has(n) && !n.endsWith('.xml') && !n.endsWith('.json')
+        );
+      } catch { continue; }
+
+      for (const candidate of pkgSubdirs) {
+        const candidatePath = join(pkgPath, candidate);
+
+        let isDir = false;
+        try { isDir = (await fs.stat(candidatePath)).isDirectory(); } catch { continue; }
+        if (!isDir) continue;
+
+        // A D365 model folder contains Ax* subfolders
+        let innerEntries: string[];
+        try { innerEntries = await fs.readdir(candidatePath); } catch { continue; }
+        const hasAxFolders = innerEntries.some(n => n.startsWith('Ax'));
+        if (!hasAxFolders) continue;
+
+        // Use the candidate (inner) name as the model name
+        const modelName = candidate;
+        if (alreadyIndexed.has(modelName.toLowerCase())) {
+          continue; // already in index, skip silently
+        }
+
+        const objects = await this.extractObjectsFromModelFolder(modelName, candidatePath);
+        if (objects.length > 0) {
+          console.error(`   📦 ${pkgName}/${modelName}: ${objects.length} objects found on filesystem`);
+          customObjects.push(...objects);
+          // Mark as indexed to avoid duplicates if same model appears in multiple packages
+          alreadyIndexed.add(modelName.toLowerCase());
+        }
+      }
+    }
+
     if (customObjects.length > 0) {
-      console.error(`🚀 Adding ${customObjects.length} custom-model objects to index...`);
+      console.error(`🚀 Adding ${customObjects.length} filesystem-discovered objects to index...`);
       this.sqliteIndex!.insertObjectsBulk(customObjects);
-      console.error(`✅ Custom model objects added to index`);
+      console.error(`✅ Filesystem supplement complete`);
     } else {
-      console.error(`ℹ️  No new custom model objects discovered in ${parentDir}`);
+      console.error(`ℹ️  No new models discovered on filesystem in ${parentDir}`);
     }
   }
 
@@ -329,10 +360,18 @@ export class ObjectIndexManager {
         console.error('✅ SQLite cache cleared successfully');
       }
     } else {
-      // Normal mode - skip if objects exist (use safe method to avoid read-only issues)
+      // Normal mode - skip DLL rebuild if objects exist, but still run filesystem supplement below
       const totalCount = SQLiteObjectLookup.safeGetTotalCount();
       if (totalCount > 0) {
-        console.error(`📊 SQLite index already has ${totalCount} objects, skipping rebuild`);
+        console.error(`📊 SQLite index already has ${totalCount} objects, skipping DLL rebuild`);
+        // Fall through to filesystem supplement (RC3 fix)
+        if (xppMetadataFolder) {
+          try {
+            await this.buildIndexFromCustomModelPaths(xppMetadataFolder);
+          } catch (error) {
+            console.warn(`⚠️  Filesystem supplement failed: ${(error as Error).message}`);
+          }
+        }
         return;
       }
     }
@@ -426,13 +465,15 @@ export class ObjectIndexManager {
       const result = await client.sendRequest('models', undefined, {});
       
       if (result.Success && result.Data?.models) {
-        // Filter to only models that have objects - include all model types (Standard, Custom, Extension, etc.)
-        const modelsWithObjects = result.Data.models
-          .filter((model: any) => model.HasObjects || model.ObjectCount > 0)
-          .map((model: any) => model.Name);
+        // Accept all models the DLL's ModelManifest returns regardless of ObjectCount.
+        // ObjectCount is based on Tables only, so models with only Classes/Forms/Enums
+        // would otherwise be incorrectly excluded (RC1 fix).
+        const allModels = result.Data.models
+          .map((model: any) => model.Name)
+          .filter((name: string) => !!name);
 
-        console.error(`📋 Discovered ${modelsWithObjects.length} D365 models with objects via DLL enumeration`);
-        return modelsWithObjects;
+        console.error(`📋 Discovered ${allModels.length} D365 models via DLL enumeration`);
+        return allModels;
       }
       
       console.warn('⚠️  Failed to get models from C# service, using hardcoded fallback');
