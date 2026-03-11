@@ -87,16 +87,31 @@ namespace D365MetadataService.Handlers
                 }
             }
 
-            // Parse label reference to extract label file ID and actual label ID
+            // Parse label reference to extract label file ID and actual label ID.
+            // Supports both modern (@FileID:LabelID) and legacy (@SYS12345) formats.
             string labelFileId = null;
             string actualLabelId = null;
             if (labelId.StartsWith("@"))
             {
-                var parts = labelId.Substring(1).Split(':');
-                if (parts.Length == 2)
+                var withoutAt = labelId.Substring(1);
+                var colonIndex = withoutAt.IndexOf(':');
+                if (colonIndex >= 0)
                 {
-                    labelFileId = parts[0];
-                    actualLabelId = parts[1];
+                    // Modern format: @LabelFileID:LabelID
+                    labelFileId = withoutAt.Substring(0, colonIndex);
+                    actualLabelId = withoutAt.Substring(colonIndex + 1);
+                }
+                else
+                {
+                    // Legacy format: @SYS12345 — extract alphabetic prefix as file ID
+                    var prefixLength = 0;
+                    while (prefixLength < withoutAt.Length && char.IsLetter(withoutAt[prefixLength]))
+                        prefixLength++;
+                    if (prefixLength > 0 && prefixLength < withoutAt.Length)
+                    {
+                        labelFileId = withoutAt.Substring(0, prefixLength);
+                        actualLabelId = withoutAt; // full string (e.g. "SYS12345") is the key in the label file
+                    }
                 }
             }
 
