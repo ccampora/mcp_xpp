@@ -1702,7 +1702,7 @@ namespace D365MetadataService.Handlers
                 });
 
                 // Recurse into child controls if depth limit not reached
-                if (maxDepth > 0 && currentDepth >= maxDepth)
+                if (maxDepth > 0 && currentDepth + 1 > maxDepth)
                     continue;
 
                 var nestedControlsProp = ct.GetProperties()
