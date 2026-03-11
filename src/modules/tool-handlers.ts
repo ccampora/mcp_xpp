@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { join } from "path";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync, existsSync, statSync } from "fs";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { createLoggedResponse } from "./logger.js";
 import { AppConfig } from "./app-config.js";
@@ -804,37 +804,90 @@ export class ToolHandlers {
       // Enrich field metadata with Label/HelpText from XML when the C# reflection API returns them as null
       if (inspectionMode === "field" && data?.Found && data?.Field && (!data.Field.Label || !data.Field.HelpText)) {
         try {
-          const lookup = new SQLiteObjectLookup();
-          if (lookup.initialize()) {
-            // First, try to get Label/HelpText from the field's own XML definition
-            const objects = lookup.findObject(objectName);
-            const match = objects.find(o => !objectType || o.type === objectType);
-            if (match?.path) {
-              const xmlContent = readFileSync(match.path, 'utf-8');
-              const fieldRegex = new RegExp(
-                `<AxTableField[^>]*>[\\s\\S]*?<Name>${data.Field.Name || fieldName}</Name>[\\s\\S]*?</AxTableField[^>]*>`,
-                'i'
-              );
-              const fieldXml = xmlContent.match(fieldRegex);
-              if (fieldXml) {
-                if (!data.Field.Label) {
-                  const labelMatch = fieldXml[0].match(/<Label>([^<]+)<\/Label>/);
-                  if (labelMatch) data.Field.Label = labelMatch[1];
+          const xppPath = AppConfig.getXppPath();
+          if (xppPath) {
+            // Map VS2022 service type names to actual Ax* filesystem folder names
+            const typeToAxFolder: Record<string, string> = {
+              'Tables': 'AxTable', 'Classes': 'AxClass', 'Forms': 'AxForm',
+              'Enums': 'AxEnum', 'DataEntityViews': 'AxDataEntityView',
+              'CompositeDataEntityViews': 'AxCompositeDataEntityView',
+              'LabelFiles': 'AxLabelFile', 'Maps': 'AxMap', 'Menus': 'AxMenu',
+              'Queries': 'AxQuery', 'Reports': 'AxReport', 'Views': 'AxView',
+            };
+
+            // Find an XML file by scanning package directories under xppPath.
+            // Handles both single-level (PackageName/AxFolder/Name.xml) and
+            // double-nested (PackageName/SubDir/AxFolder/Name.xml) structures.
+            // Uses statSync (not dirent.isDirectory) to correctly follow Windows junction points.
+            const isDir = (p: string): boolean => { try { return statSync(p).isDirectory(); } catch { return false; } };
+            const findXmlFile = (name: string, axFolder: string): string | null => {
+              try {
+                for (const pkg of readdirSync(xppPath)) {
+                  const pkgPath = join(xppPath, pkg);
+                  if (!isDir(pkgPath)) continue;
+                  // Single-level: PackageName/AxFolder/Name.xml
+                  const direct = join(pkgPath, axFolder, `${name}.xml`);
+                  if (existsSync(direct)) return direct;
+                  // Double-nested: PackageName/SubDir/AxFolder/Name.xml
+                  try {
+                    for (const sub of readdirSync(pkgPath)) {
+                      const subPath = join(pkgPath, sub);
+                      if (!isDir(subPath)) continue;
+                      const nested = join(subPath, axFolder, `${name}.xml`);
+                      if (existsSync(nested)) return nested;
+                    }
+                  } catch { /* skip inaccessible sub-dirs */ }
                 }
-                if (!data.Field.HelpText) {
-                  const helpMatch = fieldXml[0].match(/<HelpText>([^<]+)<\/HelpText>/);
-                  if (helpMatch) data.Field.HelpText = helpMatch[1];
+              } catch { /* skip inaccessible xppPath */ }
+              return null;
+            };
+
+            // Helper: extract Label/HelpText from a small XML snippet of a single field/EDT block
+            const extractLabelHelp = (xmlSnippet: string) => ({
+              label: (xmlSnippet.match(/<Label>([^<]+)<\/Label>/) || [])[1] ?? null,
+              helpText: (xmlSnippet.match(/<HelpText>([^<]+)<\/HelpText>/) || [])[1] ?? null,
+            });
+
+            // Helper: find a named field block inside a stripped XML string.
+            // Strips CDATA sections first so code text doesn't interfere.
+            // Uses indexOf/lastIndexOf for O(n) efficiency instead of a greedy regex.
+            const extractFieldBlock = (xmlContent: string, targetFieldName: string): string | null => {
+              const stripped = xmlContent.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+              const nameTag = `<Name>${targetFieldName}</Name>`;
+              const nameIdx = stripped.indexOf(nameTag);
+              if (nameIdx < 0) return null;
+              const blockStart = stripped.lastIndexOf('<AxTableField', nameIdx);
+              const blockEnd = stripped.indexOf('</AxTableField>', nameIdx);
+              if (blockStart < 0 || blockEnd <= nameIdx) return null;
+              return stripped.substring(blockStart, blockEnd + 15);
+            };
+
+            // First, try to get Label/HelpText from the field's own XML definition
+            const lookup = new SQLiteObjectLookup();
+            if (lookup.initialize()) {
+              const objects = lookup.findObject(objectName);
+              const match = objects.find(o => !objectType || o.type === objectType);
+              const axFolder = match ? (typeToAxFolder[match.type] ?? `Ax${match.type}`) : 'AxTable';
+              const xmlPath = findXmlFile(objectName, axFolder);
+              if (xmlPath) {
+                const xmlContent = readFileSync(xmlPath, 'utf-8');
+                const fieldBlock = extractFieldBlock(xmlContent, data.Field.Name || fieldName);
+                if (fieldBlock) {
+                  const { label, helpText } = extractLabelHelp(fieldBlock);
+                  if (!data.Field.Label && label) data.Field.Label = label;
+                  if (!data.Field.HelpText && helpText) data.Field.HelpText = helpText;
                 }
               }
+              lookup.close();
             }
 
-            // If still missing, fall back to the Extended Data Type's Label/HelpText
+            // If still missing, fall back to the Extended Data Type's Label/HelpText.
+            // Search for the EDT XML directly on the filesystem (EDTs are not indexed in SQLite).
             const edtName = data.Field.ExtendedDataType;
             if (edtName && (!data.Field.Label || !data.Field.HelpText)) {
-              const edtObjects = lookup.findObject(edtName);
-              const edtMatch = edtObjects.find(o => o.type === 'AxEdt');
-              if (edtMatch?.path) {
-                const edtXml = readFileSync(edtMatch.path, 'utf-8');
+              const edtXmlPath = findXmlFile(edtName, 'AxEdt');
+              if (edtXmlPath) {
+                const edtXml = readFileSync(edtXmlPath, 'utf-8');
                 if (!data.Field.Label) {
                   const edtLabelMatch = edtXml.match(/<Label>([^<]+)<\/Label>/);
                   if (edtLabelMatch) data.Field.Label = edtLabelMatch[1];
@@ -845,8 +898,6 @@ export class ToolHandlers {
                 }
               }
             }
-
-            lookup.close();
           }
         } catch (xmlError) {
           // Non-critical: field data from C# is still usable without XML enrichment
