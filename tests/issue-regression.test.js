@@ -1,10 +1,11 @@
 /**
  * ISSUE REGRESSION TESTS
- * Verifies fixes for closed GitHub issues #6, #7, #8
+ * Verifies fixes for closed GitHub issues #6, #7, #8, #17
  *
  * Issue #6: get_label / get_labels_batch: @SYS label file not found
  * Issue #7: inspect_xpp_object (inspectionMode=field): Label and HelpText missing
  * Issue #8: inspect_xpp_object (inspectionMode=controls): only top-level controls returned
+ * Issue #17: find_xpp_object: objectType filter fails for standard D365 objects (AxTable vs Tables)
  */
 
 import { describe, test, expect, beforeAll } from 'vitest';
@@ -256,5 +257,99 @@ describe('Issue #8 – inspect_xpp_object controls mode: recursive depth travers
 
     // The Delivery tab/group should appear when traversal is deep enough
     expect(text).toMatch(/Delivery|DeliveryDate|LineDetails/i);
+  });
+});
+
+// =============================================================================
+// ISSUE #17 – find_xpp_object: objectType filter fails for standard D365 objects
+// =============================================================================
+
+describe('Issue #17 – find_xpp_object: objectType filter accepts all naming conventions', () => {
+  test('AxTable filter should find SalesTable', async () => {
+    if (!(await isServiceAvailable())) return;
+
+    const result = await ToolHandlers.findXppObject(
+      { objectName: 'SalesTable', objectType: 'AxTable' },
+      REQ_ID
+    );
+
+    const text = typeof result.content === 'string'
+      ? result.content
+      : JSON.stringify(result.content);
+
+    console.log('find_xpp_object SalesTable AxTable:\n', text);
+    expect(text).not.toMatch(/No objects found/i);
+    expect(text).toMatch(/SalesTable/i);
+  });
+
+  test('Tables filter should find SalesTable', async () => {
+    if (!(await isServiceAvailable())) return;
+
+    const result = await ToolHandlers.findXppObject(
+      { objectName: 'SalesTable', objectType: 'Tables' },
+      REQ_ID
+    );
+
+    const text = typeof result.content === 'string'
+      ? result.content
+      : JSON.stringify(result.content);
+
+    console.log('find_xpp_object SalesTable Tables:\n', text);
+    expect(text).not.toMatch(/No objects found/i);
+    expect(text).toMatch(/SalesTable/i);
+  });
+
+  test('Table filter (singular) should find SalesTable', async () => {
+    if (!(await isServiceAvailable())) return;
+
+    const result = await ToolHandlers.findXppObject(
+      { objectName: 'SalesTable', objectType: 'Table' },
+      REQ_ID
+    );
+
+    const text = typeof result.content === 'string'
+      ? result.content
+      : JSON.stringify(result.content);
+
+    console.log('find_xpp_object SalesTable Table:\n', text);
+    expect(text).not.toMatch(/No objects found/i);
+    expect(text).toMatch(/SalesTable/i);
+  });
+
+  test('all three variants should return the same object count', async () => {
+    if (!(await isServiceAvailable())) return;
+
+    const [r1, r2, r3] = await Promise.all([
+      ToolHandlers.findXppObject({ objectName: 'SalesTable', objectType: 'AxTable' }, REQ_ID),
+      ToolHandlers.findXppObject({ objectName: 'SalesTable', objectType: 'Tables' }, REQ_ID),
+      ToolHandlers.findXppObject({ objectName: 'SalesTable', objectType: 'Table' }, REQ_ID),
+    ]);
+
+    const count = (r) => {
+      const t = typeof r.content === 'string' ? r.content : JSON.stringify(r.content);
+      const m = t.match(/Found (\d+) object/i);
+      return m ? parseInt(m[1], 10) : -1;
+    };
+
+    expect(count(r1)).toBeGreaterThan(0);
+    expect(count(r2)).toBe(count(r1));
+    expect(count(r3)).toBe(count(r1));
+  });
+
+  test('AxClass filter should find a standard class (NumberSeq)', async () => {
+    if (!(await isServiceAvailable())) return;
+
+    const result = await ToolHandlers.findXppObject(
+      { objectName: 'NumberSeq', objectType: 'AxClass' },
+      REQ_ID
+    );
+
+    const text = typeof result.content === 'string'
+      ? result.content
+      : JSON.stringify(result.content);
+
+    console.log('find_xpp_object NumberSeq AxClass:\n', text);
+    expect(text).not.toMatch(/No objects found/i);
+    expect(text).toMatch(/NumberSeq/i);
   });
 });

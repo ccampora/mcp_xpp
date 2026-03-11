@@ -195,18 +195,58 @@ export async function parseXppTable(filepath: string): Promise<any> {
 /**
  * Find X++ object by name across the codebase using SQLite index
  */
+/**
+ * Maps every known objectType variant (Ax-prefixed, plural, singular) to a
+ * lowercase canonical singular form so that AxTable, Table, and Tables all compare equal.
+ */
+const OBJECT_TYPE_CANONICAL: Record<string, string> = {
+  // Tables
+  axtable: 'table', tables: 'table', table: 'table',
+  // Classes
+  axclass: 'class', classes: 'class', class: 'class',
+  // Forms
+  axform: 'form', forms: 'form', form: 'form',
+  // Enums
+  axenum: 'enum', enums: 'enum', enum: 'enum',
+  // Views
+  axview: 'view', views: 'view', view: 'view',
+  // Queries
+  axquery: 'query', queries: 'query', query: 'query',
+  // Reports
+  axreport: 'report', reports: 'report', report: 'report',
+  // Maps
+  axmap: 'map', maps: 'map', map: 'map',
+  // DataEntityViews
+  axdataentityview: 'dataentityview', dataentityviews: 'dataentityview', dataentityview: 'dataentityview',
+  // CompositeDataEntityViews
+  axcompositedataentityview: 'compositedataentityview', compositedataentityviews: 'compositedataentityview', compositedataentityview: 'compositedataentityview',
+  // LabelFiles / Menus (indexed but no Ax-prefix form in common use)
+  labelfiles: 'labelfile', labelfile: 'labelfile',
+  menus: 'menu', menu: 'menu',
+};
+
+/**
+ * Normalise an objectType string to a canonical lowercase singular form.
+ * Falls back to lowercasing the input so unknown future types degrade gracefully.
+ */
+function normaliseObjectType(type: string): string {
+  const key = type.toLowerCase();
+  return OBJECT_TYPE_CANONICAL[key] ?? key;
+}
+
 export async function findXppObject(objectName: string, objectType?: string, model?: string): Promise<any[]> {
   const results: any[] = [];
-  
+
   // Try SQLite lookup first (fastest method)
   const lookup = new SQLiteObjectLookup();
   if (lookup.initialize()) {
     try {
       let objects = lookup.findObject(objectName);
-      
+
       // Apply filters
       if (objectType) {
-        objects = objects.filter(obj => obj.type === objectType);
+        const normRequested = normaliseObjectType(objectType);
+        objects = objects.filter(obj => normaliseObjectType(obj.type) === normRequested);
       }
       
       if (model) {
