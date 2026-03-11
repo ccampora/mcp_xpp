@@ -138,3 +138,4 @@ docs/internal
 docs/xpp_guidelines
 .github/copilot-instructions.md
 config/vs2022_mcp_config.json
+.claude/settings.local.json
