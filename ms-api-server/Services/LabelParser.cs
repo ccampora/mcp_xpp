@@ -36,7 +36,7 @@ namespace D365MetadataService.Services
         private readonly ConcurrentDictionary<string, Dictionary<string, LabelInfo>> _labelCache = new();
 
         // Regex patterns for parsing
-        private static readonly Regex LabelLineRegex = new Regex(@"^([A-Za-z0-9_]+)=(.*)$", RegexOptions.Compiled);
+        private static readonly Regex LabelLineRegex = new Regex(@"^@?([A-Za-z0-9_]+)=(.*)$", RegexOptions.Compiled);
         private static readonly Regex DescriptionLineRegex = new Regex(@"^;(.*)$", RegexOptions.Compiled);
         // Modern format: @LabelFileID:LabelID
         private static readonly Regex LabelReferenceRegex = new Regex(@"^@([A-Za-z0-9_]+):([A-Za-z0-9_]+)$", RegexOptions.Compiled);
