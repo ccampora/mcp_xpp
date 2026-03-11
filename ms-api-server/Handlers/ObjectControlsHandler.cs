@@ -35,16 +35,20 @@ namespace D365MetadataService.Handlers
 
             try
             {
-                var objectName   = request.Parameters?.ContainsKey("objectName")   == true ? request.Parameters["objectName"]?.ToString()   : null;
-                var objectType   = request.Parameters?.ContainsKey("objectType")   == true ? request.Parameters["objectType"]?.ToString()   : null;
+                var objectName    = request.Parameters?.ContainsKey("objectName")    == true ? request.Parameters["objectName"]?.ToString()    : null;
+                var objectType    = request.Parameters?.ContainsKey("objectType")    == true ? request.Parameters["objectType"]?.ToString()    : null;
                 var filterPattern = request.Parameters?.ContainsKey("filterPattern") == true ? request.Parameters["filterPattern"]?.ToString() : null;
+                var maxDepthStr   = request.Parameters?.ContainsKey("maxDepth")      == true ? request.Parameters["maxDepth"]?.ToString()      : null;
+                int maxDepth = 0; // 0 = unlimited
+                if (!string.IsNullOrEmpty(maxDepthStr))
+                    int.TryParse(maxDepthStr, out maxDepth);
 
                 if (string.IsNullOrEmpty(objectName))
                     return ServiceResponse.CreateError("objectName parameter is required");
                 if (string.IsNullOrEmpty(objectType))
                     return ServiceResponse.CreateError("objectType parameter is required");
 
-                var result = await _inspectHandler.GetObjectControlsAsync(objectName, objectType, filterPattern);
+                var result = await _inspectHandler.GetObjectControlsAsync(objectName, objectType, filterPattern, maxDepth);
                 return ServiceResponse.CreateSuccess(result);
             }
             catch (Exception ex)

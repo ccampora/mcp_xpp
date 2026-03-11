@@ -1565,11 +1565,11 @@ namespace D365MetadataService.Handlers
         /// Get form control tree for a form object.
         /// Returns control name, type, caption, dataField binding, and parent group.
         /// </summary>
-        public Task<object> GetObjectControlsAsync(string objectName, string objectType, string filterPattern)
+        public Task<object> GetObjectControlsAsync(string objectName, string objectType, string filterPattern, int maxDepth = 0)
         {
             try
             {
-                Logger.Information("Getting form controls for {ObjectType} '{ObjectName}' filter '{FilterPattern}'", objectType, objectName, filterPattern ?? "none");
+                Logger.Information("Getting form controls for {ObjectType} '{ObjectName}' filter '{FilterPattern}' maxDepth={MaxDepth}", objectType, objectName, filterPattern ?? "none", maxDepth);
 
                 var axType = _reflectionManager.GetD365Type(objectType);
                 if (axType == null)
@@ -1591,8 +1591,9 @@ namespace D365MetadataService.Handlers
                     return Task.FromResult<object>(new { ObjectName = objectName, ObjectType = objectType, Found = false, Error = $"Form '{objectName}' not found" });
 
                 // Collect controls recursively from the Design/Controls tree
+                // maxDepth=0 means unlimited depth
                 var controls = new List<object>();
-                CollectFormControls(actualObject, axType, controls, null);
+                CollectFormControls(actualObject, axType, controls, null, 0, maxDepth);
 
                 var totalCount = controls.Count;
 
@@ -1625,9 +1626,17 @@ namespace D365MetadataService.Handlers
         }
 
         /// <summary>
-        /// Recursively collect form controls from the Design hierarchy
+        /// Recursively collect form controls from the Design hierarchy.
+        /// Traverses the full control tree to any depth, collecting all nested controls
+        /// within groups, tabs, tab pages, and other container controls.
         /// </summary>
-        private void CollectFormControls(object formObject, Type axType, List<object> results, string parentGroup)
+        /// <param name="formObject">The form or container object to inspect</param>
+        /// <param name="objectType">The CLR type of the object</param>
+        /// <param name="results">Accumulator list for discovered controls</param>
+        /// <param name="parentGroup">Name of the parent container (null for top-level)</param>
+        /// <param name="currentDepth">Current nesting depth (0 = top-level)</param>
+        /// <param name="maxDepth">Maximum depth to traverse (0 = unlimited)</param>
+        private void CollectFormControls(object formObject, Type objectType, List<object> results, string parentGroup, int currentDepth, int maxDepth)
         {
             try
             {
@@ -1635,7 +1644,7 @@ namespace D365MetadataService.Handlers
                 string[] controlContainerProps = { "Design", "Controls" };
                 foreach (var containerPropName in controlContainerProps)
                 {
-                    var containerProp = axType.GetProperty(containerPropName);
+                    var containerProp = objectType.GetProperty(containerPropName);
                     if (containerProp == null) continue;
 
                     var container = containerProp.GetValue(formObject);
@@ -1653,60 +1662,59 @@ namespace D365MetadataService.Handlers
 
                     if (controlsCollection == null) continue;
 
-                    foreach (var control in controlsCollection)
-                    {
-                        if (control == null) continue;
-                        var ct = control.GetType();
-                        string Prop(string n) => ct.GetProperty(n)?.GetValue(control)?.ToString();
-
-                        var name = Prop("Name");
-                        var controlType = ct.Name.Replace("AxForm", "").Replace("Control", "");
-                        var caption = Prop("Caption") ?? Prop("Label");
-                        var dataField = Prop("DataField") ?? Prop("DataSource");
-                        var dataSource = Prop("DataSource");
-
-                        results.Add(new
-                        {
-                            Name = name,
-                            ControlType = controlType,
-                            Caption = caption,
-                            DataField = dataField,
-                            DataSource = dataSource,
-                            ParentGroup = parentGroup
-                        });
-
-                        // Recurse into group/tab controls that have nested controls
-                        var nestedControlsProp = ct.GetProperties()
-                            .FirstOrDefault(p => p.Name.Equals("Controls", StringComparison.OrdinalIgnoreCase) && IsCollectionType(p.PropertyType));
-                        if (nestedControlsProp != null)
-                        {
-                            var nested = nestedControlsProp.GetValue(control) as System.Collections.IEnumerable;
-                            if (nested != null)
-                            {
-                                foreach (var child in nested)
-                                {
-                                    if (child == null) continue;
-                                    var cct = child.GetType();
-                                    string CProp(string n) => cct.GetProperty(n)?.GetValue(child)?.ToString();
-                                    results.Add(new
-                                    {
-                                        Name = CProp("Name"),
-                                        ControlType = cct.Name.Replace("AxForm", "").Replace("Control", ""),
-                                        Caption = CProp("Caption") ?? CProp("Label"),
-                                        DataField = CProp("DataField") ?? CProp("DataSource"),
-                                        DataSource = CProp("DataSource"),
-                                        ParentGroup = name
-                                    });
-                                }
-                            }
-                        }
-                    }
+                    CollectControlsFromEnumerable(controlsCollection, results, parentGroup, currentDepth, maxDepth);
                     break; // stop after first successful container
                 }
             }
             catch (Exception ex)
             {
-                Logger.Warning(ex, "Error collecting form controls");
+                Logger.Warning(ex, "Error collecting form controls at depth {Depth}", currentDepth);
+            }
+        }
+
+        /// <summary>
+        /// Recursively processes a collection of controls, adding each to results
+        /// and descending into any child Controls collections.
+        /// </summary>
+        private void CollectControlsFromEnumerable(System.Collections.IEnumerable controls, List<object> results, string parentGroup, int currentDepth, int maxDepth)
+        {
+            foreach (var control in controls)
+            {
+                if (control == null) continue;
+                var ct = control.GetType();
+                string Prop(string n) => ct.GetProperty(n)?.GetValue(control)?.ToString();
+
+                var name = Prop("Name");
+                var controlType = ct.Name.Replace("AxForm", "").Replace("Control", "");
+                var caption = Prop("Caption") ?? Prop("Label");
+                var dataField = Prop("DataField") ?? Prop("DataSource");
+                var dataSource = Prop("DataSource");
+
+                results.Add(new
+                {
+                    Name = name,
+                    ControlType = controlType,
+                    Caption = caption,
+                    DataField = dataField,
+                    DataSource = dataSource,
+                    ParentGroup = parentGroup,
+                    Depth = currentDepth
+                });
+
+                // Recurse into child controls if depth limit not reached
+                if (maxDepth > 0 && currentDepth + 1 > maxDepth)
+                    continue;
+
+                var nestedControlsProp = ct.GetProperties()
+                    .FirstOrDefault(p => p.Name.Equals("Controls", StringComparison.OrdinalIgnoreCase) && IsCollectionType(p.PropertyType));
+                if (nestedControlsProp != null)
+                {
+                    var nested = nestedControlsProp.GetValue(control) as System.Collections.IEnumerable;
+                    if (nested != null)
+                    {
+                        CollectControlsFromEnumerable(nested, results, name, currentDepth + 1, maxDepth);
+                    }
+                }
             }
         }
 
