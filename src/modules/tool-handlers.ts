@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { join } from "path";
+import { readFileSync } from "fs";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { createLoggedResponse } from "./logger.js";
 import { AppConfig } from "./app-config.js";
@@ -799,7 +800,59 @@ export class ToolHandlers {
       }
       
       let data = result.Data;
-      
+
+      // Enrich field metadata with Label/HelpText from XML when the C# reflection API returns them as null
+      if (inspectionMode === "field" && data?.Found && data?.Field && (!data.Field.Label || !data.Field.HelpText)) {
+        try {
+          const lookup = new SQLiteObjectLookup();
+          if (lookup.initialize()) {
+            // First, try to get Label/HelpText from the field's own XML definition
+            const objects = lookup.findObject(objectName);
+            const match = objects.find(o => !objectType || o.type === objectType);
+            if (match?.path) {
+              const xmlContent = readFileSync(match.path, 'utf-8');
+              const fieldRegex = new RegExp(
+                `<AxTableField[^>]*>[\\s\\S]*?<Name>${data.Field.Name || fieldName}</Name>[\\s\\S]*?</AxTableField[^>]*>`,
+                'i'
+              );
+              const fieldXml = xmlContent.match(fieldRegex);
+              if (fieldXml) {
+                if (!data.Field.Label) {
+                  const labelMatch = fieldXml[0].match(/<Label>([^<]+)<\/Label>/);
+                  if (labelMatch) data.Field.Label = labelMatch[1];
+                }
+                if (!data.Field.HelpText) {
+                  const helpMatch = fieldXml[0].match(/<HelpText>([^<]+)<\/HelpText>/);
+                  if (helpMatch) data.Field.HelpText = helpMatch[1];
+                }
+              }
+            }
+
+            // If still missing, fall back to the Extended Data Type's Label/HelpText
+            const edtName = data.Field.ExtendedDataType;
+            if (edtName && (!data.Field.Label || !data.Field.HelpText)) {
+              const edtObjects = lookup.findObject(edtName);
+              const edtMatch = edtObjects.find(o => o.type === 'AxEdt');
+              if (edtMatch?.path) {
+                const edtXml = readFileSync(edtMatch.path, 'utf-8');
+                if (!data.Field.Label) {
+                  const edtLabelMatch = edtXml.match(/<Label>([^<]+)<\/Label>/);
+                  if (edtLabelMatch) data.Field.Label = edtLabelMatch[1];
+                }
+                if (!data.Field.HelpText) {
+                  const edtHelpMatch = edtXml.match(/<HelpText>([^<]+)<\/HelpText>/);
+                  if (edtHelpMatch) data.Field.HelpText = edtHelpMatch[1];
+                }
+              }
+            }
+
+            lookup.close();
+          }
+        } catch (xmlError) {
+          // Non-critical: field data from C# is still usable without XML enrichment
+        }
+      }
+
       // Format output based on inspection mode (filtering handled internally by C# service)
       let content = this.formatInspectionResult(inspectionMode, objectName, data, filterPattern, collectionName);
       
