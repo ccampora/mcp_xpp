@@ -50,9 +50,11 @@ namespace D365MetadataService.Handlers
                 var patternVersion = ExtractParameter(parameters, new[] { "patternVersion", "version" }, "UX7 1.0");
                 var modelName = ExtractParameter(parameters, new[] { "modelName", "model" }, "ApplicationSuite");
                 var dataSources = ExtractDataSources(parameters);
+                var caption = ExtractParameter(parameters, new[] { "caption", "Caption", "label", "Label" }, null);
+                var addGridWithFields = ExtractBoolParameter(parameters, new[] { "addGridWithFields", "autoGrid", "grid" }, false);
 
-                _logger.Information("📝 Extracted parameters - FormName: '{FormName}', Pattern: '{Pattern}', Version: '{Version}', Model: '{Model}', DataSources: [{DataSources}]", 
-                    formName, patternName, patternVersion, modelName, dataSources != null ? string.Join(", ", dataSources) : "none");
+                _logger.Information("Extracted parameters - FormName: '{FormName}', Pattern: '{Pattern}', Version: '{Version}', Model: '{Model}', DataSources: [{DataSources}], Caption: '{Caption}', AddGrid: {AddGrid}", 
+                    formName, patternName, patternVersion, modelName, dataSources != null ? string.Join(", ", dataSources) : "none", caption ?? "(auto)", addGridWithFields);
 
                 if (string.IsNullOrEmpty(formName))
                 {
@@ -60,7 +62,7 @@ namespace D365MetadataService.Handlers
                 }
 
                 // Create form with pattern and datasources
-                var result = await CreateFormWithPatternAsync(formName, patternName, patternVersion, modelName, dataSources, parameters);
+                var result = await CreateFormWithPatternAsync(formName, patternName, patternVersion, modelName, dataSources, caption, addGridWithFields, parameters);
 
                 return ServiceResponse.CreateSuccess(result);
             }
@@ -134,16 +136,32 @@ namespace D365MetadataService.Handlers
             return defaultValue;
         }
 
-        private async Task<object> CreateFormWithPatternAsync(string formName, string patternName, string patternVersion, string modelName, string[] dataSources, Dictionary<string, object> parameters)
+        private bool ExtractBoolParameter(Dictionary<string, object> parameters, string[] keys, bool defaultValue)
+        {
+            foreach (var key in keys)
+            {
+                if (parameters.TryGetValue(key, out var value) && value != null)
+                {
+                    if (value is bool boolValue)
+                        return boolValue;
+                    if (bool.TryParse(value.ToString(), out var parsed))
+                        return parsed;
+                }
+            }
+            return defaultValue;
+        }
+
+        private async Task<object> CreateFormWithPatternAsync(string formName, string patternName, string patternVersion, string modelName, string[] dataSources, string caption, bool addGridWithFields, Dictionary<string, object> parameters)
         {
             try
             {
-                _logger.Information("🔧 Creating form '{FormName}' with pattern '{Pattern}' version '{Version}'", formName, patternName, patternVersion);
+                _logger.Information("Creating form '{FormName}' with pattern '{Pattern}' version '{Version}'", formName, patternName, patternVersion);
 
-                // Create the form object
+                // Step 1: Create the bare form object
                 var formParameters = new Dictionary<string, object>(parameters)
                 {
-                    ["Name"] = formName
+                    ["Name"] = formName,
+                    ["model"] = modelName
                 };
 
                 var formCreationResult = await _objectFactory.CreateObjectDynamicallyAsync("AxForm", formParameters);
@@ -154,9 +172,9 @@ namespace D365MetadataService.Handlers
                     throw new Exception($"Form creation failed: {formCreationResult.ErrorMessage}");
                 }
                 
-                _logger.Information("✅ Form creation result received successfully");
+                _logger.Information("Step 1 complete: bare form created");
 
-                // Get the actual AxForm instance from the factory
+                // Step 2: Retrieve the form instance from the metadata provider
                 var formInstance = _objectFactory.GetExistingObject("AxForm", formName);
                 if (formInstance == null)
                 {
@@ -164,57 +182,138 @@ namespace D365MetadataService.Handlers
                     throw new Exception("Could not retrieve created form instance from factory");
                 }
 
-                _logger.Information("✅ Retrieved actual AxForm instance: {FormType}", formInstance.GetType().FullName);
+                _logger.Information("Step 2 complete: form instance retrieved ({FormType})", formInstance.GetType().FullName);
 
-                // Add datasources if specified
+                // Step 3: Add datasources
                 int dataSourcesAdded = 0;
+                string primaryDataSource = dataSources?.Length > 0 ? dataSources[0] : null;
+                
                 if (dataSources != null && dataSources.Length > 0)
                 {
-                    _logger.Information("🗄️ Adding {Count} datasource(s) to form: [{DataSources}]", dataSources.Length, string.Join(", ", dataSources));
+                    _logger.Information("Step 3: Adding {Count} datasource(s): [{DataSources}]", dataSources.Length, string.Join(", ", dataSources));
                     dataSourcesAdded = await AddDataSourcesToFormAsync(formInstance, dataSources);
-                    _logger.Information("DataSources addition result: {Count} added successfully", dataSourcesAdded);
+                    _logger.Information("Step 3 complete: {Count} datasources added", dataSourcesAdded);
                 }
 
-                // Apply pattern if requested
-                bool patternApplied = false;
-                if (!string.IsNullOrEmpty(patternName) && patternName != "None")
+                // Step 4: Configure the Design - set pattern, caption, datasource, and build controls
+                bool designConfigured = false;
+                int controlsAdded = 0;
+                
+                var formDesign = GetOrCreateFormDesign(formInstance);
+                if (formDesign != null)
                 {
-                    // For patterns that require field controls, add them before applying the pattern
-                    if (RequiresFieldControls(patternName) && dataSources != null && dataSources.Length > 0)
+                    _logger.Information("Step 4: Configuring form design");
+                    var designType = formDesign.GetType();
+
+                    // Set Pattern
+                    SetPropertySafe(formDesign, designType, "Pattern", patternName);
+                    SetPropertySafe(formDesign, designType, "PatternVersion", patternVersion);
+                    
+                    // Set DataSource on design (binds the form to its primary datasource)
+                    if (primaryDataSource != null)
                     {
-                        _logger.Information("🎛️ Pattern '{PatternName}' requires field controls - adding fields from datasources", patternName);
-                        await AddFieldControlsFromDataSourcesAsync(formInstance, dataSources);
+                        SetPropertySafe(formDesign, designType, "DataSource", primaryDataSource);
                     }
 
-                    patternApplied = await ApplyPatternToFormAsync(formInstance, patternName, patternVersion);
-                    _logger.Information("Pattern application result: {Result}", patternApplied ? "Success" : "Failed");
+                    // Set Caption
+                    var effectiveCaption = caption ?? formName;
+                    SetPropertySafe(formDesign, designType, "Caption", effectiveCaption);
                     
-                    // CRITICAL: Save the form after pattern application to persist changes
-                    if (patternApplied)
+                    // Set style defaults matching the working reference form
+                    SetPropertySafe(formDesign, designType, "UseCaptionFromMenuItem", "Yes");
+
+                    // Set Style property required by pattern validation
+                    if (patternName == "SimpleList")
                     {
-                        var saveSuccess = await _objectFactory.SaveObjectAsync("AxForm", formName, formInstance);
-                        if (saveSuccess)
-                        {
-                            _logger.Information("✅ Form successfully saved to metadata store after pattern application");
-                        }
-                        else
-                        {
-                            _logger.Warning("⚠️ Pattern applied but failed to save form to metadata store");
-                        }
+                        SetPropertySafe(formDesign, designType, "Style", "SimpleList");
                     }
+                    else if (patternName == "SimpleListDetails")
+                    {
+                        SetPropertySafe(formDesign, designType, "Style", "SimpleListDetails");
+                    }
+
+                    // Step 5: Add controls to the design
+                    var controlsCollection = GetControlsCollection(formDesign);
+                    if (controlsCollection != null)
+                    {
+                        _logger.Information("Step 5: Adding controls to design");
+                        
+                        // Add ActionPane (required by SimpleList/SimpleListDetails patterns)
+                        var actionPane = CreateAndAddControl("AxFormActionPaneControl", "FormActionPaneControl1", controlsCollection);
+                        if (actionPane != null)
+                        {
+                            controlsAdded++;
+                            _logger.Information("Added ActionPane control");
+                        }
+
+                        // Add Custom Filter Group (required by SimpleList/SimpleListDetails patterns)
+                        // This is a Group control with CustomAndQuickFilters sub-pattern containing a QuickFilterControl
+                        if (patternName == "SimpleList" || patternName == "SimpleListDetails")
+                        {
+                            var filterGroup = AddCustomFilterGroup(controlsCollection, "FormGridControl1");
+                            if (filterGroup != null)
+                            {
+                                controlsAdded++;
+                                _logger.Information("Added Custom Filter Group with QuickFilterControl");
+                            }
+                        }
+
+                        // Add Grid with field controls if requested or if datasources are specified
+                        if ((addGridWithFields || dataSources?.Length > 0) && primaryDataSource != null)
+                        {
+                            var gridControl = CreateAndAddControl("AxFormGridControl", "FormGridControl1", controlsCollection);
+                            if (gridControl != null)
+                            {
+                                controlsAdded++;
+                                // Set DataSource on the grid
+                                SetPropertySafe(gridControl, gridControl.GetType(), "DataSource", primaryDataSource);
+                                
+                                // Set Grid Style required by SimpleList pattern
+                                if (patternName == "SimpleList" || patternName == "SimpleListDetails")
+                                {
+                                    SetPropertySafe(gridControl, gridControl.GetType(), "Style", "Tabular");
+                                }
+                                
+                                _logger.Information("Added Grid control bound to {DataSource}", primaryDataSource);
+
+                                // Add field controls inside the grid
+                                var gridControlsCollection = GetControlsCollection(gridControl);
+                                if (gridControlsCollection != null)
+                                {
+                                    controlsAdded += await AddFieldControlsToGrid(gridControlsCollection, primaryDataSource);
+                                }
+                            }
+                        }
+
+                        designConfigured = true;
+                        _logger.Information("Step 5 complete: {Count} controls added", controlsAdded);
+                    }
+                }
+
+                // Step 6: ALWAYS save the form to persist all changes
+                _logger.Information("Step 6: Saving complete form to metadata store for model '{Model}'", modelName);
+                var saveSuccess = await _objectFactory.SaveObjectAsync("AxForm", formName, formInstance, modelName);
+                if (saveSuccess)
+                {
+                    _logger.Information("Form '{FormName}' saved successfully with all components", formName);
+                }
+                else
+                {
+                    _logger.Warning("Failed to save form '{FormName}' to metadata store", formName);
                 }
 
                 return new
                 {
-                    Success = true,
+                    Success = saveSuccess,
                     FormName = formName,
                     Model = modelName,
                     Pattern = patternName,
                     PatternVersion = patternVersion,
-                    PatternApplied = patternApplied,
+                    PatternApplied = designConfigured,
                     DataSources = dataSources,
                     DataSourcesAdded = dataSourcesAdded,
-                    Message = BuildSuccessMessage(formName, patternName, patternVersion, patternApplied, dataSourcesAdded, dataSources?.Length ?? 0)
+                    ControlsAdded = controlsAdded,
+                    Message = BuildSuccessMessage(formName, patternName, patternVersion, designConfigured, dataSourcesAdded, dataSources?.Length ?? 0)
                 };
             }
             catch (Exception ex)
@@ -228,6 +327,373 @@ namespace D365MetadataService.Handlers
                     Pattern = patternName
                 };
             }
+        }
+
+        /// <summary>
+        /// Set a property value on an object safely, handling type conversion
+        /// </summary>
+        private void SetPropertySafe(object target, Type targetType, string propertyName, object value)
+        {
+            try
+            {
+                var property = targetType.GetProperty(propertyName);
+                if (property != null && property.CanWrite && value != null)
+                {
+                    // Handle enum types 
+                    if (property.PropertyType.IsEnum && value is string strValue)
+                    {
+                        try
+                        {
+                            var enumValue = Enum.Parse(property.PropertyType, strValue, true);
+                            property.SetValue(target, enumValue);
+                            _logger.Information("Set {Property} = {Value} (enum)", propertyName, strValue);
+                            return;
+                        }
+                        catch (ArgumentException)
+                        {
+                            _logger.Debug("Could not parse enum value '{Value}' for {Property}", strValue, propertyName);
+                        }
+                    }
+                    
+                    // Handle direct assignment
+                    if (property.PropertyType.IsAssignableFrom(value.GetType()))
+                    {
+                        property.SetValue(target, value);
+                        _logger.Information("Set {Property} = {Value}", propertyName, value);
+                    }
+                    else
+                    {
+                        // Try Convert
+                        var converted = Convert.ChangeType(value, property.PropertyType);
+                        property.SetValue(target, converted);
+                        _logger.Information("Set {Property} = {Value} (converted)", propertyName, value);
+                    }
+                }
+                else if (property == null)
+                {
+                    _logger.Debug("Property {Property} not found on {Type}", propertyName, targetType.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Failed to set property {Property} on {Type}", propertyName, targetType.Name);
+            }
+        }
+
+        /// <summary>
+        /// Create a form control instance and add it to a controls collection
+        /// </summary>
+        private object CreateAndAddControl(string controlTypeName, string controlName, object controlsCollection)
+        {
+            try
+            {
+                // Get the control type from the D365 metadata assembly
+                var assembly = typeof(Microsoft.Dynamics.AX.Metadata.MetaModel.AxForm).Assembly;
+                var controlType = assembly.GetType($"Microsoft.Dynamics.AX.Metadata.MetaModel.{controlTypeName}");
+                
+                if (controlType == null)
+                {
+                    _logger.Warning("Control type {TypeName} not found in D365 metadata assembly", controlTypeName);
+                    return null;
+                }
+
+                var control = Activator.CreateInstance(controlType);
+                
+                // Set Name property
+                SetPropertySafe(control, controlType, "Name", controlName);
+                
+                // Add to collection - handle ambiguous Add overloads
+                var collectionType = controlsCollection.GetType();
+                
+                // Find the Add method that accepts the specific control type or its base type
+                var addMethods = collectionType.GetMethods()
+                    .Where(m => m.Name == "Add" && m.GetParameters().Length == 1)
+                    .ToArray();
+                
+                MethodInfo addMethod = null;
+                foreach (var method in addMethods)
+                {
+                    var paramType = method.GetParameters()[0].ParameterType;
+                    if (paramType.IsAssignableFrom(controlType))
+                    {
+                        addMethod = method;
+                        break;
+                    }
+                }
+                
+                if (addMethod != null)
+                {
+                    addMethod.Invoke(controlsCollection, new[] { control });
+                    _logger.Information("Created and added {ControlType} as '{ControlName}'", controlTypeName, controlName);
+                    return control;
+                }
+                else
+                {
+                    _logger.Warning("No compatible Add method found on controls collection for {ControlType}. Available Add methods: {Methods}", 
+                        controlTypeName, 
+                        string.Join(", ", addMethods.Select(m => m.GetParameters()[0].ParameterType.Name)));
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to create control {ControlType}", controlTypeName);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Add Custom Filter Group with QuickFilterControl child.
+        /// Required by SimpleList and SimpleListDetails patterns.
+        /// Structure: Group(CustomAndQuickFilters 1.1) -> QuickFilterControl(FormControlExtension)
+        /// </summary>
+        private object AddCustomFilterGroup(object parentControlsCollection, string targetGridName)
+        {
+            try
+            {
+                var assembly = typeof(Microsoft.Dynamics.AX.Metadata.MetaModel.AxForm).Assembly;
+
+                // Create the Group control
+                var groupType = assembly.GetType("Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormGroupControl");
+                if (groupType == null)
+                {
+                    _logger.Warning("AxFormGroupControl type not found");
+                    return null;
+                }
+
+                var groupControl = Activator.CreateInstance(groupType);
+                SetPropertySafe(groupControl, groupType, "Name", "CustomFilterGroup");
+                SetPropertySafe(groupControl, groupType, "Pattern", "CustomAndQuickFilters");
+                SetPropertySafe(groupControl, groupType, "PatternVersion", "1.1");
+                // Required pattern properties for CustomAndQuickFilters
+                SetPropertySafe(groupControl, groupType, "ArrangeMethod", "HorizontalLeft");
+                SetPropertySafe(groupControl, groupType, "WidthMode", "SizeToAvailable");
+                SetPropertySafe(groupControl, groupType, "ViewEditMode", "Edit");
+                SetPropertySafe(groupControl, groupType, "FrameType", "None");
+                SetPropertySafe(groupControl, groupType, "Style", "CustomFilter");
+
+                // Create the QuickFilterControl (base AxFormControl with FormControlExtension)
+                var baseControlType = assembly.GetType("Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormControl");
+                if (baseControlType != null)
+                {
+                    var quickFilter = Activator.CreateInstance(baseControlType);
+                    SetPropertySafe(quickFilter, baseControlType, "Name", "QuickFilterControl");
+
+                    // Create and set FormControlExtension
+                    var extensionType = assembly.GetType("Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormControlExtension");
+                    if (extensionType != null)
+                    {
+                        var extension = Activator.CreateInstance(extensionType);
+                        SetPropertySafe(extension, extensionType, "Name", "QuickFilterControl");
+
+                        // Add targetControlName property pointing to the grid
+                        var propType = assembly.GetType("Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormControlExtensionProperty");
+                        if (propType != null)
+                        {
+                            var targetProp = Activator.CreateInstance(propType);
+                            SetPropertySafe(targetProp, propType, "Name", "targetControlName");
+                            SetPropertySafe(targetProp, propType, "Type", "String");
+                            SetPropertySafe(targetProp, propType, "Value", targetGridName);
+
+                            // Add property to extension's ExtensionProperties collection
+                            var extPropsProperty = extensionType.GetProperty("ExtensionProperties");
+                            if (extPropsProperty != null)
+                            {
+                                var extPropsCollection = extPropsProperty.GetValue(extension);
+                                if (extPropsCollection != null)
+                                {
+                                    var addMethods = extPropsCollection.GetType().GetMethods()
+                                        .Where(m => m.Name == "Add" && m.GetParameters().Length == 1)
+                                        .ToArray();
+                                    foreach (var addMethod in addMethods)
+                                    {
+                                        if (addMethod.GetParameters()[0].ParameterType.IsAssignableFrom(propType))
+                                        {
+                                            addMethod.Invoke(extPropsCollection, new[] { targetProp });
+                                            _logger.Information("Added targetControlName property to QuickFilterControl extension");
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Set the extension on the QuickFilterControl
+                        SetPropertySafe(quickFilter, baseControlType, "FormControlExtension", extension);
+                    }
+
+                    // Add QuickFilterControl to the group's Controls collection
+                    var groupControlsCollection = GetControlsCollection(groupControl);
+                    if (groupControlsCollection != null)
+                    {
+                        var addMethods = groupControlsCollection.GetType().GetMethods()
+                            .Where(m => m.Name == "Add" && m.GetParameters().Length == 1)
+                            .ToArray();
+                        foreach (var addMethod in addMethods)
+                        {
+                            if (addMethod.GetParameters()[0].ParameterType.IsAssignableFrom(baseControlType))
+                            {
+                                addMethod.Invoke(groupControlsCollection, new[] { quickFilter });
+                                _logger.Information("Added QuickFilterControl to CustomFilterGroup");
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Add the group to the parent controls collection
+                var parentAddMethods = parentControlsCollection.GetType().GetMethods()
+                    .Where(m => m.Name == "Add" && m.GetParameters().Length == 1)
+                    .ToArray();
+                foreach (var addMethod in parentAddMethods)
+                {
+                    if (addMethod.GetParameters()[0].ParameterType.IsAssignableFrom(groupType))
+                    {
+                        addMethod.Invoke(parentControlsCollection, new[] { groupControl });
+                        _logger.Information("Added CustomFilterGroup to design controls");
+                        return groupControl;
+                    }
+                }
+
+                _logger.Warning("Could not add CustomFilterGroup - no compatible Add method found");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to add Custom Filter Group");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Add field controls to a grid by reading the table's field metadata
+        /// Maps table field types to form control types:
+        ///   String -> AxFormStringControl
+        ///   Enum   -> AxFormComboBoxControl  
+        ///   Int    -> AxFormIntegerControl
+        ///   Int64  -> AxFormInt64Control
+        ///   Real   -> AxFormRealControl
+        ///   Date   -> AxFormDateControl
+        ///   DateTime -> AxFormDateTimeControl
+        ///   Guid   -> AxFormGuidControl
+        /// </summary>
+        private async Task<int> AddFieldControlsToGrid(object gridControlsCollection, string tableName)
+        {
+            int fieldsAdded = 0;
+            try
+            {
+                _logger.Information("Reading table '{TableName}' fields to create grid controls", tableName);
+
+                // Read the table metadata to discover its fields
+                var tableInstance = _objectFactory.GetExistingObject("AxTable", tableName);
+                if (tableInstance == null)
+                {
+                    _logger.Warning("Table '{TableName}' not found in metadata - cannot auto-create field controls", tableName);
+                    return 0;
+                }
+
+                var tableType = tableInstance.GetType();
+                var fieldsProperty = tableType.GetProperty("Fields");
+                if (fieldsProperty == null)
+                {
+                    _logger.Warning("Table '{TableName}' has no Fields property", tableName);
+                    return 0;
+                }
+
+                var fieldsCollection = fieldsProperty.GetValue(tableInstance);
+                if (fieldsCollection == null || !(fieldsCollection is System.Collections.IEnumerable enumerable))
+                {
+                    _logger.Warning("Table '{TableName}' Fields collection is null or not enumerable", tableName);
+                    return 0;
+                }
+
+                var assembly = typeof(Microsoft.Dynamics.AX.Metadata.MetaModel.AxForm).Assembly;
+
+                foreach (var field in enumerable)
+                {
+                    try
+                    {
+                        var fieldType = field.GetType();
+                        var fieldName = fieldType.GetProperty("Name")?.GetValue(field)?.ToString();
+                        
+                        if (string.IsNullOrEmpty(fieldName))
+                            continue;
+
+                        // Map field type to form control type
+                        var controlTypeName = MapFieldTypeToControlType(fieldType.Name);
+                        
+                        var controlType = assembly.GetType($"Microsoft.Dynamics.AX.Metadata.MetaModel.{controlTypeName}");
+                        if (controlType == null)
+                        {
+                            _logger.Debug("Control type {ControlType} not found, skipping field {FieldName}", controlTypeName, fieldName);
+                            continue;
+                        }
+
+                        var control = Activator.CreateInstance(controlType);
+                        var controlObjType = control.GetType();
+                        
+                        // Set control properties: Name, DataField, DataSource
+                        SetPropertySafe(control, controlObjType, "Name", $"{tableName}_{fieldName}");
+                        SetPropertySafe(control, controlObjType, "DataField", fieldName);
+                        SetPropertySafe(control, controlObjType, "DataSource", tableName);
+
+                        // Add to grid - handle ambiguous Add overloads
+                        var addMethods = gridControlsCollection.GetType().GetMethods()
+                            .Where(m => m.Name == "Add" && m.GetParameters().Length == 1)
+                            .ToArray();
+                        
+                        MethodInfo addMethod = null;
+                        foreach (var method in addMethods)
+                        {
+                            var paramType = method.GetParameters()[0].ParameterType;
+                            if (paramType.IsAssignableFrom(controlObjType))
+                            {
+                                addMethod = method;
+                                break;
+                            }
+                        }
+                        
+                        if (addMethod != null)
+                        {
+                            addMethod.Invoke(gridControlsCollection, new[] { control });
+                            fieldsAdded++;
+                            _logger.Information("Added {ControlType} for field '{FieldName}'", controlTypeName, fieldName);
+                        }
+                    }
+                    catch (Exception fieldEx)
+                    {
+                        _logger.Debug(fieldEx, "Failed to create control for field");
+                    }
+                }
+
+                _logger.Information("Added {Count} field controls to grid from table '{TableName}'", fieldsAdded, tableName);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to add field controls to grid for table '{TableName}'", tableName);
+            }
+            return fieldsAdded;
+        }
+
+        /// <summary>
+        /// Map D365 table field type names to form control type names
+        /// </summary>
+        private string MapFieldTypeToControlType(string fieldTypeName)
+        {
+            return fieldTypeName switch
+            {
+                "AxTableFieldString" => "AxFormStringControl",
+                "AxTableFieldEnum" => "AxFormComboBoxControl",
+                "AxTableFieldInt" => "AxFormIntegerControl",
+                "AxTableFieldInt64" => "AxFormInt64Control",
+                "AxTableFieldReal" => "AxFormRealControl",
+                "AxTableFieldDate" => "AxFormDateControl",
+                "AxTableFieldUtcDateTime" => "AxFormDateTimeControl",
+                "AxTableFieldGuid" => "AxFormGuidControl",
+                "AxTableFieldContainer" => "AxFormStringControl",
+                "AxTableFieldTime" => "AxFormTimeControl",
+                _ => "AxFormStringControl" // Default fallback
+            };
         }
 
         private async Task<bool> ApplyPatternToFormAsync(object formInstance, string patternName, string patternVersion)

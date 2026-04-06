@@ -27,6 +27,7 @@ export class ObjectCreators {
     version?: string;
     dependencies?: string[];
     outputPath?: string;
+    modelName?: string;
     properties?: Record<string, any>;
   }): Promise<string> {
     try {
@@ -39,6 +40,9 @@ export class ObjectCreators {
         OutputPath: options.outputPath || 'Models',
         Layer: options.layer || 'usr'
       };
+
+      // Add model name if provided - this routes the object to the correct D365 model
+      if (options.modelName) parameters.model = options.modelName;
 
       // Add optional parameters if provided
       if (options.publisher) parameters.Publisher = options.publisher;

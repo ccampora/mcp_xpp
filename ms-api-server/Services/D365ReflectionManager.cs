@@ -515,7 +515,7 @@ namespace D365MetadataService.Services
             {
                 _logger.Information("🔍 Processing model: {Model} using WORKING approach", modelName);
                 
-                // Use the WORKING approach from ModelsHandler - direct property access
+                // Use human-readable type names, TypeScript will map to both formats
                 try { var result = provider.Tables.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Tables"] = result; } catch { }
                 try { var result = provider.Classes.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Classes"] = result; } catch { }
                 try { var result = provider.Forms.ListObjectsForModel(modelName); if (result?.Any() == true) objects["Forms"] = result; } catch { }

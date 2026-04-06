@@ -6,6 +6,54 @@
 import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 import { D365ServiceClient } from './d365-service-client.js';
 
+/**
+ * Map human-readable type names from C# service to proper D365 AX type names
+ * This provides both formats for maximum compatibility
+ */
+function mapToAxType(humanReadableType: string): string {
+    const typeMapping: Record<string, string> = {
+        'Classes': 'AxClass',
+        'Tables': 'AxTable',
+        'Forms': 'AxForm',
+        'Enums': 'AxEnum',
+        'Views': 'AxView',
+        'Queries': 'AxQuery',
+        'Menus': 'AxMenu',
+        'Maps': 'AxMap',
+        'Reports': 'AxReport',
+        'DataEntityViews': 'AxDataEntityView',
+        'CompositeDataEntityViews': 'AxCompositeDataEntityView',
+        'LabelFiles': 'AxLabelFile',
+        'Edts': 'AxEdt',
+        'EdtExtensions': 'AxEdtExtension',
+        'TableExtensions': 'AxTableExtension',
+        'FormExtensions': 'AxFormExtension',
+        'EnumExtensions': 'AxEnumExtension',
+        'ViewExtensions': 'AxViewExtension',
+        'MenuExtensions': 'AxMenuExtension',
+        'QueryExtensions': 'AxQueryExtension',
+        'ReportExtensions': 'AxReportExtension',
+        'SecurityRoles': 'AxSecurityRole',
+        'SecurityDuties': 'AxSecurityDuty',
+        'SecurityPrivileges': 'AxSecurityPrivilege',
+        'MenuItems': 'AxMenuItemDisplay',
+        'MenuItemActions': 'AxMenuItemAction',
+        'MenuItemOutputs': 'AxMenuItemOutput',
+        'Workflows': 'AxWorkflowTemplate',
+        'WorkflowApprovals': 'AxWorkflowApproval',
+        'WorkflowTasks': 'AxWorkflowTask',
+        'Services': 'AxService',
+        'ServiceGroups': 'AxServiceGroup',
+        'KPIs': 'AxKPI',
+        'Tiles': 'AxTile',
+        'ConfigurationKeys': 'AxConfigurationKey',
+        'LicenseCodes': 'AxLicenseCode',
+        'Resources': 'AxResource'
+    };
+    
+    return typeMapping[humanReadableType] || humanReadableType;
+}
+
 export interface ModelProcessingTask {
     modelName: string;
     requestId: string;
@@ -18,7 +66,8 @@ export interface ModelProcessingResult {
         name: string;
         path: string;
         model: string;
-        type: string;
+        type: string;        // Human-readable type
+        axType: string;      // D365 AX type
         lastModified: string;
     }>;
     objectCount: number;
@@ -72,13 +121,15 @@ if (!isMainThread && parentPort) {
                 
                 for (const [objectType, objectNames] of Object.entries(modelData.objects)) {
                     const objectArray = objectNames as string[];
+                    const axType = mapToAxType(objectType);
                     
                     for (const objectName of objectArray) {
                         objects.push({
                             name: objectName,
                             path: `${task.modelName}/${objectType}/${objectName}`,
                             model: task.modelName,
-                            type: objectType,
+                            type: objectType,  // Human-readable type (Classes, Tables, etc.)
+                            axType: axType,    // D365 AX type (AxClass, AxTable, etc.)
                             lastModified: new Date().toISOString()
                         });
                     }

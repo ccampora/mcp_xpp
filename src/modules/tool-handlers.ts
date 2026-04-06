@@ -109,6 +109,7 @@ export class ToolHandlers {
     const schema = z.object({
       objectName: z.string().optional(),
       objectType: z.string().optional(),
+      modelName: z.string().optional(),
       layer: z.string().optional(),
       publisher: z.string().default("YourCompany"),
       version: z.string().default("1.0.0.0"),
@@ -293,12 +294,13 @@ export class ToolHandlers {
         version: params.version,
         dependencies: params.dependencies,
         outputPath: params.outputPath,
+        modelName: params.modelName,
         properties: params.properties
       });
       
       // Immediately add the created object to the search index for instant searchability
       try {
-        const model = params.properties?.model || 'UnknownModel';
+        const model = params.modelName || params.properties?.model || 'UnknownModel';
         const filePath = `Models/${model}/${params.objectType}/${params.objectName}.xml`;
         
         const indexSuccess = await ObjectIndexManager.addObjectToIndex(
@@ -350,7 +352,9 @@ export class ToolHandlers {
         z.array(z.string()),
         z.string()
       ]).optional(),
-      modelName: z.string().optional()
+      modelName: z.string().optional(),
+      caption: z.string().optional(),
+      addGridWithFields: z.boolean().optional()
     });
 
     const validationResult = schema.safeParse(actualArgs);
@@ -396,8 +400,10 @@ export class ToolHandlers {
           formName: params.formName,
           patternName: params.patternName || 'SimpleListDetails',
           patternVersion: params.patternVersion || 'UX7 1.0',
-          modelName: params.modelName || 'ApplicationSuite',
-          ...(params.dataSources && { dataSources: params.dataSources })
+          ...(params.modelName && { modelName: params.modelName }),
+          ...(params.dataSources && { dataSources: params.dataSources }),
+          ...(params.caption && { caption: params.caption }),
+          addGridWithFields: params.addGridWithFields !== undefined ? params.addGridWithFields : true
         };
         
         response = await client.sendRequest('create_form', undefined, formParams);
@@ -2072,5 +2078,272 @@ export class ToolHandlers {
     return content;
   }
 
+  // ==================== CODE SEARCH TOOLS ====================
+
+  /**
+   * Unified codebase search - handles all search types in one tool
+   */
+  static async searchCodebase(args: any, requestId: string): Promise<any> {
+    const schema = z.object({
+      searchType: z.enum(['objects', 'method_calls', 'references', 'source_code', 'auto']).optional().default('auto'),
+      query: z.string(),
+      filters: z.object({
+        objectType: z.string().optional(),
+        model: z.string().optional(),
+        className: z.string().optional(),
+        methodName: z.string().optional()
+      }).optional().default({}),
+      maxResults: z.number().optional().default(50),
+      includeContext: z.boolean().optional().default(true),
+      format: z.enum(['text', 'json']).optional().default('text')
+    });
+
+    try {
+      const { searchType, query, filters, maxResults, includeContext, format } = schema.parse(args);
+      
+      console.log(`🔍 Unified search: ${query}`);
+
+      // Import index manager
+      const { ObjectIndexManager } = await import('./object-index.js');
+      
+      // Auto-detect search type if needed
+      let detectedType = searchType;
+      if (searchType === 'auto') {
+        detectedType = this.detectSearchType(query);
+      }
+
+      let results: any[] = [];
+      let searchDescription = '';
+
+      // Perform search based on detected type
+      switch (detectedType) {
+        case 'method_calls':
+          if (query.includes('::')) {
+            const [className, methodName] = query.split('::');
+            results = await ObjectIndexManager.searchMethodCalls(className.trim(), methodName.trim());
+          } else {
+            results = await ObjectIndexManager.searchMethodCallsByPattern(`%${query}%`);
+          }
+          searchDescription = 'Method Call Search';
+          break;
+          
+        case 'references':
+          results = await ObjectIndexManager.searchObjectReferences(query);
+          searchDescription = 'Object Reference Search';
+          break;
+          
+        case 'source_code':
+          results = await ObjectIndexManager.searchMethodCode(query);
+          searchDescription = 'Source Code Search';
+          break;
+          
+        default:
+          // Default to method calls for now
+          results = await ObjectIndexManager.searchMethodCallsByPattern(`%${query}%`);
+          searchDescription = 'Pattern Search';
+          break;
+      }
+
+      const limitedResults = results.slice(0, maxResults);
+
+      if (results.length === 0) {
+        return await createLoggedResponse(
+          `No results found for: ${query}`,
+          'text', 
+          requestId
+        );
+      }
+
+      if (format === 'json') {
+        return await createLoggedResponse(JSON.stringify({
+          searchType: detectedType,
+          query,
+          totalResults: results.length,
+          results: limitedResults
+        }, null, 2), 'text', requestId);
+      }
+
+      // Format results
+      let content = `🔍 **${searchDescription} Results**\n\n`;
+      content += `**Query:** ${query}\n`;
+      content += `**Type:** ${detectedType.toUpperCase()}\n`;
+      content += `**Found:** ${results.length} match(es)`;
+      if (results.length > maxResults) {
+        content += ` (showing first ${maxResults})`;
+      }
+      content += `\n\n`;
+
+      // Format results based on search type
+      limitedResults.forEach((result: any, index: number) => {
+        content += `## ${index + 1}. `;
+        
+        if (result.objectType && result.objectName) {
+          content += `${result.objectType}: ${result.objectName}\n`;
+          if (result.objectModel) {
+            content += `**Model:** ${result.objectModel}\n`;
+          }
+        } else if (result.type && result.name) {
+          // Object search result format
+          content += `${result.type}: ${result.name}\n`;
+          if (result.model) {
+            content += `**Model:** ${result.model}\n`;
+          }
+        }
+        
+        // Add search-type specific details
+        if (detectedType === 'method_calls') {
+          if (result.sourceLocation) {
+            content += `**Location:** ${result.sourceLocation}\n`;
+          }
+          if (result.callContext && includeContext) {
+            content += `**Context:** ${result.callContext}\n`;
+          }
+        } else if (detectedType === 'source_code') {
+          if (result.methodName) {
+            content += `**Method:** ${result.methodName}\n`;
+          }
+          if (result.matchingCode && includeContext) {
+            content += `**Code Preview:**\n\`\`\`xpp\n${result.matchingCode}\n\`\`\`\n`;
+          }
+        } else if (detectedType === 'references') {
+          if (result.sourceLocation) {
+            content += `**Location:** ${result.sourceLocation}\n`;
+          }
+        }
+        
+        if (result.objectPath && includeContext) {
+          content += `**Path:** \`${result.objectPath}\`\n`;
+        }
+        
+        content += `\n`;
+      });
+
+      return await createLoggedResponse(content, 'text', requestId);
+
+    } catch (error) {
+      console.error('❌ Error in unified search:', error);
+      return await createLoggedResponse(
+        `Error in codebase search: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'text', 
+        requestId
+      );
+    }
+  }
+
+  /**
+   * Auto-detect search type from query format
+   */
+  private static detectSearchType(query: string): 'objects' | 'method_calls' | 'references' | 'source_code' {
+    // Method call patterns: Class::method or methodName
+    if (query.includes('::')) {
+      return 'method_calls';
+    }
+    
+    // Object patterns: wildcards, exact object names
+    if (query.includes('*') || query.includes('?')) {
+      return 'objects';
+    }
+    
+    // Code patterns: keywords, operators, SQL-like syntax
+    if (query.includes('select') || query.includes('throw') || query.includes('new ') || 
+        query.includes('(') || query.includes('=') || query.includes(';')) {
+      return 'source_code';
+    }
+    
+    // Default to references for simple names
+    return 'references';
+  }
+
+  /**
+   * Build code analysis index
+   */
+  static async buildCodeAnalysisIndex(args: any, requestId: string): Promise<any> {
+    const schema = z.object({
+      includeCodeAnalysis: z.boolean().optional().default(true),
+      batchSize: z.number().optional().default(10),
+      maxConcurrentAnalysis: z.number().optional().default(3)
+    });
+
+    try {
+      const options = schema.parse(args);
+      
+      console.log(`� Building code analysis index with options:`, options);
+
+      const { ObjectIndexManager } = await import('./object-index.js');
+      
+      const startTime = Date.now();
+      const stats = await ObjectIndexManager.buildCodeAnalysisIndex(options);
+      const totalTimeMs = Date.now() - startTime;
+
+      let content = `✅ **Code Analysis Index Build Complete**\n\n`;
+      content += `📊 **Statistics:**\n`;
+      content += `- Total Objects: ${stats.totalObjects}\n`;
+      content += `- Analyzed Objects: ${stats.analyzedObjects}\n`;
+      content += `- Newly Analyzed: ${stats.newlyAnalyzed}\n`;
+      content += `- Skipped Objects: ${stats.skippedObjects}\n`;
+      content += `- Errors: ${stats.errorCount}\n`;
+      content += `- Analysis Time: ${stats.analysisTimeMs}ms\n`;
+      content += `- Indexing Time: ${stats.indexingTimeMs}ms\n`;
+      content += `- Total Time: ${totalTimeMs}ms\n\n`;
+
+      const analysisPercentage = stats.totalObjects > 0 ? 
+        Math.round((stats.analyzedObjects / stats.totalObjects) * 100) : 0;
+      
+      content += `📈 **Progress:** ${analysisPercentage}% of objects analyzed\n`;
+      
+      if (stats.errorCount > 0) {
+        content += `\n⚠️ **Warnings:** ${stats.errorCount} objects had analysis errors\n`;
+      }
+
+      return await createLoggedResponse(content, 'text', requestId);
+
+    } catch (error) {
+      console.error('❌ Error building code analysis index:', error);
+      return await createLoggedResponse(
+        `Error building code analysis index: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'text', 
+        requestId
+      );
+    }
+  }
+
+  /**
+   * Get code analysis statistics
+   */
+  static async getCodeAnalysisStats(args: any, requestId: string): Promise<any> {
+    try {
+      const { ObjectIndexManager } = await import('./object-index.js');
+      
+      const stats = await ObjectIndexManager.getCodeAnalysisStats();
+      
+      let content = `📊 **Enhanced Index Statistics**\n\n`;
+      content += `🏗️ **Index Status:**\n`;
+      content += `- Total Objects: ${stats.totalObjects}\n`;
+      content += `- Analyzed Objects: ${stats.analyzedObjects}\n`;
+      content += `- Analysis Progress: ${stats.analysisProgress}%\n`;
+      content += `\n🔍 **Analysis Results:**\n`;
+      content += `- Total Methods: ${stats.totalMethods}\n`;
+      content += `- Total Method Calls: ${stats.totalCalls}\n`;
+      content += `- Total References: ${stats.totalReferences}\n`;
+      
+      if (stats.lastAnalysisTime) {
+        content += `\n⏱️ **Last Analysis:** ${stats.lastAnalysisTime}\n`;
+      }
+
+      if (stats.analysisProgress < 100) {
+        content += `\n💡 **Tip:** Run \`buildEnhancedIndex\` to analyze remaining objects\n`;
+      }
+
+      return await createLoggedResponse(content, 'text', requestId);
+
+    } catch (error) {
+      console.error('❌ Error getting enhanced stats:', error);
+      return await createLoggedResponse(
+        `Error getting enhanced statistics: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'text', 
+        requestId
+      );
+    }
+  }
 
 }

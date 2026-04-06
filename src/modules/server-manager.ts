@@ -100,6 +100,15 @@ export class ServerManager {
           case "execute_object_modification":
             return await ToolHandlers.executeObjectModification(args, requestId);
           
+          case "search_codebase":
+            return await ToolHandlers.searchCodebase(args, requestId);
+          
+          case "build_code_analysis_index":
+            return await ToolHandlers.buildCodeAnalysisIndex(args, requestId);
+          
+          case "get_code_analysis_stats":
+            return await ToolHandlers.getCodeAnalysisStats(args, requestId);
+          
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,

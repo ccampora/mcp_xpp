@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using D365MetadataService.Models;
 using D365MetadataService.Services;
 using D365MetadataService.Handlers;
@@ -14,7 +15,7 @@ namespace D365MetadataService
 {
     class Program
     {
-        private static ILogger _logger;
+        private static Serilog.ILogger _logger;
         private static NamedPipeServer _namedPipeServer;
 
         static async Task Main(string[] args)
@@ -79,6 +80,12 @@ namespace D365MetadataService
             // Register configuration
             services.AddSingleton(config);
             services.AddSingleton(_logger);
+            
+            // Add Microsoft.Extensions.Logging services to support ILogger<T>
+            services.AddLogging();
+            
+            // Simple bridge: Register a generic ILogger<T> factory
+            services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(LoggerAdapter<>));
 
             // Register Centralized D365 Reflection Manager (eliminates scattered reflection code)
             services.AddSingleton<D365ReflectionManager>(sp => 
@@ -97,7 +104,7 @@ namespace D365MetadataService
             services.AddSingleton<D365ControlFactory>(sp =>
             {
                 var reflectionManager = D365ReflectionManager.Instance;
-                var logger = sp.GetRequiredService<ILogger>();
+                var logger = sp.GetRequiredService<Serilog.ILogger>();
                 return new D365ControlFactory(reflectionManager, logger);
             });
 
@@ -130,7 +137,7 @@ namespace D365MetadataService
             services.AddSingleton<IRequestHandler, ListObjectsByModelHandler>();
             services.AddSingleton<IRequestHandler, AvailableObjectTypesHandler>();
             services.AddSingleton<IRequestHandler, ShutdownHandler>(sp =>
-                new ShutdownHandler(sp.GetRequiredService<ILogger>(), () => Environment.Exit(0)));
+                new ShutdownHandler(sp.GetRequiredService<Serilog.ILogger>(), () => Environment.Exit(0)));
             
             // Register dynamic reflection handlers
             services.AddSingleton<IRequestHandler, DiscoverModificationCapabilitiesHandler>();
@@ -152,7 +159,7 @@ namespace D365MetadataService
             services.AddSingleton<NamedPipeServer>(sp =>
                 new NamedPipeServer(
                     sp.GetRequiredService<RequestHandlerFactory>(),
-                    sp.GetRequiredService<ILogger>(),
+                    sp.GetRequiredService<Serilog.ILogger>(),
                     config.MaxConnections));
         }
 
@@ -269,6 +276,50 @@ namespace D365MetadataService
             }
 
             _logger.Information("=== Graceful Shutdown Complete ===");
+        }
+    }
+
+    /// <summary>
+    /// Simple adapter to bridge Serilog ILogger to Microsoft.Extensions.Logging ILogger<T>
+    /// </summary>
+    public class LoggerAdapter<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        private readonly Serilog.ILogger _serilogLogger;
+
+        public LoggerAdapter(Serilog.ILogger serilogLogger)
+        {
+            _serilogLogger = serilogLogger.ForContext<T>();
+        }
+
+        public System.IDisposable BeginScope<TState>(TState state) => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+        {
+            if (!IsEnabled(logLevel)) return;
+
+            var message = formatter(state, exception);
+            
+            switch (logLevel)
+            {
+                case Microsoft.Extensions.Logging.LogLevel.Trace:
+                case Microsoft.Extensions.Logging.LogLevel.Debug:
+                    _serilogLogger.Debug(message);
+                    break;
+                case Microsoft.Extensions.Logging.LogLevel.Information:
+                    _serilogLogger.Information(message);
+                    break;
+                case Microsoft.Extensions.Logging.LogLevel.Warning:
+                    _serilogLogger.Warning(message);
+                    break;
+                case Microsoft.Extensions.Logging.LogLevel.Error:
+                    _serilogLogger.Error(exception, message);
+                    break;
+                case Microsoft.Extensions.Logging.LogLevel.Critical:
+                    _serilogLogger.Fatal(exception, message);
+                    break;
+            }
         }
     }
 }

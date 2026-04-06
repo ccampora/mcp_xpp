@@ -28,6 +28,8 @@ namespace D365MetadataService.Services
         private readonly IMetadataProvider _metadataProvider; // Primary provider for backward compatibility
         private readonly ILogger _logger;
         private readonly D365ReflectionManager _reflectionManager;
+        private readonly string _defaultModelName;
+        private readonly string _customMetadataPath;
         private readonly Dictionary<string, Type> _axTypeCache;
         private readonly Dictionary<string, PropertyInfo> _providerPropertyCache;
         private readonly Dictionary<string, MethodInfo> _createMethodCache;
@@ -36,6 +38,8 @@ namespace D365MetadataService.Services
         {
             _logger = logger.ForContext<D365ObjectFactory>();
             _reflectionManager = D365ReflectionManager.Instance;
+            _defaultModelName = config.DefaultModel ?? "ApplicationSuite";
+            _customMetadataPath = config.CustomMetadataPath;
             _axTypeCache = new Dictionary<string, Type>();
             _providerPropertyCache = new Dictionary<string, PropertyInfo>();
             _createMethodCache = new Dictionary<string, MethodInfo>();
@@ -196,8 +200,8 @@ namespace D365MetadataService.Services
                 var createMethod = _createMethodCache[providerProperty.Name];
 
                 // 6. Create ModelSaveInfo
-                var model = parameters.ContainsKey("model") ? parameters["model"]?.ToString() : "ApplicationSuite";
-                var modelSaveInfo = CreateModelSaveInfo(model ?? "ApplicationSuite");
+                var model = parameters.ContainsKey("model") ? parameters["model"]?.ToString() : _defaultModelName;
+                var modelSaveInfo = CreateModelSaveInfo(model ?? _defaultModelName);
 
                 // 7. Deep type analysis before invoking Create method
                 _logger.Information("=== DEEP TYPE ANALYSIS ===");
@@ -806,7 +810,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Save a modified object back to the metadata store
         /// </summary>
-        public Task<bool> SaveObjectAsync(string objectType, string objectName, object modifiedObject)
+        public Task<bool> SaveObjectAsync(string objectType, string objectName, object modifiedObject, string? modelName = null)
         {
             try
             {
@@ -817,28 +821,24 @@ namespace D365MetadataService.Services
                     return Task.FromResult(false);
                 }
 
-                _logger.Information("Saving modified object: {ObjectType}:{ObjectName}", objectType, objectName);
-
-                // First, try to save using the provider itself (not the collection)
-                var providerType = _metadataProvider.GetType();
-                var providerMethods = providerType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+                var effectiveModel = modelName ?? _defaultModelName;
                 
-                _logger.Information("Available methods on provider for {ObjectType}: {Methods}", 
-                    objectType, string.Join(", ", providerMethods.Select(m => $"{m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name))})")));
-
-                // NO HARDCODING: Look for save methods dynamically
-                var providerSaveMethod = GetSaveMethodDynamically(providerType, modifiedObject, providerMethods);
-
-                if (providerSaveMethod != null)
+                // Auto-detect model from filesystem if using default
+                if (modelName == null)
                 {
-                    _logger.Information("Using provider method {MethodName} to save {ObjectType}:{ObjectName}", providerSaveMethod.Name, objectType, objectName);
-                    providerSaveMethod.Invoke(_metadataProvider, new object[] { modifiedObject });
-                    _logger.Information("Successfully saved {ObjectType}:{ObjectName} to metadata store using provider method", objectType, objectName);
-                    return Task.FromResult(true);
+                    var detectedModel = FindModelForObject(objectType, objectName);
+                    if (detectedModel != null)
+                    {
+                        effectiveModel = detectedModel;
+                        _logger.Information("Auto-detected model '{Model}' for {ObjectType}:{ObjectName}", effectiveModel, objectType, objectName);
+                    }
                 }
+                
+                _logger.Information("Saving modified object: {ObjectType}:{ObjectName} to model '{Model}'", objectType, objectName, effectiveModel);
 
-                // If no provider method found, try the collection approach as fallback
-                _logger.Information("No provider save method found, trying collection approach for {ObjectType}", objectType);
+                // Always use the collection approach with ModelSaveInfo for proper model routing.
+                // The provider-level save methods lack ModelSaveInfo and save to unpredictable models.
+                _logger.Information("Using collection approach with ModelSaveInfo for {ObjectType}", objectType);
 
                 // Get the Ax type
                 if (!_axTypeCache.TryGetValue(objectType, out var axType))
@@ -887,7 +887,7 @@ namespace D365MetadataService.Services
                     saveMethod = createMethod;
                     // Create a properly initialized ModelSaveInfo
                     var modelSaveInfoType = createMethod.GetParameters()[1].ParameterType;
-                    var modelSaveInfo = CreateModelSaveInfo(modelSaveInfoType, objectName);
+                    var modelSaveInfo = CreateModelSaveInfo(modelSaveInfoType, objectName, effectiveModel);
                     parameters = new object[] { modifiedObject, modelSaveInfo };
                     _logger.Information("Using Create method with parameters: {ObjectType}, {ModelSaveInfoType}", modifiedObject.GetType().Name, modelSaveInfoType.Name);
                 }
@@ -896,7 +896,7 @@ namespace D365MetadataService.Services
                     saveMethod = updateMethod;
                     // Create a properly initialized ModelSaveInfo  
                     var modelSaveInfoType = updateMethod.GetParameters()[1].ParameterType;
-                    var modelSaveInfo = CreateModelSaveInfo(modelSaveInfoType, objectName);
+                    var modelSaveInfo = CreateModelSaveInfo(modelSaveInfoType, objectName, effectiveModel);
                     parameters = new object[] { modifiedObject, modelSaveInfo };
                     _logger.Information("Using Update method with parameters: {ObjectType}, {ModelSaveInfoType}", modifiedObject.GetType().Name, modelSaveInfoType.Name);
                 }
@@ -1083,8 +1083,8 @@ namespace D365MetadataService.Services
                 var nameProperty = modelSaveInfoType.GetProperty("Name");
                 if (nameProperty != null && nameProperty.CanWrite)
                 {
-                    // Try to get model name from existing object, fall back to default
-                    string modelName = "MyCustomModel"; // Default
+                    // Try to get model name from existing object, fall back to config default
+                    string modelName = _defaultModelName;
                     
                     // Look for model-related properties on the existing object
                     var objectModelProperty = objectType.GetProperty("Model");
@@ -1125,10 +1125,11 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Create a properly initialized ModelSaveInfo object
         /// </summary>
-        private object CreateModelSaveInfo(Type modelSaveInfoType, string objectName)
+        private object CreateModelSaveInfo(Type modelSaveInfoType, string objectName, string? targetModelName = null)
         {
             try
             {
+                var effectiveModel = targetModelName ?? _defaultModelName;
                 var modelSaveInfo = Activator.CreateInstance(modelSaveInfoType);
                 
                 // Log all properties to understand the structure
@@ -1138,12 +1139,34 @@ namespace D365MetadataService.Services
                 
                 // Set all required properties based on discovered structure
                 // Properties: Id:Int32, SequenceId:Int32, Layer:Int32, Name:String, Precedence:Int64
-                                
+                
+                // Try to read actual model info from the manifest for correct Id/Layer
+                int modelId = 1;
+                int modelLayer = 8;
+                try
+                {
+                    var modelInfo = _metadataProvider.ModelManifest.Read(effectiveModel);
+                    if (modelInfo != null)
+                    {
+                        modelId = modelInfo.Id;
+                        modelLayer = modelInfo.Layer;
+                        _logger.Information("Read model manifest for '{Model}': Id={Id}, Layer={Layer}", effectiveModel, modelId, modelLayer);
+                    }
+                    else
+                    {
+                        _logger.Warning("Model manifest not found for '{Model}', using defaults Id=1, Layer=8", effectiveModel);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "Failed to read model manifest for '{Model}', using defaults", effectiveModel);
+                }
+
                 var idProperty = modelSaveInfoType.GetProperty("Id");
                 if (idProperty != null && idProperty.CanWrite)
                 {
-                    idProperty.SetValue(modelSaveInfo, 1);
-                    _logger.Information("Set Id property to: 1");
+                    idProperty.SetValue(modelSaveInfo, modelId);
+                    _logger.Information("Set Id property to: {Id}", modelId);
                 }
 
                 var sequenceIdProperty = modelSaveInfoType.GetProperty("SequenceId");
@@ -1156,17 +1179,15 @@ namespace D365MetadataService.Services
                 var layerProperty = modelSaveInfoType.GetProperty("Layer");
                 if (layerProperty != null && layerProperty.CanWrite)
                 {
-                    // Use layer enum value - 8 is typically USR layer
-                    layerProperty.SetValue(modelSaveInfo, 8);
-                    _logger.Information("Set Layer property to: 8 (USR)");
+                    layerProperty.SetValue(modelSaveInfo, modelLayer);
+                    _logger.Information("Set Layer property to: {Layer}", modelLayer);
                 }
 
                 var nameProperty = modelSaveInfoType.GetProperty("Name");
                 if (nameProperty != null && nameProperty.CanWrite)
                 {
-                    // Use a default model name - this could be made configurable
-                    nameProperty.SetValue(modelSaveInfo, "MyCustomModel");
-                    _logger.Information("Set Name property to: MyCustomModel");
+                    nameProperty.SetValue(modelSaveInfo, effectiveModel);
+                    _logger.Information("Set Name property to: {ModelName}", effectiveModel);
                 }
 
                 var precedenceProperty = modelSaveInfoType.GetProperty("Precedence");
@@ -1182,6 +1203,41 @@ namespace D365MetadataService.Services
             {
                 _logger.Error(ex, "Failed to create ModelSaveInfo for {ObjectName}", objectName);
                 return Activator.CreateInstance(modelSaveInfoType);
+            }
+        }
+
+        /// <summary>
+        /// Find which model an object belongs to by scanning the custom metadata path on disk.
+        /// Scans each model subfolder for a matching XML file.
+        /// Returns null if not found.
+        /// </summary>
+        private string? FindModelForObject(string objectType, string objectName)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(_customMetadataPath) || !Directory.Exists(_customMetadataPath))
+                    return null;
+
+                // Expected path pattern: <root>/<model>/<model>/<objectType>/<objectName>.xml
+                foreach (var modelDir in Directory.GetDirectories(_customMetadataPath))
+                {
+                    var modelName = Path.GetFileName(modelDir);
+                    var objectPath = Path.Combine(modelDir, modelName, objectType, $"{objectName}.xml");
+                    if (File.Exists(objectPath))
+                    {
+                        _logger.Information("Found {ObjectType}:{ObjectName} in model '{Model}' at {Path}",
+                            objectType, objectName, modelName, objectPath);
+                        return modelName;
+                    }
+                }
+
+                _logger.Debug("Object {ObjectType}:{ObjectName} not found in any custom model", objectType, objectName);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Error scanning for model of {ObjectType}:{ObjectName}", objectType, objectName);
+                return null;
             }
         }
 

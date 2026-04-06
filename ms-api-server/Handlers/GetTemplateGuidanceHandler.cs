@@ -12,9 +12,9 @@ namespace D365MetadataService.Handlers
     /// </summary>
     public class GetTemplateGuidanceHandler : BaseRequestHandler
     {
-        private readonly TemplateGuidanceService _templateService;
+        private readonly ITemplateGuidanceService _templateService;
 
-        public GetTemplateGuidanceHandler(ILogger logger, TemplateGuidanceService templateService) : base(logger)
+        public GetTemplateGuidanceHandler(ILogger logger, ITemplateGuidanceService templateService) : base(logger)
         {
             _templateService = templateService;
         }
@@ -37,7 +37,7 @@ namespace D365MetadataService.Handlers
 
                 Logger.Information("Getting template guidance for {ObjectType}", request.ObjectType);
 
-                var guidance = _templateService.GetTemplateGuidance(request.ObjectType);
+                var guidance = await _templateService.GetTemplateGuidanceAsync(request.ObjectType);
                 
                 var response = new
                 {
@@ -46,7 +46,7 @@ namespace D365MetadataService.Handlers
                     Guidance = guidance
                 };
 
-                return await Task.FromResult(ServiceResponse.CreateSuccess(response));
+                return ServiceResponse.CreateSuccess(response);
             }
             catch (Exception ex)
             {

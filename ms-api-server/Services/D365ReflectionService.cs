@@ -90,6 +90,18 @@ namespace D365MetadataService.Services
 
                 // Get the method
                 var method = targetObject.GetType().GetMethod(methodCall.MethodName, BindingFlags.Public | BindingFlags.Instance);
+                
+                // Fallback: if method not found and name starts with "Add", try collection-add pattern
+                // e.g. "AddEntryPoint" -> find "EntryPoints" collection property and call its Add method
+                if (method == null && methodCall.MethodName.StartsWith("Add"))
+                {
+                    var addResult = await TryCollectionAddFallbackAsync(targetObject, methodCall);
+                    if (addResult != null)
+                    {
+                        return addResult;
+                    }
+                }
+                
                 if (method == null)
                 {
                     result.Success = false;
@@ -129,7 +141,325 @@ namespace D365MetadataService.Services
             }
         }
 
+        /// <summary>
+        /// Finds a collection property on the given type that matches an "Add{ItemName}" method name.
+        /// For example, "AddEntryPoint" will look for properties named "EntryPoints", "EntryPoint", etc.
+        /// Returns null if no match is found.
+        /// </summary>
+        private PropertyInfo FindCollectionPropertyForAddMethod(Type objectType, string addMethodName)
+        {
+            if (!addMethodName.StartsWith("Add") || addMethodName.Length <= 3)
+                return null;
 
+            var itemName = addMethodName.Substring(3);
+
+            var candidateNames = new List<string>
+            {
+                itemName + "s",
+                itemName + "es",
+                itemName,
+                itemName + "Collection",
+                itemName + "Permissions",
+            };
+
+            foreach (var candidate in candidateNames)
+            {
+                var prop = objectType.GetProperty(candidate, BindingFlags.Public | BindingFlags.Instance);
+                if (prop != null)
+                    return prop;
+            }
+
+            // Broader suffix-based search
+            return objectType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(p =>
+                    p.Name.EndsWith(itemName + "s", StringComparison.OrdinalIgnoreCase) ||
+                    p.Name.EndsWith(itemName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// Fallback for method calls like "AddEntryPoint" on objects that don't have that method directly.
+        /// Resolves the collection property (e.g., "EntryPoints") and calls its Add method
+        /// with a newly created item populated from the provided parameters.
+        /// </summary>
+        private async Task<DynamicExecutionResult> TryCollectionAddFallbackAsync(object targetObject, DynamicMethodCall methodCall)
+        {
+            var result = new DynamicExecutionResult
+            {
+                MethodName = methodCall.MethodName,
+                ObjectName = methodCall.ObjectName,
+                StartTime = DateTime.UtcNow
+            };
+
+            try
+            {
+                var objectType = targetObject.GetType();
+
+                // Use shared helper to find the matching collection property
+                var collectionProperty = FindCollectionPropertyForAddMethod(objectType, methodCall.MethodName);
+
+                if (collectionProperty == null)
+                {
+                    _logger.Warning("No collection property found for {MethodName} on {ObjectType}", methodCall.MethodName, objectType.Name);
+                    return null; // Signal to caller that fallback did not match
+                }
+
+                _logger.Information("Found collection property '{PropertyName}' for {MethodName}", collectionProperty.Name, methodCall.MethodName);
+
+                // Get the collection instance
+                var collection = collectionProperty.GetValue(targetObject);
+                if (collection == null)
+                {
+                    _logger.Warning("Collection property '{PropertyName}' is null on {ObjectType}", collectionProperty.Name, objectType.Name);
+                    return null;
+                }
+
+                // Determine the item type from the collection's Add method or generic type argument
+                var collectionType = collection.GetType();
+                var addMethods = collectionType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => m.Name == "Add" && m.GetParameters().Length == 1)
+                    .ToList();
+
+                if (addMethods.Count == 0)
+                {
+                    _logger.Warning("No Add method found on collection type {CollectionType}", collectionType.Name);
+                    return null;
+                }
+
+                // Determine the concrete type for the item to add
+                Type itemType = null;
+
+                // Check for explicit concreteType parameter
+                if (methodCall.Parameters.ContainsKey("concreteType"))
+                {
+                    var concreteTypeName = methodCall.Parameters["concreteType"]?.ToString();
+                    itemType = _reflectionManager.GetD365Type(concreteTypeName);
+                    if (itemType != null)
+                    {
+                        _logger.Information("Using explicit concreteType: {ConcreteType}", itemType.Name);
+                    }
+                }
+
+                // Fallback: use the Add method's parameter type
+                if (itemType == null)
+                {
+                    var addMethodParamType = addMethods[0].GetParameters()[0].ParameterType;
+                    if (!addMethodParamType.IsAbstract)
+                    {
+                        itemType = addMethodParamType;
+                    }
+                    else
+                    {
+                        _logger.Warning("Add method parameter type {ParamType} is abstract and no concreteType specified", addMethodParamType.Name);
+                        result.Success = false;
+                        result.Error = $"Cannot add item to collection '{collectionProperty.Name}': the item type " +
+                                       $"'{addMethodParamType.Name}' is abstract. Specify 'concreteType' parameter with the exact type name.";
+                        return result;
+                    }
+                }
+
+                // Create the item instance
+                var newItem = Activator.CreateInstance(itemType);
+                _logger.Information("Created instance of {ItemType}", itemType.Name);
+
+                // Set properties from provided parameters (excluding concreteType)
+                var propsToSkip = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "concreteType" };
+                foreach (var kvp in methodCall.Parameters)
+                {
+                    if (propsToSkip.Contains(kvp.Key)) continue;
+
+                    // Skip collection/array values - these are handled by PopulateChildCollections
+                    if (kvp.Value is Newtonsoft.Json.Linq.JArray || 
+                        (kvp.Value is System.Collections.IEnumerable && !(kvp.Value is string)))
+                    {
+                        _logger.Information("Deferring collection parameter '{PropName}' to PopulateChildCollections", kvp.Key);
+                        continue;
+                    }
+
+                    var prop = itemType.GetProperty(kvp.Key, BindingFlags.Public | BindingFlags.Instance);
+                    if (prop != null && prop.CanWrite)
+                    {
+                        try
+                        {
+                            var converted = ConvertParameterValue(kvp.Value, prop.PropertyType);
+                            prop.SetValue(newItem, converted);
+                            _logger.Information("Set property {PropName} = {Value} on {ItemType}", kvp.Key, kvp.Value, itemType.Name);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Warning("Failed to set property '{PropName}' on {ItemType}: {Error}", kvp.Key, itemType.Name, ex.Message);
+                        }
+                    }
+                    else
+                    {
+                        _logger.Warning("Property '{PropName}' not found or not writable on {ItemType}", kvp.Key, itemType.Name);
+                    }
+                }
+
+                // Inline nested collection handling for the newly created item.
+                // This directly processes deferred array parameters (e.g., Fields on AxDataEntityViewKey)
+                // by finding Add* methods on the new item and invoking them for each child.
+                _logger.Information("Processing nested collections on {ItemType}. Param types: {Keys}",
+                    itemType.Name,
+                    string.Join(", ", methodCall.Parameters.Select(p => $"{p.Key}={p.Value?.GetType().FullName ?? "null"}")));
+
+                var itemAddMethods = itemType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => m.Name.StartsWith("Add") && m.GetParameters().Length == 1)
+                    .ToList();
+                _logger.Information("Found {Count} Add methods on {ItemType}: {Methods}",
+                    itemAddMethods.Count, itemType.Name,
+                    string.Join(", ", itemAddMethods.Select(m => m.Name)));
+
+                foreach (var kvp in methodCall.Parameters)
+                {
+                    if (kvp.Value == null) continue;
+                    if (string.Equals(kvp.Key, "concreteType", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    // Normalize the value to a JArray regardless of how it arrived
+                    Newtonsoft.Json.Linq.JArray childArray = null;
+                    if (kvp.Value is Newtonsoft.Json.Linq.JArray ja)
+                    {
+                        childArray = ja;
+                    }
+                    else if (kvp.Value is Newtonsoft.Json.Linq.JToken jt && jt.Type == Newtonsoft.Json.Linq.JTokenType.Array)
+                    {
+                        childArray = (Newtonsoft.Json.Linq.JArray)jt;
+                    }
+                    else if (kvp.Value is System.Collections.IEnumerable enumVal && !(kvp.Value is string))
+                    {
+                        // Convert IEnumerable (e.g. List<object>) back to JArray for uniform handling
+                        childArray = Newtonsoft.Json.Linq.JArray.FromObject(kvp.Value);
+                    }
+
+                    if (childArray == null || childArray.Count == 0) continue;
+
+                    _logger.Information("Processing nested collection param '{Key}' with {Count} items (original type: {Type})",
+                        kvp.Key, childArray.Count, kvp.Value.GetType().FullName);
+
+                    // Find matching Add method: param "Fields" -> AddField, "Indexes" -> AddIndex, etc.
+                    MethodInfo childAddMethod = null;
+                    foreach (var am in itemAddMethods)
+                    {
+                        var methodSuffix = am.Name.Substring(3); // Remove "Add"
+                        var plural1 = methodSuffix + "s";
+                        var plural2 = methodSuffix.EndsWith("x") ? methodSuffix + "es" : methodSuffix + "s";
+                        if (string.Equals(kvp.Key, plural1, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(kvp.Key, plural2, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(kvp.Key, methodSuffix, StringComparison.OrdinalIgnoreCase))
+                        {
+                            childAddMethod = am;
+                            break;
+                        }
+                    }
+
+                    if (childAddMethod == null)
+                    {
+                        _logger.Warning("No Add method found on {ItemType} matching param '{Key}'", itemType.Name, kvp.Key);
+                        continue;
+                    }
+
+                    var childBaseType = childAddMethod.GetParameters()[0].ParameterType;
+                    _logger.Information("Matched param '{Key}' to {Method}({ParamType}) on {ItemType}",
+                        kvp.Key, childAddMethod.Name, childBaseType.Name, itemType.Name);
+
+                    foreach (var jItem in childArray)
+                    {
+                        if (jItem is not Newtonsoft.Json.Linq.JObject jChild) continue;
+
+                        try
+                        {
+                            // Resolve concrete type
+                            Type concreteChildType = childBaseType;
+                            var ctToken = jChild["concreteType"];
+                            if (ctToken != null)
+                            {
+                                var ctName = ctToken.ToString();
+                                var resolved = _reflectionManager.GetD365Type(ctName);
+                                if (resolved != null && !resolved.IsAbstract)
+                                {
+                                    concreteChildType = resolved;
+                                }
+                            }
+                            if (concreteChildType.IsAbstract)
+                            {
+                                // Last resort: if the base type param is not abstract, use it
+                                if (!childBaseType.IsAbstract)
+                                    concreteChildType = childBaseType;
+                                else
+                                {
+                                    _logger.Warning("Cannot instantiate abstract type {Type} for {Key}", concreteChildType.Name, kvp.Key);
+                                    continue;
+                                }
+                            }
+
+                            var childInstance = Activator.CreateInstance(concreteChildType);
+
+                            // Set properties from JObject directly
+                            foreach (var childProp in jChild.Properties())
+                            {
+                                if (childProp.Name == "concreteType") continue;
+                                var pi = concreteChildType.GetProperty(childProp.Name, BindingFlags.Public | BindingFlags.Instance);
+                                if (pi != null && pi.CanWrite)
+                                {
+                                    var val = ConvertParameterValue(childProp.Value?.ToObject<object>(), pi.PropertyType);
+                                    pi.SetValue(childInstance, val);
+                                    _logger.Information("Set nested child prop {Prop} = {Val} on {Type}",
+                                        childProp.Name, val, concreteChildType.Name);
+                                }
+                            }
+
+                            childAddMethod.Invoke(newItem, new[] { childInstance });
+                            _logger.Information("Added nested child {Type} to {Parent} via {Method}",
+                                concreteChildType.Name, itemType.Name, childAddMethod.Name);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error(ex, "Failed to add nested child for param '{Key}' on {ItemType}", kvp.Key, itemType.Name);
+                        }
+                    }
+                }
+
+                // Find a compatible Add method for the created item
+                MethodInfo compatibleAdd = null;
+                foreach (var addMethod in addMethods)
+                {
+                    var paramType = addMethod.GetParameters()[0].ParameterType;
+                    if (paramType.IsAssignableFrom(itemType))
+                    {
+                        compatibleAdd = addMethod;
+                        break;
+                    }
+                }
+
+                if (compatibleAdd == null)
+                {
+                    result.Success = false;
+                    result.Error = $"No compatible Add method found on collection '{collectionProperty.Name}' for item type '{itemType.Name}'";
+                    return result;
+                }
+
+                // Add the item to the collection
+                compatibleAdd.Invoke(collection, new[] { newItem });
+                _logger.Information("Successfully added {ItemType} to {CollectionName} via collection-add fallback", itemType.Name, collectionProperty.Name);
+
+                // Save the modified object
+                await SaveModifiedObjectAsync(methodCall.ObjectType, methodCall.ObjectName, targetObject);
+
+                result.Success = true;
+                result.Message = $"Successfully added {itemType.Name} to {collectionProperty.Name} on {methodCall.ObjectName} (via collection-add fallback)";
+                result.ExecutionTime = DateTime.UtcNow - result.StartTime;
+                result.UpdatedObjectInfo = _reflectionManager.GetObjectStateInfo(targetObject);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Collection-add fallback failed for {MethodName} on {ObjectName}", methodCall.MethodName, methodCall.ObjectName);
+                result.Success = false;
+                result.Error = $"Collection-add fallback error: {ex.Message}";
+                result.ExecutionTime = DateTime.UtcNow - result.StartTime;
+                return result;
+            }
+        }
 
         /// <summary>
         /// Creates an instance of a specific type dynamically
@@ -568,13 +898,27 @@ namespace D365MetadataService.Services
                     requirement.RequiredProperties?.Count ?? 0, requirement.ParameterType);
             }
 
-            // If the type is abstract, try to determine concrete type from provided parameters
+            // Check for explicit concreteType parameter first (works for both abstract AND concrete base types)
+            // This handles cases like AxDataEntityViewField -> AxDataEntityViewMappedField where the base is concrete
             _logger.Information("Type check: {TypeName} - IsAbstract: {IsAbstract}, IsInterface: {IsInterface}, IsClass: {IsClass}", 
                 objectType.Name, objectType.IsAbstract, objectType.IsInterface, objectType.IsClass);
-                
+            
+            // Always check for concreteType override, regardless of whether base type is abstract
+            if (providedParams.ContainsKey("concreteType"))
+            {
+                var concreteType = DetermineConcreteTypeFromParameters(objectType, providedParams);
+                if (concreteType != null && concreteType != objectType)
+                {
+                    _logger.Information("Overriding type {BaseType} with explicit concrete type: {ConcreteType}", 
+                        objectType.Name, concreteType.Name);
+                    objectType = concreteType;
+                }
+            }
+            
+            // If still abstract after concreteType check, try automatic resolution
             if (objectType.IsAbstract)
             {
-                _logger.Information("Type {TypeName} is abstract, determining concrete type", objectType.Name);
+                _logger.Information("Type {TypeName} is abstract, determining concrete type automatically", objectType.Name);
                 var concreteType = DetermineConcreteTypeFromParameters(objectType, providedParams);
                 if (concreteType != null)
                 {
@@ -594,11 +938,25 @@ namespace D365MetadataService.Services
 
             var instance = Activator.CreateInstance(objectType);
             
+            // Re-analyze properties from the actual concrete type so subtype properties
+            // (e.g., EnumType on AxTableFieldEnum, StringSize on AxTableFieldString) are included
+            var effectiveProperties = requirement?.RequiredProperties;
             if (requirement?.RequiredProperties != null)
             {
-                _logger.Information("Processing {PropertyCount} property requirements", requirement.RequiredProperties.Count);
+                var concreteProperties = AnalyzeD365ObjectPropertiesAsync(objectType).Result;
+                if (concreteProperties.Count > requirement.RequiredProperties.Count)
+                {
+                    _logger.Information("Using concrete type properties ({ConcreteCount}) instead of base type ({BaseCount}) for {TypeName}",
+                        concreteProperties.Count, requirement.RequiredProperties.Count, objectType.Name);
+                    effectiveProperties = concreteProperties;
+                }
+            }
+
+            if (effectiveProperties != null)
+            {
+                _logger.Information("Processing {PropertyCount} property requirements", effectiveProperties.Count);
                 
-                foreach (var propReq in requirement.RequiredProperties)
+                foreach (var propReq in effectiveProperties)
                 {
                     _logger.Information("Checking property requirement: {PropertyName} -> {ExpectedParameter}", 
                         propReq.PropertyName, propReq.ExpectedParameterName);
@@ -609,36 +967,237 @@ namespace D365MetadataService.Services
                         // Look for the expected parameter name
                         if (providedParams.ContainsKey(propReq.ExpectedParameterName))
                         {
-                            var value = ConvertParameterValue(providedParams[propReq.ExpectedParameterName], property.PropertyType);
+                            var rawValue = providedParams[propReq.ExpectedParameterName];
+
+                            // Skip collection properties when the value is a JSON array -
+                            // these will be handled by PopulateChildCollections instead
+                            if (rawValue is Newtonsoft.Json.Linq.JArray || 
+                                (rawValue is System.Collections.IEnumerable && !(rawValue is string) && 
+                                 property.PropertyType.IsGenericType && 
+                                 property.PropertyType.Name.Contains("Collection")))
+                            {
+                                _logger.Information("Deferring collection property {PropertyName} to PopulateChildCollections",
+                                    propReq.PropertyName);
+                                continue;
+                            }
+
+                            var value = ConvertParameterValue(rawValue, property.PropertyType);
                             property.SetValue(instance, value);
-                            _logger.Information("✅ Set property {PropertyName} = {Value} from parameter {ParameterName}", 
+                            _logger.Information("Set property {PropertyName} = {Value} from parameter {ParameterName}", 
                                 propReq.PropertyName, value, propReq.ExpectedParameterName);
                         }
                         else if (propReq.IsRequired)
                         {
-                            _logger.Warning("❌ Required property {PropertyName} could not be set - parameter {ParameterName} not provided", 
+                            _logger.Warning("Required property {PropertyName} could not be set - parameter {ParameterName} not provided", 
                                 propReq.PropertyName, propReq.ExpectedParameterName);
                         }
                         else
                         {
-                            _logger.Information("⚪ Optional property {PropertyName} skipped - parameter {ParameterName} not provided", 
+                            _logger.Information("Optional property {PropertyName} skipped - parameter {ParameterName} not provided", 
                                 propReq.PropertyName, propReq.ExpectedParameterName);
                         }
                     }
                     else
                     {
-                        _logger.Warning("⚠️ Property {PropertyName} not found or not writable on {TypeName}", 
+                        _logger.Warning("Property {PropertyName} not found or not writable on {TypeName}", 
                             propReq.PropertyName, objectType.Name);
                     }
                 }
             }
             else
             {
-                _logger.Warning("⚠️ No property requirements provided for {TypeName}", objectType.Name);
+                _logger.Warning("No property requirements provided for {TypeName}", objectType.Name);
             }
 
-            _logger.Information("✅ Created D365 object: {TypeName}", objectType.Name);
+            // Handle collection-type child objects (e.g., Fields on AxTableIndex)
+            // If a provided parameter is a JSON array and the instance has a matching Add* method,
+            // create child objects and add them to the parent
+            PopulateChildCollections(instance, objectType, providedParams);
+
+            _logger.Information("Created D365 object: {TypeName}", objectType.Name);
             return Task.FromResult(instance);
+        }
+
+        /// <summary>
+        /// Populate collection-type child objects on a parent instance.
+        /// Handles cases like adding AxTableIndexField items to an AxTableIndex via its AddField method.
+        /// Provided parameters that are JSON arrays matching an Add* method on the parent are processed.
+        /// </summary>
+        private void PopulateChildCollections(object parentInstance, Type parentType, Dictionary<string, object> providedParams)
+        {
+            // Find all Add* methods on the parent type that take a single parameter
+            var addMethods = parentType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => m.Name.StartsWith("Add") && m.GetParameters().Length == 1)
+                .ToList();
+
+            var addMethodNames = string.Join(", ", addMethods.Select(m => $"{m.Name}({m.GetParameters()[0].ParameterType.Name})"));
+            _logger.Information("PopulateChildCollections on {ParentType}: Found {Count} Add methods: {Methods}",
+                parentType.Name, addMethods.Count, addMethodNames);
+            _logger.Information("Provided params with array values: {Keys}",
+                string.Join(", ", providedParams.Where(p => p.Value is Newtonsoft.Json.Linq.JArray || (p.Value is System.Collections.IEnumerable && !(p.Value is string))).Select(p => p.Key)));
+
+            foreach (var addMethod in addMethods)
+            {
+                // Derive collection name from method name: AddField -> Fields, AddIndex -> Indexes
+                var collectionName = addMethod.Name.Substring(3); // Remove "Add" prefix
+                // Try plural forms: "Field" -> "Fields", "Index" -> "Indexes"  
+                var pluralName = collectionName.EndsWith("x") ? collectionName + "es" : collectionName + "s";
+                
+                // Check if the caller provided an array parameter matching this collection
+                string matchedKey = null;
+                if (providedParams.ContainsKey(pluralName))
+                    matchedKey = pluralName;
+                else if (providedParams.ContainsKey(collectionName))
+                    matchedKey = collectionName;
+                else if (providedParams.ContainsKey(collectionName + "Items"))
+                    matchedKey = collectionName + "Items";
+
+                // Fallback: check if any provided array param key is a suffix of the method name
+                // e.g. AddRootDataSource -> matches "DataSources" param because "DataSource" is a suffix of "RootDataSource"
+                if (matchedKey == null)
+                {
+                    foreach (var key in providedParams.Keys)
+                    {
+                        var val = providedParams[key];
+                        bool isArray = val is Newtonsoft.Json.Linq.JArray || 
+                                       (val is System.Collections.IEnumerable && !(val is string));
+                        if (!isArray) continue;
+
+                        var keySingular = key.EndsWith("s") ? key.Substring(0, key.Length - 1) : key;
+                        if (collectionName.EndsWith(keySingular, StringComparison.OrdinalIgnoreCase) ||
+                            keySingular.EndsWith(collectionName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            matchedKey = key;
+                            _logger.Information("Matched param '{Key}' to method '{Method}' via suffix matching",
+                                key, addMethod.Name);
+                            break;
+                        }
+                    }
+                }
+
+                if (matchedKey == null) continue;
+
+                var paramValue = providedParams[matchedKey];
+                if (paramValue == null) continue;
+
+                _logger.Information("Found collection parameter '{Key}' for Add method '{Method}' on {ParentType}",
+                    matchedKey, addMethod.Name, parentType.Name);
+
+                // Get the child type from the Add method parameter
+                var childParamType = addMethod.GetParameters()[0].ParameterType;
+                
+                // Parse the array items
+                var items = ParseCollectionItems(paramValue);
+                if (items == null || items.Count == 0)
+                {
+                    _logger.Warning("No items found in collection parameter '{Key}'", matchedKey);
+                    continue;
+                }
+
+                foreach (var itemData in items)
+                {
+                    try
+                    {
+                        // Determine the concrete child type
+                        Type concreteChildType = childParamType;
+                        if (childParamType.IsAbstract && itemData.ContainsKey("concreteType"))
+                        {
+                            var concreteTypeName = itemData["concreteType"]?.ToString();
+                            var assembly = Assembly.GetAssembly(childParamType);
+                            concreteChildType = assembly?.GetTypes()
+                                .FirstOrDefault(t => t.Name == concreteTypeName &&
+                                                     (t.IsSubclassOf(childParamType) || childParamType.IsAssignableFrom(t)) &&
+                                                     !t.IsAbstract && t.IsPublic) ?? childParamType;
+                        }
+
+                        if (concreteChildType.IsAbstract)
+                        {
+                            _logger.Warning("Cannot create abstract child type {ChildType} - provide concreteType parameter", concreteChildType.Name);
+                            continue;
+                        }
+
+                        // Create the child instance
+                        var childInstance = Activator.CreateInstance(concreteChildType);
+
+                        // Set properties on the child from the item data
+                        foreach (var kvp in itemData)
+                        {
+                            if (kvp.Key == "concreteType") continue; // Skip meta-parameter
+                            
+                            var childProperty = concreteChildType.GetProperty(kvp.Key, BindingFlags.Public | BindingFlags.Instance);
+                            if (childProperty != null && childProperty.CanWrite && kvp.Value != null)
+                            {
+                                var convertedValue = ConvertParameterValue(kvp.Value, childProperty.PropertyType);
+                                childProperty.SetValue(childInstance, convertedValue);
+                                _logger.Information("Set child property {Property} = {Value} on {ChildType}",
+                                    kvp.Key, convertedValue, concreteChildType.Name);
+                            }
+                        }
+
+                        // Invoke the Add method on the parent
+                        addMethod.Invoke(parentInstance, new[] { childInstance });
+                        _logger.Information("Added child {ChildType} to {ParentType} via {Method}",
+                            concreteChildType.Name, parentType.Name, addMethod.Name);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "Failed to create and add child object for collection '{Key}'", matchedKey);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Parse a provided parameter value into a list of dictionaries representing child objects.
+        /// Handles JArray, List, and other iterable formats from JSON deserialization.
+        /// </summary>
+        private List<Dictionary<string, object>> ParseCollectionItems(object paramValue)
+        {
+            var items = new List<Dictionary<string, object>>();
+
+            try
+            {
+                if (paramValue is Newtonsoft.Json.Linq.JArray jArray)
+                {
+                    foreach (var jItem in jArray)
+                    {
+                        if (jItem is Newtonsoft.Json.Linq.JObject jObj)
+                        {
+                            var dict = new Dictionary<string, object>();
+                            foreach (var prop in jObj.Properties())
+                            {
+                                dict[prop.Name] = prop.Value?.ToObject<object>();
+                            }
+                            items.Add(dict);
+                        }
+                    }
+                }
+                else if (paramValue is System.Collections.IEnumerable enumerable && !(paramValue is string))
+                {
+                    foreach (var item in enumerable)
+                    {
+                        if (item is Dictionary<string, object> dict)
+                        {
+                            items.Add(dict);
+                        }
+                        else if (item is Newtonsoft.Json.Linq.JObject jObj2)
+                        {
+                            var dict2 = new Dictionary<string, object>();
+                            foreach (var prop in jObj2.Properties())
+                            {
+                                dict2[prop.Name] = prop.Value?.ToObject<object>();
+                            }
+                            items.Add(dict2);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Failed to parse collection items from parameter value");
+            }
+
+            return items;
         }
 
         private object ConvertParameterValue(object value, Type targetType)
@@ -794,6 +1353,28 @@ namespace D365MetadataService.Services
                 var type = targetObject.GetType();
                 var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Instance);
                 
+                // Fallback: if method not found and name starts with "Add", try collection-add pattern
+                if (method == null && methodName.StartsWith("Add"))
+                {
+                    var methodCallObj = new DynamicMethodCall
+                    {
+                        MethodName = methodName,
+                        ObjectName = objectName,
+                        ObjectType = objectType,
+                        Parameters = parameters
+                    };
+                    var addResult = await TryCollectionAddFallbackAsync(targetObject, methodCallObj);
+                    if (addResult != null)
+                    {
+                        // Convert DynamicExecutionResult to ObjectModificationResult
+                        result.Success = addResult.Success;
+                        result.Message = addResult.Message;
+                        result.Error = addResult.Error;
+                        result.ExecutionTime = DateTime.UtcNow - result.StartTime;
+                        return result;
+                    }
+                }
+                
                 if (method == null)
                 {
                     result.Error = $"Method '{methodName}' not found on type '{objectType}'";
@@ -923,6 +1504,18 @@ namespace D365MetadataService.Services
                 
                 if (method == null)
                 {
+                    // Check if this is a collection-add pattern (e.g., "AddEntryPoint" -> "EntryPoints" collection)
+                    if (methodName.StartsWith("Add"))
+                    {
+                        var collectionProp = FindCollectionPropertyForAddMethod(type, methodName);
+                        if (collectionProp != null)
+                        {
+                            _logger.Information("Validation: {MethodName} resolved to collection-add on '{CollectionName}', skipping deep validation",
+                                methodName, collectionProp.Name);
+                            return ParameterValidationResult.Success();
+                        }
+                    }
+                    
                     return ParameterValidationResult.Failure(
                         $"Method '{methodName}' not found on type '{objectType}'",
                         methodName: methodName,
@@ -974,19 +1567,57 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
-        /// Validate that provided parameters match the property requirements for object creation
+        /// Validate that provided parameters match the property requirements for object creation.
+        /// When a concreteType is specified, validates against the concrete type's properties
+        /// instead of the abstract base type, enabling subtype-specific properties like
+        /// EnumType on AxTableFieldEnum and StringSize on AxTableFieldString.
         /// </summary>
         private ParameterValidationResult ValidateObjectCreationParameters(
             ParameterCreationRequirement requirement, 
             Dictionary<string, object> providedParameters)
         {
+            // If a concreteType is provided, re-analyze properties using the concrete type
+            // This allows subtype-specific properties (e.g., EnumType, StringSize) to pass validation
+            var effectiveRequirement = requirement;
+            if (providedParameters.TryGetValue("concreteType", out var concreteTypeObj) && concreteTypeObj != null)
+            {
+                var concreteTypeName = concreteTypeObj.ToString();
+                var baseType = _reflectionManager.GetD365Type(requirement.ParameterType);
+                if (baseType != null)
+                {
+                    var assembly = Assembly.GetAssembly(baseType);
+                    var concreteType = assembly?.GetTypes()
+                        .FirstOrDefault(t => t.Name == concreteTypeName &&
+                                            (t.IsSubclassOf(baseType) || baseType.IsAssignableFrom(t)) &&
+                                            !t.IsAbstract &&
+                                            t.IsPublic);
+
+                    if (concreteType != null)
+                    {
+                        _logger.Information("Validating against concrete type {ConcreteType} instead of base type {BaseType}",
+                            concreteTypeName, requirement.ParameterType);
+
+                        var concreteProperties = AnalyzeD365ObjectPropertiesAsync(concreteType).Result;
+                        effectiveRequirement = new ParameterCreationRequirement
+                        {
+                            ParameterName = requirement.ParameterName,
+                            ParameterType = concreteTypeName,
+                            ParameterTypeFullName = concreteType.FullName,
+                            IsRequired = requirement.IsRequired,
+                            RequiredProperties = concreteProperties,
+                            CreationInstructions = requirement.CreationInstructions
+                        };
+                    }
+                }
+            }
+
             var result = new ParameterValidationResult
             {
-                ObjectTypeBeingCreated = requirement.ParameterType
+                ObjectTypeBeingCreated = effectiveRequirement.ParameterType
             };
 
             // Check for required parameters
-            foreach (var propReq in requirement.RequiredProperties.Where(p => p.IsRequired))
+            foreach (var propReq in effectiveRequirement.RequiredProperties.Where(p => p.IsRequired))
             {
                 if (!providedParameters.ContainsKey(propReq.ExpectedParameterName))
                 {
@@ -995,7 +1626,7 @@ namespace D365MetadataService.Services
             }
 
             // Check for unknown parameters (parameters provided that don't match any expected parameters)
-            var expectedParameterNames = requirement.RequiredProperties.Select(p => p.ExpectedParameterName).ToHashSet();
+            var expectedParameterNames = effectiveRequirement.RequiredProperties.Select(p => p.ExpectedParameterName).ToHashSet();
             foreach (var providedParam in providedParameters.Keys)
             {
                 // Skip system parameters that are not property mappings
@@ -1009,13 +1640,13 @@ namespace D365MetadataService.Services
             }
 
             // Set suggested parameters (all expected parameters)
-            result.SuggestedParameters = requirement.RequiredProperties.Select(p => p.ExpectedParameterName).ToList();
+            result.SuggestedParameters = effectiveRequirement.RequiredProperties.Select(p => p.ExpectedParameterName).ToList();
 
             // Determine if validation passed
             if (result.MissingRequiredParameters.Any() || result.UnknownParameters.Any())
             {
                 result.IsValid = false;
-                result.ErrorMessage = CreateParameterValidationErrorMessage(requirement, result);
+                result.ErrorMessage = CreateParameterValidationErrorMessage(effectiveRequirement, result);
             }
             else
             {

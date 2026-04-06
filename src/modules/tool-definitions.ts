@@ -161,7 +161,15 @@ export class ToolDefinitions {
               },
               modelName: {
                 type: "string", 
-                description: "D365 model/package name to create the form in (e.g., 'ApplicationSuite', 'MyCustomModel'). Optional - defaults to 'ApplicationSuite'."
+                description: "D365 model/package name to create the form in (e.g., 'ApplicationSuite', 'MyCustomModel'). Optional - defaults to the configured DefaultModel in appsettings.json."
+              },
+              caption: {
+                type: "string",
+                description: "Form caption/title displayed in the UI. Optional - defaults to the form name."
+              },
+              addGridWithFields: {
+                type: "boolean",
+                description: "When true, automatically reads table field metadata and creates a Grid control with bound field controls (String, ComboBox, Integer, etc.) inside the form design. Also adds an ActionPane control. Defaults to true when dataSources are provided."
               }
             },
             required: ["mode"],
@@ -807,6 +815,117 @@ export class ToolDefinitions {
                 }
               }
             ]
+          }
+        },
+        {
+          name: "search_codebase",
+          description: "🔍 UNIFIED CODEBASE SEARCH: Comprehensive search across D365 F&O objects, method calls, references, and source code. Supports multiple search types in one tool with intelligent result formatting and auto-detection of search intent.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              searchType: {
+                type: "string",
+                enum: ["objects", "method_calls", "references", "source_code", "auto"],
+                description: "Type of search: 'objects' (find objects by pattern), 'method_calls' (find method invocations), 'references' (find object usage), 'source_code' (search within code), 'auto' (auto-detect from query format)"
+              },
+              query: {
+                type: "string",
+                description: "Search query. Examples: 'Cust*' (objects), 'xGlobal::runAsync' or 'runAsync' (method calls), 'CustTable' (references), 'throw new Exception' (source code). Auto-detection works with Class::method format."
+              },
+              filters: {
+                type: "object",
+                properties: {
+                  objectType: {
+                    type: "string",
+                    description: "Filter by object type (AxClass, AxTable, AxForm, etc.)"
+                  },
+                  model: {
+                    type: "string", 
+                    description: "Filter by D365 model/package name"
+                  },
+                  className: {
+                    type: "string",
+                    description: "For method_calls: specific class name filter"
+                  },
+                  methodName: {
+                    type: "string", 
+                    description: "For method_calls: specific method name filter"
+                  }
+                },
+                description: "Optional filters to narrow search results based on search type"
+              },
+              maxResults: {
+                type: "number",
+                default: 50,
+                description: "Maximum number of results to return"
+              },
+              includeContext: {
+                type: "boolean",
+                default: true,
+                description: "Include code context, file paths, and additional details in results"
+              },
+              format: {
+                type: "string", 
+                enum: ["text", "json"],
+                default: "text",
+                description: "Output format: 'text' for human-readable, 'json' for structured data"
+              }
+            },
+            required: ["query"],
+            examples: [
+              {
+                searchType: "objects",
+                query: "Cust*",
+                description: "Find all objects starting with 'Cust'"
+              },
+              {
+                searchType: "method_calls", 
+                query: "xGlobal::runAsync",
+                description: "Find all calls to xGlobal::runAsync method"
+              },
+              {
+                searchType: "auto",
+                query: "Global::info",
+                description: "Auto-detect as method call search"
+              },
+              {
+                searchType: "source_code",
+                query: "select * from",
+                description: "Find SQL queries in method source code"
+              }
+            ]
+          }
+        },
+        {
+          name: "build_code_analysis_index",
+          description: "🚀 BUILD CODE ANALYSIS INDEX: Build or update the code analysis index that analyzes X++ source code for method calls, references, and code patterns. Required before using search_codebase tool. This process analyzes all D365 objects and extracts method calls and references for fast searching.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              includeCodeAnalysis: {
+                type: "boolean",
+                description: "Whether to perform full code analysis (slower but enables all search features).",
+                default: true
+              },
+              batchSize: {
+                type: "number",
+                description: "Number of objects to analyze in each batch. Lower values use less memory but take longer.",
+                default: 10
+              },
+              maxConcurrentAnalysis: {
+                type: "number", 
+                description: "Maximum number of objects to analyze concurrently. Higher values are faster but use more resources.",
+                default: 3
+              }
+            }
+          }
+        },
+        {
+          name: "get_code_analysis_stats", 
+          description: "📊 CODE ANALYSIS STATS: Get statistics about the code analysis index including number of objects analyzed, method calls indexed, references found, and analysis progress.",
+          inputSchema: {
+            type: "object",
+            properties: {}
           }
         },
       ],
