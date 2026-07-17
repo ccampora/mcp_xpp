@@ -714,6 +714,32 @@ namespace D365MetadataService.Services
         }
 
         /// <summary>
+        /// Return the provider that actually holds the object, in the same custom-then-standard
+        /// order GetExistingObject uses. Writes must go to the provider the object lives in:
+        /// _metadataProvider is only the custom one, so using it for an object found in the
+        /// standard provider addresses a store that has never heard of it.
+        /// </summary>
+        private IMetadataProvider? FindProviderContaining(string objectType, string objectName)
+        {
+            if (!_axTypeCache.TryGetValue(objectType, out var axType))
+            {
+                return null;
+            }
+
+            if (TryGetObjectFromProvider(_customMetadataProvider, "Custom", objectType, objectName, axType) != null)
+            {
+                return _customMetadataProvider;
+            }
+
+            if (TryGetObjectFromProvider(_standardMetadataProvider, "Standard", objectType, objectName, axType) != null)
+            {
+                return _standardMetadataProvider;
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Try to retrieve an object from a specific metadata provider
         /// </summary>
         private object? TryGetObjectFromProvider(IMetadataProvider provider, string providerName, string objectType, string objectName, Type axType)
@@ -963,7 +989,12 @@ namespace D365MetadataService.Services
                     return Task.FromResult(false);
                 }
 
-                var providerCollection = providerProperty.GetValue(_metadataProvider, new object[] { axType });
+                // Delete from the provider the object was found in, not from _metadataProvider:
+                // that one is always the custom provider, so objects living in the standard one
+                // were being deleted from a store that does not contain them.
+                var owningProvider = FindProviderContaining(objectType, objectName) ?? _metadataProvider;
+
+                var providerCollection = providerProperty.GetValue(owningProvider, new object[] { axType });
                 if (providerCollection == null)
                 {
                     _logger.Warning("Provider collection is null for {ObjectType}", objectType);
@@ -980,7 +1011,7 @@ namespace D365MetadataService.Services
 
                 // Create ModelSaveInfo for deletion
                 var modelSaveInfoType = typeof(Microsoft.Dynamics.AX.Metadata.MetaModel.ModelSaveInfo);
-                var modelSaveInfo = CreateModelSaveInfoForObject(modelSaveInfoType, objectName, existingObject);
+                var modelSaveInfo = CreateModelSaveInfoForObject(modelSaveInfoType, objectName, existingObject, owningProvider);
 
                 if (modelSaveInfo == null)
                 {
@@ -1045,7 +1076,7 @@ namespace D365MetadataService.Services
         /// <summary>
         /// Create ModelSaveInfo for an object being deleted (extracts model info from existing object)
         /// </summary>
-        private object? CreateModelSaveInfoForObject(Type modelSaveInfoType, string objectName, object existingObject)
+        private object? CreateModelSaveInfoForObject(Type modelSaveInfoType, string objectName, object existingObject, IMetadataProvider? owningProvider = null)
         {
             try
             {
@@ -1057,12 +1088,63 @@ namespace D365MetadataService.Services
                 var objectType = existingObject.GetType();
                 _logger.Information("Existing object type: {ObjectType}", objectType.Name);
 
+                // Resolve the owning model first: Id and Layer below have to describe it.
+                string modelName = _defaultModelName;
+
+                // Look for model-related properties on the existing object
+                var objectModelProperty = objectType.GetProperty("Model");
+                var objectModelNameProperty = objectType.GetProperty("ModelName");
+
+                if (objectModelProperty != null)
+                {
+                    var modelValue = objectModelProperty.GetValue(existingObject);
+                    if (modelValue != null)
+                    {
+                        modelName = modelValue.ToString();
+                        _logger.Information("Extracted model name from object.Model: {ModelName}", modelName);
+                    }
+                }
+                else if (objectModelNameProperty != null)
+                {
+                    var modelValue = objectModelNameProperty.GetValue(existingObject);
+                    if (modelValue != null)
+                    {
+                        modelName = modelValue.ToString();
+                        _logger.Information("Extracted model name from object.ModelName: {ModelName}", modelName);
+                    }
+                }
+
+                // The provider resolves the target model by Id/Layer, not by Name, and throws
+                // KeyNotFoundException when they match no installed model. Read the real values
+                // from the manifest, exactly as CreateModelSaveInfo does for the create path.
+                int modelId = 1;
+                int modelLayer = 8;
+                var manifestProvider = owningProvider ?? _metadataProvider;
+                try
+                {
+                    var modelInfo = manifestProvider?.ModelManifest?.Read(modelName);
+                    if (modelInfo != null)
+                    {
+                        modelId = modelInfo.Id;
+                        modelLayer = modelInfo.Layer;
+                        _logger.Information("Read model manifest for '{Model}': Id={Id}, Layer={Layer}", modelName, modelId, modelLayer);
+                    }
+                    else
+                    {
+                        _logger.Warning("Model manifest not found for '{Model}', using defaults Id=1, Layer=8", modelName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "Failed to read model manifest for '{Model}', using defaults", modelName);
+                }
+
                 // Set basic properties
                 var idProperty = modelSaveInfoType.GetProperty("Id");
                 if (idProperty != null && idProperty.CanWrite)
                 {
-                    idProperty.SetValue(modelSaveInfo, 1);
-                    _logger.Information("Set Id property to: 1");
+                    idProperty.SetValue(modelSaveInfo, modelId);
+                    _logger.Information("Set Id property to: {Id}", modelId);
                 }
 
                 var sequenceIdProperty = modelSaveInfoType.GetProperty("SequenceId");
@@ -1075,40 +1157,13 @@ namespace D365MetadataService.Services
                 var layerProperty = modelSaveInfoType.GetProperty("Layer");
                 if (layerProperty != null && layerProperty.CanWrite)
                 {
-                    // Use layer enum value - 8 is typically USR layer
-                    layerProperty.SetValue(modelSaveInfo, 8);
-                    _logger.Information("Set Layer property to: 8 (USR)");
+                    layerProperty.SetValue(modelSaveInfo, modelLayer);
+                    _logger.Information("Set Layer property to: {Layer}", modelLayer);
                 }
 
                 var nameProperty = modelSaveInfoType.GetProperty("Name");
                 if (nameProperty != null && nameProperty.CanWrite)
                 {
-                    // Try to get model name from existing object, fall back to config default
-                    string modelName = _defaultModelName;
-                    
-                    // Look for model-related properties on the existing object
-                    var objectModelProperty = objectType.GetProperty("Model");
-                    var objectModelNameProperty = objectType.GetProperty("ModelName");
-                    
-                    if (objectModelProperty != null)
-                    {
-                        var modelValue = objectModelProperty.GetValue(existingObject);
-                        if (modelValue != null)
-                        {
-                            modelName = modelValue.ToString();
-                            _logger.Information("Extracted model name from object.Model: {ModelName}", modelName);
-                        }
-                    }
-                    else if (objectModelNameProperty != null)
-                    {
-                        var modelValue = objectModelNameProperty.GetValue(existingObject);
-                        if (modelValue != null)
-                        {
-                            modelName = modelValue.ToString();
-                            _logger.Information("Extracted model name from object.ModelName: {ModelName}", modelName);
-                        }
-                    }
-
                     nameProperty.SetValue(modelSaveInfo, modelName);
                     _logger.Information("Set Name property to: {ModelName}", modelName);
                 }
