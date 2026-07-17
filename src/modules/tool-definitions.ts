@@ -8,10 +8,12 @@ export class ToolDefinitions {
    * Get all tool definitions with dynamic configuration
    */
   static async getToolDefinitions() {
-    // Get available layers and object types dynamically from configuration
+    // Layers are a short, stable list, so they stay inline as an enum. Object types
+    // (544+) are discovered on demand via get_current_config/create_xpp_object instead:
+    // inlining them cost ~44% of the schema payload and made tools/list depend on the
+    // VS2022 service being reachable.
     const availableLayers = await AOTStructureManager.getAvailableLayers();
-    const availableObjectTypes = await AOTStructureManager.getAvailableObjectTypes();
-    
+
     return {
       tools: [
         {
@@ -26,8 +28,7 @@ export class ToolDefinitions {
               },
               objectType: {
                 type: "string",
-                enum: availableObjectTypes,
-                description: "D365 object type to create. 🔍 IMPORTANT: Call this tool WITHOUT parameters first to see all 544+ available types organized by category! Common types: 'AxClass' (X++ classes), 'AxTable' (data tables), 'AxForm' (UI forms), 'AxEnum' (enumerations), 'AxEdt' (extended data types), 'AxView' (database views), 'AxQuery' (queries), 'AxReport' (SSRS reports), 'AxMenuItemDisplay' (menu items), 'AxDataEntityView' (OData entities), 'AxWorkflowHierarchyProvider' (workflow), 'AxService' (services), 'AxMap' (data maps)."
+                description: "D365 object type to create. Call this tool WITHOUT parameters, or get_current_config with objectTypeList=true, to list all 544+ valid types. Common types: 'AxClass' (X++ classes), 'AxTable' (data tables), 'AxForm' (UI forms), 'AxEnum' (enumerations), 'AxEdt' (extended data types), 'AxView' (database views), 'AxQuery' (queries), 'AxReport' (SSRS reports), 'AxMenuItemDisplay' (menu items), 'AxDataEntityView' (OData entities), 'AxWorkflowHierarchyProvider' (workflow), 'AxService' (services), 'AxMap' (data maps)."
               },
               layer: {
                 type: "string",
@@ -173,52 +174,34 @@ export class ToolDefinitions {
               }
             },
             required: ["mode"],
+            examples: [
+              {
+                description: "LIST PATTERNS: Discover all available D365 form patterns",
+                parameters: {
+                  mode: "list_patterns"
+                }
+              },
+              {
+                description: "CREATE: Details master form with multiple datasources",
+                parameters: {
+                  mode: "create",
+                  formName: "MySalesOrderForm",
+                  patternName: "DetailsMaster",
+                  patternVersion: "UX7 1.0",
+                  dataSources: ["SalesTable", "SalesLine", "CustTable"],
+                  modelName: "MyCustomModel"
+                }
+              },
+              {
+                description: "CREATE: Datasources may also be passed as one comma-separated string",
+                parameters: {
+                  mode: "create",
+                  formName: "MyInventoryForm",
+                  dataSources: ["InventTable,InventDim,InventSum"]
+                }
+              }
+            ]
           },
-          examples: [
-            {
-              description: "🔍 LIST PATTERNS: Discover all available D365 form patterns",
-              parameters: {
-                mode: "list_patterns"
-              }
-            },
-            {
-              description: "🏗️ CREATE SIMPLE FORM: Create a basic list form with single datasource",
-              parameters: {
-                mode: "create",
-                formName: "MyCustomerListForm",
-                patternName: "SimpleListDetails",
-                dataSources: ["CustTable"]
-              }
-            },
-            {
-              description: "🏗️ CREATE COMPLEX FORM: Create a details master form with multiple datasources",
-              parameters: {
-                mode: "create",
-                formName: "MySalesOrderForm",
-                patternName: "DetailsMaster",
-                patternVersion: "UX7 1.0",
-                dataSources: ["SalesTable", "SalesLine", "CustTable"],
-                modelName: "MyCustomModel"
-              }
-            },
-            {
-              description: "🏗️ CREATE LIST PAGE: Create a list page form for browsing records",
-              parameters: {
-                mode: "create",
-                formName: "MyCustomerListPage",
-                patternName: "ListPage",
-                dataSources: ["CustTable"]
-              }
-            },
-            {
-              description: "🏗️ CREATE WITH CSV DATASOURCES: Using comma-separated datasource string",
-              parameters: {
-                mode: "create", 
-                formName: "MyInventoryForm",
-                dataSources: ["InventTable,InventDim,InventSum"]
-              }
-            }
-          ]
         },
         {
           name: "delete_xpp_object",
@@ -231,9 +214,8 @@ export class ToolDefinitions {
                 description: "Name of the D365 object to delete (e.g., 'MyCustomClass', 'MyTestTable', 'MyCustomForm'). Object must exist in metadata.",
               },
               objectType: {
-                type: "string", 
-                enum: availableObjectTypes,
-                description: "D365 object type to delete. Common types: 'AxClass' (X++ classes), 'AxTable' (data tables), 'AxForm' (UI forms), 'AxEnum' (enumerations), 'AxEdt' (extended data types), 'AxView' (database views), 'AxQuery' (queries), 'AxReport' (SSRS reports), 'AxMenuItemDisplay' (menu items). Use find_xpp_object first to confirm object exists and get correct type."
+                type: "string",
+                description: "D365 object type to delete. Get the full list from get_current_config with objectTypeList=true. Common types: 'AxClass' (X++ classes), 'AxTable' (data tables), 'AxForm' (UI forms), 'AxEnum' (enumerations), 'AxEdt' (extended data types), 'AxView' (database views), 'AxQuery' (queries), 'AxReport' (SSRS reports), 'AxMenuItemDisplay' (menu items). Use find_xpp_object first to confirm object exists and get correct type."
               },
               cascadeDelete: {
                 type: "boolean",
@@ -359,15 +341,6 @@ export class ToolDefinitions {
                 }
               },
               {
-                description: "📋 CLASS METHODS: Get all methods from a business logic class",
-                parameters: {
-                  objectName: "SalesFormLetter",
-                  objectType: "AxClass",
-                  inspectionMode: "collection", 
-                  collectionName: "Methods"
-                }
-              },
-              {
                 description: "📋 TABLE FIELDS: Get all fields from a data table",
                 parameters: {
                   objectName: "CustTable",
@@ -381,7 +354,7 @@ export class ToolDefinitions {
                 parameters: {
                   objectName: "SalesFormLetter",
                   objectType: "AxClass",
-                  inspectionMode: "code",
+                  inspectionMode: "xppcode",
                   codeTarget: "methods"
                 }
               },
@@ -390,7 +363,7 @@ export class ToolDefinitions {
                 parameters: {
                   objectName: "CustTable",
                   objectType: "AxTable",
-                  inspectionMode: "code",
+                  inspectionMode: "xppcode",
                   codeTarget: "specific-method",
                   methodName: "validateWrite"
                 }
@@ -400,7 +373,7 @@ export class ToolDefinitions {
                 parameters: {
                   objectName: "SalesTable",
                   objectType: "AxTable",
-                  inspectionMode: "code",
+                  inspectionMode: "xppcode",
                   codeTarget: "methods",
                   maxCodeLines: 50
                 }
@@ -413,14 +386,6 @@ export class ToolDefinitions {
                   inspectionMode: "collection",
                   collectionName: "Methods", 
                   filterPattern: "*validate*"
-                }
-              },
-              {
-                description: "� PROPERTIES INSPECTION: Get all object properties with descriptions",
-                parameters: {
-                  objectName: "CustTable",
-                  objectType: "AxTable",
-                  inspectionMode: "properties"
                 }
               },
               {
@@ -439,14 +404,6 @@ export class ToolDefinitions {
                   objectType: "AxForm",
                   inspectionMode: "collection",
                   collectionName: "DataSources"
-                }
-              },
-              {
-                description: "⚡ PERFORMANCE COMPARISON: Fast summary vs properties inspection",
-                parameters: {
-                  objectName: "SalesTable",
-                  objectType: "AxTable",
-                  inspectionMode: "summary"
                 }
               }
             ]
@@ -728,67 +685,12 @@ export class ToolDefinitions {
                         GeneralDataProtectionRegulation: "None",
                         SysSharingType: "Duplicate"
                       }
-                    },
-                    {
-                      methodName: "AddField",
-                      parameters: {
-                        concreteType: "AxTableFieldDate",
-                        Name: "LastReviewDate",
-                        Label: "Last Review Date",
-                        HelpText: "Date of last customer review",
-                        SaveContents: "Yes",
-                        Mandatory: "No",
-                        AllowEditOnCreate: "Yes",
-                        AllowEdit: "Yes",
-                        Visible: "Yes",
-                        AosAuthorization: "None",
-                        MinReadAccess: "Auto",
-                        IgnoreEDTRelation: "No",
-                        Null: "Yes",
-                        IsSystemGenerated: "No",
-                        IsManuallyUpdated: "No",
-                        IsObsolete: "No",
-                        GeneralDataProtectionRegulation: "None",
-                        SysSharingType: "Duplicate"
-                      }
                     }
                   ]
                 }
               },
               {
-                description: "🔧 Single field: Add one field using array format (only when one modification needed)",
-                parameters: {
-                  objectType: "AxTable",
-                  objectName: "CustTable",
-                  modifications: [
-                    {
-                      methodName: "AddField",
-                      parameters: {
-                        concreteType: "AxTableFieldString",
-                        Name: "MyCustomField",
-                        Label: "My Custom Field",
-                        HelpText: "Custom field description",
-                        SaveContents: "Yes",
-                        Mandatory: "No",
-                        AllowEditOnCreate: "Yes",
-                        AllowEdit: "Yes",
-                        Visible: "Yes",
-                        AosAuthorization: "None",
-                        MinReadAccess: "Auto",
-                        IgnoreEDTRelation: "No",
-                        Null: "Yes",
-                        IsSystemGenerated: "No",
-                        IsManuallyUpdated: "No",
-                        IsObsolete: "No",
-                        GeneralDataProtectionRegulation: "None",
-                        SysSharingType: "Duplicate"
-                      }
-                    }
-                  ]
-                }
-              },
-              {
-                description: "🔧 Enum values: Add multiple values to a custom enum in one call",
+                description: "Enum values: Add multiple values to a custom enum in one call",
                 parameters: {
                   objectType: "AxEnum",
                   objectName: "MyCustomEnum",
