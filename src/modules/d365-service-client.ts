@@ -21,6 +21,17 @@ export class D365ServiceClient extends EventEmitter {
     }
 
     /**
+     * Emit 'error' only when a listener is attached. An unhandled 'error' event
+     * on an EventEmitter is rethrown by Node and terminates the process, so
+     * callers that only rely on the rejected promise must not bring the server down.
+     */
+    private emitError(error: Error): void {
+        if (this.listenerCount('error') > 0) {
+            this.emit('error', error);
+        }
+    }
+
+    /**
      * Connect to the Named Pipe server
      */
     async connect(): Promise<void> {
@@ -51,7 +62,7 @@ export class D365ServiceClient extends EventEmitter {
             this.connection.on('error', (error: Error) => {
                 clearTimeout(connectionTimer);
                 this.isConnected = false;
-                this.emit('error', error);
+                this.emitError(error);
                 reject(error);
             });
         });
@@ -243,7 +254,7 @@ export class D365ServiceClient extends EventEmitter {
 
         this.connection.on('error', (error: Error) => {
             this.isConnected = false;
-            this.emit('error', error);
+            this.emitError(error);
         });
     }
 
@@ -257,7 +268,7 @@ export class D365ServiceClient extends EventEmitter {
                     const response = JSON.parse(line);
                     this.handleResponse(response);
                 } catch (error) {
-                    this.emit('error', new Error(`Invalid JSON response: ${line}`));
+                    this.emitError(new Error(`Invalid JSON response: ${line}`));
                 }
             }
         }
