@@ -1273,12 +1273,13 @@ export class SQLiteObjectLookup {
             throw new Error('Database not initialized');
         }
 
-        const stmt = this.db!.prepare(`
-            ${SEARCH_PATTERNS.METADATA.NEEDS_ANALYSIS}
-            LIMIT ?
-        `);
-
-        const results = stmt.all(analysisVersion, limit) as any[];
+        // SEARCH_PATTERNS.METADATA.NEEDS_ANALYSIS already ends with its own `LIMIT ?`.
+        // Reuse the statement prepared from it (see initializePreparedStatements) instead of
+        // wrapping it in a second `LIMIT ?`, which produced invalid SQL ("...LIMIT ? LIMIT ?").
+        // The pattern binds 3 placeholders: analysis_version, last_analyzed, limit. No caller
+        // needs staleness-based re-analysis today, so 0 is passed for last_analyzed (epoch 0
+        // never satisfies `last_analyzed < ?`), preserving the existing id/version/error-only behavior.
+        const results = this.prepared.findObjectsNeedingAnalysis.all(analysisVersion, 0, limit) as any[];
         return results.map(row => ({
             name: row.name,
             type: row.type,
