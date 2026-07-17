@@ -56,12 +56,43 @@ foreach ($dll in $requiredDlls) {
 
 Write-Host "✅ All required DLLs found" -ForegroundColor Green
 
+# D365MetadataService.csproj and app.config are gitignored because they carry
+# machine-specific paths, so on a fresh clone only the .template files exist.
+# Read the generated file when it is there, otherwise fall back to its template.
+function Get-ConfigSource {
+    param(
+        [Parameter(Mandatory)][string] $TargetPath,
+        [Parameter(Mandatory)][string] $TemplatePath
+    )
+
+    if (Test-Path $TargetPath) {
+        return Get-Content $TargetPath -Raw
+    }
+
+    if (Test-Path $TemplatePath) {
+        $templateName = Split-Path $TemplatePath -Leaf
+        Write-Host "$TargetPath not found, generating it from $templateName" -ForegroundColor Cyan
+        return Get-Content $TemplatePath -Raw
+    }
+
+    Write-Host "❌ Neither $TargetPath nor $TemplatePath was found!" -ForegroundColor Red
+    Write-Host "Run this script from the repository root." -ForegroundColor Yellow
+    exit 1
+}
+
 # Update .csproj file
 $csprojPath = "ms-api-server\D365MetadataService.csproj"
-$csprojContent = Get-Content $csprojPath -Raw
+$csprojContent = Get-ConfigSource -TargetPath $csprojPath -TemplatePath "$csprojPath.template"
 
-# Replace the hardcoded paths with the dynamically found path
-$updatedContent = $csprojContent -replace 'C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\Common7\\IDE\\Extensions\\[^\\]+\\', ($d365ExtensionPath.Replace('\', '\\') + '\\')
+# The template carries a {{VS_EXTENSION_PATH}} placeholder, an already-generated
+# file a real path from a previous run. These are alternatives: running the
+# hardcoded-path regex over a freshly substituted placeholder would double every
+# separator.
+if ($csprojContent -match [regex]::Escape('{{VS_EXTENSION_PATH}}')) {
+    $updatedContent = $csprojContent -replace [regex]::Escape('{{VS_EXTENSION_PATH}}'), $d365ExtensionPath
+} else {
+    $updatedContent = $csprojContent -replace 'C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\Common7\\IDE\\Extensions\\[^\\]+\\', ($d365ExtensionPath.Replace('\', '\\') + '\\')
+}
 
 # Write back to file
 $updatedContent | Out-File $csprojPath -Encoding utf8 -NoNewline
@@ -71,7 +102,7 @@ Write-Host "Extension path: $d365ExtensionPath" -ForegroundColor Cyan
 
 # Also update app.config
 $appConfigPath = "ms-api-server\app.config"
-$appConfigContent = Get-Content $appConfigPath -Raw
+$appConfigContent = Get-ConfigSource -TargetPath $appConfigPath -TemplatePath "$appConfigPath.template"
 
 # Replace the hardcoded paths in app.config
 $updatedAppConfig = $appConfigContent -replace 'C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/[^/]+/', ($d365ExtensionPath.Replace('\', '/') + '/')
