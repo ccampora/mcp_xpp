@@ -1073,6 +1073,14 @@ export class SQLiteObjectLookup {
      * Add a method call to the index
      */
     public async addMethodCall(methodCall: MethodCall): Promise<void> {
+        // Check if database needs to be reopened in write mode
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for method call insertion...');
+            this.close();
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+
         if (!this.prepared.insertMethodCall) {
             throw new Error('Database not initialized');
         }
@@ -1150,6 +1158,14 @@ export class SQLiteObjectLookup {
      * Add a code reference to the index
      */
     public async addCodeReference(codeRef: CodeReference): Promise<void> {
+        // Check if database needs to be reopened in write mode
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for code reference insertion...');
+            this.close();
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+
         if (!this.prepared.insertCodeReference) {
             throw new Error('Database not initialized');
         }
@@ -1195,6 +1211,14 @@ export class SQLiteObjectLookup {
      * Add method source code to the index
      */
     public async addMethodCode(objectCode: ObjectCode): Promise<void> {
+        // Check if database needs to be reopened in write mode
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for method code insertion...');
+            this.close();
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+
         if (!this.prepared.insertObjectCode) {
             throw new Error('Database not initialized');
         }
@@ -1247,6 +1271,14 @@ export class SQLiteObjectLookup {
      * Update indexing metadata for an object
      */
     public async updateIndexingMetadata(metadata: IndexingMetadata): Promise<void> {
+        // Check if database needs to be reopened in write mode
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for indexing metadata...');
+            this.close();
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+
         if (!this.prepared.insertIndexingMetadata) {
             throw new Error('Database not initialized');
         }
@@ -1315,6 +1347,14 @@ export class SQLiteObjectLookup {
      * Clean up analysis data for an object (before re-analysis)
      */
     public async cleanupObjectAnalysis(objectName: string, objectType: string, objectModel: string): Promise<void> {
+        // Check if database needs to be reopened in write mode
+        if (!this.db || this.db.readonly) {
+            console.log('🔄 Reopening database in write mode for analysis cleanup...');
+            this.close();
+            this.db = new Database(this.dbPath, { readonly: false });
+            this.prepareStatements();
+        }
+
         if (!this.db) {
             throw new Error('Database not initialized');
         }
